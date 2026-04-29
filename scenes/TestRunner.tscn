@@ -1,0 +1,28 @@
+[gd_scene load_steps=2 format=3 uid="uid://possession_testrunner"]
+
+[ext_resource type="Script" path="res://scripts/ui/TestRunnerScene.gd" id="1_tr"]
+
+[node name="TestRunner" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_tr")
+
+[node name="Background" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.04, 0.05, 0.1, 1)
+
+[node name="Summary" type="Label" parent="."]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 1260.0
+offset_bottom = 60.0
+text = "..."
+
+[node name="Output" type="RichTextLabel" parent="."]
+offset_left = 20.0
+offset_top = 60.0
+offset_right = 1260.0
+offset_bottom = 780.0
+bbcode_enabled = true
+scroll_active = true

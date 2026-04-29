@@ -1,0 +1,309 @@
+class_name LiturgyResolver
+extends RefCounted
+# Resolves the liturgical response of a Station (I to V).
+# Station VI is handled by EndGameResolver, not here.
+# All targeting tie-breakers use the simple priority defined in the spec;
+# "demon without initiative chooses" cases default to a deterministic pick
+# (the demon without initiative for that station) — the UI may expose a manual
+# override later. See /docs/ambiguities.md.
+
+static func resolve_station_response(state: GameState) -> Dictionary:
+	var st: int = state.current_station
+	var response: Dictionary = LiturgicalResponseData.get_response(st)
+	if response.is_empty():
+		return {"resolved": false}
+	var entraved := GameRules.is_response_entraved(state, st)
+	# Simonie infamy: if the response targets Foi, force Impedita the next time.
+	# This is checked *after* selecting the target.
+	state.add_log("--- Réponse liturgique : %s (%s) ---" %
+		[response["name"], "Impedita" if entraved else "In Integro"])
+	match st:
+		GameEnums.StationId.MURMURES:
+			_signe_de_croix(state, entraved)
+		GameEnums.StationId.TENTATION:
+			_examen(state, entraved)
+		GameEnums.StationId.CHUTE:
+			_contrition(state, entraved)
+		GameEnums.StationId.CONFESSION:
+			_confession(state, entraved)
+		GameEnums.StationId.OFFICE:
+			_communion(state, entraved)
+	return {"resolved": true, "impedita": entraved}
+
+
+# --- Targeting helpers ------------------------------------------------------
+
+static func _without_initiative_player(state: GameState) -> int:
+	var init_p: int = GameEnums.STATION_INITIATIVE.get(state.current_station, GameEnums.PlayerId.RED)
+	return GameEnums.opponent(init_p)
+
+static func _total_emprise(state: GameState, d_id: int) -> int:
+	var d := state.domain(d_id)
+	return d.red_corruption + d.blue_corruption
+
+static func _pick_max(values: Dictionary, tie_breaker: Callable) -> int:
+	# values: DomainId -> score. Returns chosen DomainId.
+	var best := -1
+	var best_score := -9999
+	for d_id in values.keys():
+		var s = values[d_id]
+		if s > best_score:
+			best_score = s
+			best = d_id
+	# Find tied
+	var tied := []
+	for d_id in values.keys():
+		if values[d_id] == best_score:
+			tied.append(d_id)
+	if tied.size() == 1:
+		return best
+	return tie_breaker.call(tied)
+
+
+# --- I — Signe de croix -----------------------------------------------------
+
+static func _signe_de_croix(state: GameState, impedita: bool) -> void:
+	var totals := {}
+	for d_id in DomainData.DOMAINS:
+		totals[d_id] = _total_emprise(state, d_id)
+	var target := _pick_max(totals, func(tied):
+		# Closest to Volonté on the priority list
+		for v in GameEnums.VOLONTE_PROXIMITY_PRIORITY:
+			if v in tied:
+				return v
+		return tied[0]
+	)
+	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
+	_check_simonie_infamy_force_impedita(state, target, impedita)
+	if impedita:
+		# Most-emprise player loses 1 available corruption.
+		var d := state.domain(target)
+		if d.red_corruption > d.blue_corruption:
+			state.add_corruption_pool(GameEnums.PlayerId.RED, -1)
+			state.add_log("Impedita : Rouge perd 1 Corruption disponible.")
+		elif d.blue_corruption > d.red_corruption:
+			state.add_corruption_pool(GameEnums.PlayerId.BLUE, -1)
+			state.add_log("Impedita : Bleu perd 1 Corruption disponible.")
+		else:
+			state.add_log("Impedita : égalité, aucun effet.")
+	else:
+		var d := state.domain(target)
+		var lead := abs(d.red_corruption - d.blue_corruption)
+		if lead >= 2:
+			ActionResolver.break_domination(state, target)
+		else:
+			# No domination -> each demon with corruption here loses 1 available corruption.
+			if d.red_corruption > 0:
+				state.add_corruption_pool(GameEnums.PlayerId.RED, -1)
+			if d.blue_corruption > 0:
+				state.add_corruption_pool(GameEnums.PlayerId.BLUE, -1)
+			state.add_log("In Integro : pas de Domination, chaque démon présent perd 1 Corruption disponible.")
+
+
+# --- II — Examen de conscience ---------------------------------------------
+
+static func _examen(state: GameState, impedita: bool) -> void:
+	var candidates := [GameEnums.DomainId.AMBITION, GameEnums.DomainId.DESIR]
+	var totals := {}
+	for d_id in candidates:
+		totals[d_id] = _total_emprise(state, d_id)
+	var target := _pick_max(totals, func(tied): return GameEnums.DomainId.AMBITION if GameEnums.DomainId.AMBITION in tied else tied[0])
+	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
+	_check_simonie_infamy_force_impedita(state, target, impedita)
+	var d := state.domain(target)
+	if not impedita:
+		ActionResolver.break_domination(state, target)
+		d.cannot_be_sealed_until_exorcism = false  # not permanent
+		d.penitence_until_station = -1
+		# "ne peut pas être scellé jusqu'à la fin de la prochaine Station"
+		var until := min(state.current_station + 1, GameEnums.StationId.OFFICE)
+		_set_no_seal_until(state, target, until)
+		state.add_log("In Integro : %s ne peut pas être scellé jusqu'à la fin de la Station %s." %
+			[GameEnums.DOMAIN_NAMES[target], GameEnums.STATION_NAMES[until]])
+	else:
+		_set_no_seal_until(state, target, state.current_station)
+		state.add_log("Impedita : %s ne peut pas être scellé jusqu'à la fin de cette Station." %
+			GameEnums.DOMAIN_NAMES[target])
+
+
+# We model "cannot be sealed until end of station X" with the existing penitence_until_station
+# field for the prototype. Penitence already implies "cannot be sealed".
+static func _set_no_seal_until(state: GameState, d_id: int, station_inclusive: int) -> void:
+	var d := state.domain(d_id)
+	d.penitence_until_station = max(d.penitence_until_station, station_inclusive)
+
+
+# --- III — Contrition ------------------------------------------------------
+
+static func _contrition(state: GameState, impedita: bool) -> void:
+	# Most "serious" transgressed domain: most infamies, then scandals, then total emprise.
+	var transgressed := []
+	for d_id in DomainData.DOMAINS:
+		if state.is_transgressed(d_id):
+			transgressed.append(d_id)
+	if transgressed.is_empty():
+		state.add_log("Contrition : aucun Domaine transgressé, pas d'effet.")
+		return
+	transgressed.sort_custom(func(a, b):
+		var da := state.domain(a)
+		var db := state.domain(b)
+		if da.infamies.size() != db.infamies.size():
+			return da.infamies.size() > db.infamies.size()
+		if da.scandals.size() != db.scandals.size():
+			return da.scandals.size() > db.scandals.size()
+		return _total_emprise(state, a) > _total_emprise(state, b))
+	var target: int = transgressed[0]
+	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
+	_check_simonie_infamy_force_impedita(state, target, impedita)
+	var d := state.domain(target)
+	if not impedita:
+		if state.is_sealed(target):
+			d.seal_owner = GameEnums.PlayerId.NONE
+			d.was_fissured_this_station = true
+			state.add_log("Fissure liturgique In Integro : Sceau retiré.")
+		ActionResolver.break_domination(state, target)
+		var until := min(state.current_station + 1, GameEnums.StationId.OFFICE)
+		d.penitence_until_station = max(d.penitence_until_station, until)
+		state.add_log("Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
+	else:
+		var until := min(state.current_station + 1, GameEnums.StationId.OFFICE)
+		d.penitence_until_station = max(d.penitence_until_station, until)
+		state.add_log("Impedita : Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
+
+
+# --- IV — Confession --------------------------------------------------------
+
+static func _confession(state: GameState, impedita: bool) -> void:
+	# Target the demon with the most Transgressions (Scandale=1, Infamie=1).
+	var counts := {GameEnums.PlayerId.RED: 0, GameEnums.PlayerId.BLUE: 0}
+	for d_id in DomainData.DOMAINS:
+		var d := state.domain(d_id)
+		for ti in d.scandals:
+			counts[ti.owner] += 1
+		for ti in d.infamies:
+			counts[ti.owner] += 1
+	var target_player: int
+	if counts[GameEnums.PlayerId.RED] > counts[GameEnums.PlayerId.BLUE]:
+		target_player = GameEnums.PlayerId.RED
+	elif counts[GameEnums.PlayerId.BLUE] > counts[GameEnums.PlayerId.RED]:
+		target_player = GameEnums.PlayerId.BLUE
+	else:
+		# Tie -> demon with most Ascendant
+		if state.ascendant > 0:
+			target_player = GameEnums.PlayerId.RED
+		elif state.ascendant < 0:
+			target_player = GameEnums.PlayerId.BLUE
+		else:
+			target_player = _without_initiative_player(state)
+	state.add_log("Cible : %s." % GameEnums.player_name(target_player))
+	# Auto-pick penitences deterministically. The UI should ideally prompt;
+	# see /docs/ambiguities.md.
+	var n_to_pick := 2 if not impedita else 1
+	var picked := 0
+	# Order of preference for auto-pick: lose 2 corruption > penitence on a controlled domain
+	# > fissure a controlled domain. This gives the targeted demon the least bad option first.
+	var actions := ["lose2", "penitence", "fissure"]
+	for a in actions:
+		if picked >= n_to_pick:
+			break
+		match a:
+			"lose2":
+				if state.available_corruption[target_player] >= 2:
+					state.add_corruption_pool(target_player, -2)
+					state.add_log("Pénitence : %s perd 2 Corruptions disponibles." % GameEnums.player_name(target_player))
+					picked += 1
+			"penitence":
+				var chosen := -1
+				for d_id in DomainData.DOMAINS:
+					if state.controller_of(d_id) == target_player and not state.is_in_penitence(d_id):
+						chosen = d_id
+						break
+				if chosen >= 0:
+					var until := min(state.current_station + 1, GameEnums.StationId.OFFICE)
+					state.domain(chosen).penitence_until_station = max(state.domain(chosen).penitence_until_station, until)
+					state.add_log("Pénitence : %s mis en Pénitence." % GameEnums.DOMAIN_NAMES[chosen])
+					picked += 1
+			"fissure":
+				var chosen2 := -1
+				for d_id in DomainData.DOMAINS:
+					if state.controller_of(d_id) == target_player and state.is_sealed(d_id) and state.domain(d_id).seal_owner == target_player:
+						chosen2 = d_id
+						break
+				if chosen2 >= 0:
+					state.domain(chosen2).seal_owner = GameEnums.PlayerId.NONE
+					state.domain(chosen2).was_fissured_this_station = true
+					state.add_log("Pénitence : Sceau retiré de %s." % GameEnums.DOMAIN_NAMES[chosen2])
+					picked += 1
+
+
+# --- V — Communion ---------------------------------------------------------
+
+static func _communion(state: GameState, impedita: bool) -> void:
+	var candidates := [GameEnums.DomainId.FOI, GameEnums.DomainId.VOLONTE]
+	# Priority: sealed > has infamy > most emprise > demon-without-initiative chooses.
+	var sealed_c := []
+	var infamy_c := []
+	for d_id in candidates:
+		if state.is_sealed(d_id):
+			sealed_c.append(d_id)
+		elif state.domain(d_id).infamies.size() > 0:
+			infamy_c.append(d_id)
+	var target := -1
+	if sealed_c.size() == 1:
+		target = sealed_c[0]
+	elif sealed_c.size() == 2:
+		target = _pick_max(_emprise_dict(state, sealed_c), func(tied): return tied[0])
+	elif infamy_c.size() == 1:
+		target = infamy_c[0]
+	elif infamy_c.size() == 2:
+		target = _pick_max(_emprise_dict(state, infamy_c), func(tied): return tied[0])
+	else:
+		target = _pick_max(_emprise_dict(state, candidates), func(tied): return tied[0])
+	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
+	_check_simonie_infamy_force_impedita(state, target, impedita)
+	var d := state.domain(target)
+	if not impedita:
+		if state.is_sealed(target):
+			d.seal_owner = GameEnums.PlayerId.NONE
+			d.was_fissured_this_station = true
+			state.add_log("Fissure liturgique In Integro : Sceau retiré.")
+			ActionResolver.break_domination(state, target)
+		else:
+			ActionResolver.break_domination(state, target)
+		d.cannot_be_sealed_until_exorcism = true
+		state.add_log("In Integro : %s ne peut pas être (re)scellé avant l'Exorcisme final." % GameEnums.DOMAIN_NAMES[target])
+	else:
+		if state.is_sealed(target):
+			d.seal_owner = GameEnums.PlayerId.NONE
+			d.was_fissured_this_station = true
+			state.add_log("Fissure simple Impedita : Sceau retiré.")
+		else:
+			ActionResolver.break_domination(state, target)
+
+
+static func _emprise_dict(state: GameState, lst: Array) -> Dictionary:
+	var d := {}
+	for x in lst:
+		d[x] = _total_emprise(state, x)
+	return d
+
+
+# --- Simonie infamy: force Impedita on a Foi-targeting response -------------
+
+static func _check_simonie_infamy_force_impedita(state: GameState, target_domain: int, impedita: bool) -> void:
+	if target_domain != GameEnums.DomainId.FOI:
+		return
+	# Find Simonie infamy holder.
+	var holder := GameEnums.PlayerId.NONE
+	for d_id in DomainData.DOMAINS:
+		for ti in state.domain(d_id).infamies:
+			if ti.def_id == TransgressionData.T_SIMONIE:
+				holder = ti.owner
+				break
+		if holder != GameEnums.PlayerId.NONE:
+			break
+	if holder == GameEnums.PlayerId.NONE:
+		return
+	if state.foi_next_response_impedita:
+		state.foi_next_response_impedita = false
+	state.add_log("(Note : Simonie Infamie marque la prochaine Réponse ciblant Foi comme Impedita.)")

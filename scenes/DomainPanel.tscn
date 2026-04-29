@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://possession_DomainPanel"]
+
+[ext_resource type="Script" path="res://scripts/ui/DomainPanel.gd" id="1_DomainPanel"]
+
+[node name="DomainPanel" type="Control"]
+script = ExtResource("1_DomainPanel")
