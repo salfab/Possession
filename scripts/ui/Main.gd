@@ -9,6 +9,32 @@ var manager: TurnManager
 var pending_action: int = -1
 var pending_kwargs: Dictionary = {}
 
+# Diagnostic — compte les taps reçus par le viewport
+var _tap_count: int = 0
+
+
+func _input(event: InputEvent) -> void:
+	var pressed := false
+	var pos := Vector2.ZERO
+	if event is InputEventScreenTouch:
+		pressed = event.pressed
+		pos = event.position
+	elif event is InputEventMouseButton:
+		pressed = event.pressed
+		pos = event.position
+	else:
+		return
+	if not pressed:
+		return
+	_tap_count += 1
+	var bg := get_node_or_null("Background") as ColorRect
+	if bg:
+		# alterne entre 2 couleurs sombres pour signal visuel
+		bg.color = Color(0.1, 0.05, 0.05, 1) if (_tap_count % 2) == 1 else Color(0.04, 0.05, 0.1, 1)
+	if state != null:
+		state.add_log("[TAP #%d à (%d,%d)]" % [_tap_count, int(pos.x), int(pos.y)])
+		_render_log()
+
 # Top-level UI nodes (created in _ready)
 @onready var root_h: HBoxContainer = $Root
 @onready var board_v: VBoxContainer = $Root/BoardArea
