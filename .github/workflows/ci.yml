@@ -89,12 +89,14 @@ jobs:
         # response headers. GitHub Pages and itch.io can't set them, so we use the
         # standard `coi-serviceworker` workaround: a service worker that re-injects
         # the headers client-side. Source: https://github.com/gzuidhof/coi-serviceworker
+        # The file is vendored at web_assets/coi-serviceworker.js — no curl/wget
+        # required (barichello/godot-ci doesn't ship them).
         run: |
           set -e
-          curl -fsSL -o ${EXPORT_DIR}/coi-serviceworker.js \
-            https://raw.githubusercontent.com/gzuidhof/coi-serviceworker/master/coi-serviceworker.js
+          cp web_assets/coi-serviceworker.js ${EXPORT_DIR}/coi-serviceworker.js
           # Register the service worker as the very first script in <head>.
-          sed -i 's|<head>|<head>\n<script src="coi-serviceworker.js"></script>|' ${EXPORT_DIR}/index.html
+          # Tolerate <head> with or without attributes.
+          sed -i -E 's|<head([^>]*)>|<head\1>\n<script src="coi-serviceworker.js"></script>|' ${EXPORT_DIR}/index.html
           grep -q 'coi-serviceworker.js' ${EXPORT_DIR}/index.html
 
       - name: Zip the build
