@@ -86,6 +86,29 @@ class PendingEntrave extends RefCounted:
 		target_station = d.get("target_station", 0)
 
 
+# A decision the engine cannot resolve on its own and must defer to the UI.
+# kind ∈ {"free_exploit", "confession"}
+class PendingDecision extends RefCounted:
+	var kind: String = ""
+	var player: int = GameEnums.PlayerId.NONE
+	var data: Dictionary = {}
+	var picks_remaining: int = 1
+	var picks_done: Array = []
+
+	func to_dict() -> Dictionary:
+		return {
+			"kind": kind, "player": player, "data": data,
+			"picks_remaining": picks_remaining, "picks_done": picks_done,
+		}
+
+	func from_dict(d: Dictionary) -> void:
+		kind = d.get("kind", "")
+		player = d.get("player", GameEnums.PlayerId.NONE)
+		data = d.get("data", {})
+		picks_remaining = d.get("picks_remaining", 1)
+		picks_done = d.get("picks_done", [])
+
+
 # --- GameState fields -------------------------------------------------------
 
 var domains: Dictionary = {}        # DomainId -> DomainState
@@ -98,6 +121,7 @@ var current_station: int = GameEnums.StationId.MURMURES
 var current_pulse: int = 1
 var active_player: int = GameEnums.PlayerId.RED
 var pending_entraves: Array = []   # Array[PendingEntrave]
+var pending_decisions: Array = []  # Array[PendingDecision] — UI must resolve these
 var transgressions_provoked_this_station: Dictionary = {  # PlayerId -> int count
 	GameEnums.PlayerId.RED: 0,
 	GameEnums.PlayerId.BLUE: 0,
@@ -261,6 +285,10 @@ func transgression_owner(def_id: String) -> int:
 
 # --- Serialization ----------------------------------------------------------
 
+func has_pending_decisions() -> bool:
+	return pending_decisions.size() > 0
+
+
 func to_dict() -> Dictionary:
 	var d_ser := {}
 	for d_id in domains.keys():
@@ -273,6 +301,7 @@ func to_dict() -> Dictionary:
 		"current_pulse": current_pulse,
 		"active_player": active_player,
 		"pending_entraves": pending_entraves.map(func(p): return p.to_dict()),
+		"pending_decisions": pending_decisions.map(func(p): return p.to_dict()),
 		"transgressions_provoked_this_station": transgressions_provoked_this_station,
 		"trafic_discount_pending": trafic_discount_pending,
 		"nepotisme_used_this_station": nepotisme_used_this_station,
@@ -302,6 +331,11 @@ func from_dict(d: Dictionary) -> void:
 		var pe := PendingEntrave.new()
 		pe.from_dict(p)
 		pending_entraves.append(pe)
+	pending_decisions = []
+	for p in d.get("pending_decisions", []):
+		var pd := PendingDecision.new()
+		pd.from_dict(p)
+		pending_decisions.append(pd)
 	transgressions_provoked_this_station = d.get("transgressions_provoked_this_station", transgressions_provoked_this_station)
 	trafic_discount_pending = d.get("trafic_discount_pending", trafic_discount_pending)
 	nepotisme_used_this_station = d.get("nepotisme_used_this_station", nepotisme_used_this_station)

@@ -23,7 +23,7 @@ correspondante.
 
 | Événement                | Effets                                  |
 | ------------------------ | --------------------------------------- |
-| `push` sur `main`        | tests + build + deploy itch + Netlify(*)|
+| `push` sur `main`        | tests + build + Pages + itch + Netlify(*)|
 | `push` d'un tag `v*`     | identique                               |
 | `pull_request`           | tests + build seulement                 |
 | `workflow_dispatch`      | manuel : tests + build                  |
@@ -74,6 +74,17 @@ Dans `Settings → Secrets and variables → Actions` du dépôt GitHub.
 | `ITCH_GAME`     | `possession-v1g`     | Slug du projet itch.io                             |
 | `ITCH_CHANNEL`   | `web`                | Channel butler. Optionnel, par défaut `web`.       |
 | `ENABLE_NETLIFY` | `true`               | Mettre à `true` pour activer le job Netlify.       |
+
+## Étapes pour activer GitHub Pages (le plus simple — zéro secret)
+
+1. Sur GitHub : `Settings → Pages`.
+2. Sous *Build and deployment → Source*, choisir **GitHub Actions**.
+3. Pousser sur `main`. Le job `deploy-pages` publie le build.
+4. L'URL apparaît dans la sortie du job (ex. `https://salfab.github.io/Possession/`)
+   et dans `Settings → Pages` une fois le premier déploiement fait.
+
+Pas de secret à configurer. C'est la solution recommandée pour avoir un lien
+public le plus vite possible.
 
 ## Étapes pour activer la publication itch.io
 
