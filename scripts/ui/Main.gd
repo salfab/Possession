@@ -83,9 +83,9 @@ func _render_status() -> void:
 	if state.game_over:
 		status_label.text = "PARTIE TERMINÉE — Vainqueur : %s. %s" % [GameEnums.player_name(state.winner), state.winner_reason]
 		return
-	var st := GameEnums.STATION_NAMES[state.current_station]
-	var p := GameEnums.STATION_PULSES[state.current_station]
-	var init_p := GameEnums.STATION_INITIATIVE[state.current_station]
+	var st: String = GameEnums.STATION_NAMES[state.current_station]
+	var p: int = GameEnums.STATION_PULSES[state.current_station]
+	var init_p: int = GameEnums.STATION_INITIATIVE[state.current_station]
 	status_label.text = "Station %s — Pulsation %d/%d — Joueur actif : %s — Initiative : %s — Ascendant : %d" % [
 		st, state.current_pulse, p,
 		GameEnums.player_name(state.active_player),
