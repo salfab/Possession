@@ -108,23 +108,23 @@ jobs:
           set -e
           TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
           SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          # Render banner into a temp file (safer than shell escaping)
+          # Render banner placeholders into a temp file
           sed -e "s|__SHA__|$SHA|g" -e "s|__TIMESTAMP__|$TIMESTAMP|g" \
-              web_assets/version-banner.html > ${EXPORT_DIR}/_banner.html
+              web_assets/version-banner.html > "${EXPORT_DIR}/_banner.html"
           # Insert the rendered banner right after the opening <body...> tag
-          python3 <<'PY'
-          import re, os
-          export_dir = os.environ['EXPORT_DIR']
-          with open(f'{export_dir}/index.html', 'r') as f:
-              html = f.read()
-          with open(f'{export_dir}/_banner.html', 'r') as f:
-              banner = f.read()
-          html = re.sub(r'(<body[^>]*>)', r'\1\n' + banner, html, count=1)
-          with open(f'{export_dir}/index.html', 'w') as f:
-              f.write(html)
-          PY
-          rm -f ${EXPORT_DIR}/_banner.html
-          grep -q 'version-banner' ${EXPORT_DIR}/index.html
+          awk -v banner_file="${EXPORT_DIR}/_banner.html" '
+            !inserted && /<body[^>]*>/ {
+              print
+              while ((getline line < banner_file) > 0) print line
+              close(banner_file)
+              inserted = 1
+              next
+            }
+            { print }
+          ' "${EXPORT_DIR}/index.html" > "${EXPORT_DIR}/index.html.new"
+          mv "${EXPORT_DIR}/index.html.new" "${EXPORT_DIR}/index.html"
+          rm -f "${EXPORT_DIR}/_banner.html"
+          grep -q 'version-banner' "${EXPORT_DIR}/index.html"
 
       - name: Zip the build
         run: |
