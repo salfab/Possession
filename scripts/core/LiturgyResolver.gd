@@ -88,7 +88,7 @@ static func _signe_de_croix(state: GameState, impedita: bool) -> void:
 			state.add_log("Impedita : égalité, aucun effet.")
 	else:
 		var d := state.domain(target)
-		var lead := abs(d.red_corruption - d.blue_corruption)
+		var lead: int = abs(d.red_corruption - d.blue_corruption)
 		if lead >= 2:
 			ActionResolver.break_domination(state, target)
 		else:
@@ -116,7 +116,7 @@ static func _examen(state: GameState, impedita: bool) -> void:
 		d.cannot_be_sealed_until_exorcism = false  # not permanent
 		d.penitence_until_station = -1
 		# "ne peut pas être scellé jusqu'à la fin de la prochaine Station"
-		var until := min(state.current_station + 1, GameEnums.StationId.OFFICE)
+		var until: int = min(state.current_station + 1, GameEnums.StationId.OFFICE)
 		_set_no_seal_until(state, target, until)
 		state.add_log("In Integro : %s ne peut pas être scellé jusqu'à la fin de la Station %s." %
 			[GameEnums.DOMAIN_NAMES[target], GameEnums.STATION_NAMES[until]])
@@ -162,11 +162,11 @@ static func _contrition(state: GameState, impedita: bool) -> void:
 			d.was_fissured_this_station = true
 			state.add_log("Fissure liturgique In Integro : Sceau retiré.")
 		ActionResolver.break_domination(state, target)
-		var until := min(state.current_station + 1, GameEnums.StationId.OFFICE)
+		var until: int = min(state.current_station + 1, GameEnums.StationId.OFFICE)
 		d.penitence_until_station = max(d.penitence_until_station, until)
 		state.add_log("Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
 	else:
-		var until := min(state.current_station + 1, GameEnums.StationId.OFFICE)
+		var until: int = min(state.current_station + 1, GameEnums.StationId.OFFICE)
 		d.penitence_until_station = max(d.penitence_until_station, until)
 		state.add_log("Impedita : Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
 

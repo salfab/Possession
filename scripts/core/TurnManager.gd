@@ -124,7 +124,7 @@ func _begin_station(station: int, _initial: bool) -> void:
 
 func _queue_free_exploitation_decisions() -> void:
 	# Initiative player picks first.
-	var order := [GameEnums.STATION_INITIATIVE[state.current_station], GameEnums.opponent(GameEnums.STATION_INITIATIVE[state.current_station])]
+	var order: Array = [GameEnums.STATION_INITIATIVE[state.current_station], GameEnums.opponent(GameEnums.STATION_INITIATIVE[state.current_station])]
 	for p in order:
 		var options := []
 		for d_id in DomainData.DOMAINS:

@@ -383,7 +383,7 @@ func _commit_action(kw: Dictionary = {}) -> void:
 func _render_log() -> void:
 	var lines := state.log
 	var max_lines := 40
-	var start := max(0, lines.size() - max_lines)
+	var start: int = max(0, lines.size() - max_lines)
 	var s := ""
 	for i in range(start, lines.size()):
 		s += String(lines[i]) + "\n"

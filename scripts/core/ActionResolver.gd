@@ -155,12 +155,12 @@ static func break_domination(state: GameState, d_id: int) -> void:
 	var d := state.domain(d_id)
 	if d == null:
 		return
-	var lead := abs(d.red_corruption - d.blue_corruption)
+	var lead: int = abs(d.red_corruption - d.blue_corruption)
 	if lead < 2:
 		return
 	var dominant := GameEnums.PlayerId.RED if d.red_corruption > d.blue_corruption else GameEnums.PlayerId.BLUE
 	# Reduce dominant by (lead - 1) so the gap becomes 1.
-	var to_remove := lead - 1
+	var to_remove: int = lead - 1
 	if dominant == GameEnums.PlayerId.RED:
 		d.red_corruption = max(0, d.red_corruption - to_remove)
 	else:
