@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://possession_CardPanel"]
+
+[ext_resource type="Script" path="res://scripts/ui/CardPanel.gd" id="1_CardPanel"]
+
+[node name="CardPanel" type="Control"]
+script = ExtResource("1_CardPanel")

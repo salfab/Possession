@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://possession_LogPanel"]
+
+[ext_resource type="Script" path="res://scripts/ui/LogPanel.gd" id="1_LogPanel"]
+
+[node name="LogPanel" type="Control"]
+script = ExtResource("1_LogPanel")

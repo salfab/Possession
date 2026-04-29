@@ -1,0 +1,32 @@
+; Possession V1g — Fiat Tenebris
+; Godot 4.x project file
+
+config_version=5
+
+[application]
+
+config/name="Possession V1g"
+config/description="Hotseat 2-player prototype of the Possession board game (V1g - Fiat Tenebris)."
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.2", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+GameEnums="*res://scripts/core/GameEnums.gd"
+DomainData="*res://scripts/data/DomainData.gd"
+TransgressionData="*res://scripts/data/TransgressionData.gd"
+LiturgicalResponseData="*res://scripts/data/LiturgicalResponseData.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.04, 0.05, 0.1, 1)
