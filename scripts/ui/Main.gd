@@ -27,10 +27,7 @@ func _input(event: InputEvent) -> void:
 	if not pressed:
 		return
 	_tap_count += 1
-	var bg := get_node_or_null("Background") as ColorRect
-	if bg:
-		# alterne entre 2 couleurs sombres pour signal visuel
-		bg.color = Color(0.1, 0.05, 0.05, 1) if (_tap_count % 2) == 1 else Color(0.04, 0.05, 0.1, 1)
+	# Ne plus toucher au bg ici — laissé aux diagnostics _ready/_on_btn_new_game.
 	if state != null:
 		state.add_log("[TAP #%d à (%d,%d)]" % [_tap_count, int(pos.x), int(pos.y)])
 		_render_log()
@@ -52,7 +49,14 @@ const SAVE_PATH := "user://save_game.json"
 
 
 func _ready() -> void:
+	# Diagnostic visuel : bg vert si _ready() atteint
+	var bg := get_node_or_null("Background") as ColorRect
+	if bg:
+		bg.color = Color(0.0, 0.3, 0.0, 1.0)
 	new_game()
+	# Diagnostic visuel : bg vert clair si new_game() a réussi
+	if bg:
+		bg.color = Color(0.0, 0.5, 0.1, 1.0)
 
 
 func new_game() -> void:
@@ -449,7 +453,14 @@ func _render_transgressions() -> void:
 # --- Debug buttons --------------------------------------------------------
 
 func _on_btn_new_game() -> void:
+	# Diagnostic visuel : bg orange dès que le handler s'exécute
+	var bg := get_node_or_null("Background") as ColorRect
+	if bg:
+		bg.color = Color(1.0, 0.5, 0.0, 1.0)
 	new_game()
+	# Diagnostic visuel : bg violet si new_game() retourne OK
+	if bg:
+		bg.color = Color(0.5, 0.0, 0.5, 1.0)
 	state.add_log("*** NOUVELLE PARTIE COMMENCÉE à %s ***" % Time.get_time_string_from_system())
 	_render_log()
 func _on_btn_force_next_station() -> void:
