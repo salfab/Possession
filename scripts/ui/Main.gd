@@ -36,15 +36,76 @@ var _transg_box: VBoxContainer
 var _tab_contents: Array[Control] = []
 var _active_tab: int = 0
 
+var _debug_overlay: CanvasLayer
+var _debug_log: RichTextLabel
+var _debug_visible: bool = true
+
 func _ready() -> void:
+    _build_debug_overlay()
+    _dlog("[STARTUP] _ready() commencé")
+    _dlog("Viewport: %s" % str(get_viewport().get_visible_rect().size))
+    _dlog("Construction de l'UI...")
     _build_ui()
+    _dlog("UI construite — démarrage de la partie")
     new_game()
+    _dlog("Partie créée — prêt")
+
+func _build_debug_overlay() -> void:
+    _debug_overlay = CanvasLayer.new()
+    _debug_overlay.layer = 100
+    add_child(_debug_overlay)
+
+    var bg := PanelContainer.new()
+    bg.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+    var bg_style := StyleBoxFlat.new()
+    bg_style.bg_color = Color(0, 0, 0, 0.85)
+    bg_style.border_color = Color.YELLOW
+    bg_style.set_border_width_all(2)
+    bg_style.set_content_margin_all(6)
+    bg.add_theme_stylebox_override("panel", bg_style)
+    _debug_overlay.add_child(bg)
+
+    var v := VBoxContainer.new()
+    bg.add_child(v)
+
+    var top_row := HBoxContainer.new()
+    v.add_child(top_row)
+    var title := Label.new()
+    title.text = "🐛 DEBUG"
+    title.add_theme_color_override("font_color", Color.YELLOW)
+    title.add_theme_font_size_override("font_size", 12)
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    top_row.add_child(title)
+    var toggle_btn := Button.new()
+    toggle_btn.text = "Masquer"
+    toggle_btn.add_theme_font_size_override("font_size", 11)
+    toggle_btn.pressed.connect(_toggle_debug_overlay)
+    top_row.add_child(toggle_btn)
+
+    _debug_log = RichTextLabel.new()
+    _debug_log.bbcode_enabled = true
+    _debug_log.fit_content = true
+    _debug_log.scroll_active = false
+    _debug_log.custom_minimum_size = Vector2(0, 100)
+    _debug_log.add_theme_color_override("default_color", Color(0.9, 1.0, 0.6))
+    _debug_log.add_theme_font_size_override("normal_font_size", 11)
+    v.add_child(_debug_log)
+
+func _toggle_debug_overlay() -> void:
+    _debug_visible = not _debug_visible
+    _debug_log.visible = _debug_visible
+
+func _dlog(msg: String) -> void:
+    print(msg)
+    if _debug_log:
+        _debug_log.append_text(msg + "\n")
 
 func new_game() -> void:
     state = GameState.new()
     manager = TurnManager.new(state)
     pending_action = -1
     _rebuild_all()
+    _dlog("[NEW GAME] Joueur actif: %s" % GameEnums.player_name(state.active_player))
 
 # ─── UI CONSTRUCTION ──────────────────────────────────────────────────────────
 
@@ -88,6 +149,11 @@ func _build_ui() -> void:
     root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     root.add_theme_constant_override("separation", 12)
     scroll.add_child(root)
+
+    # Spacer to push content below the debug overlay
+    var top_spacer := Control.new()
+    top_spacer.custom_minimum_size = Vector2(0, 140)
+    root.add_child(top_spacer)
 
     _build_header(root)
     _build_ascendant(root)
@@ -656,6 +722,7 @@ func _is_action_potentially_legal(action: int, p: int) -> bool:
     return false
 
 func _on_action_chosen(action: int) -> void:
+    _dlog("[CLIC] Action: %d" % action)
     pending_action = action
     if action == GameEnums.ActionId.PASSER:
         _commit_action()
@@ -691,7 +758,9 @@ func _force_pop_decision() -> void:
 
 # ─── DEBUG BUTTONS ────────────────────────────────────────────────────────────
 
-func _on_btn_new_game() -> void: new_game()
+func _on_btn_new_game() -> void:
+    _dlog("[CLIC] Nouvelle partie")
+    new_game()
 
 func _on_btn_force_next_station() -> void:
     if state.game_over: return
