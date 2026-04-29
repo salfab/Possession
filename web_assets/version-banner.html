@@ -6,24 +6,34 @@
   </div>
   <div id="version-banner-log" style="max-height:200px;overflow:auto;font-size:10px;background:#000;color:#0f0;padding:4px;margin-top:4px;display:none;white-space:pre-wrap;word-break:break-all;"></div>
 </div>
+<button id="version-banner-reopen" title="Rouvrir le panneau de debug" style="display:none;position:fixed;top:6px;right:6px;z-index:99999;width:32px;height:32px;border-radius:16px;border:2px solid #000;background:#ffeb3b;color:#000;font-family:monospace;font-size:14px;font-weight:bold;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.4);padding:0;">i</button>
 <script>
 (function () {
   var banner = document.getElementById('version-banner');
   var logBox = document.getElementById('version-banner-log');
-  function addLog(line, color) {
+  var reopenBtn = document.getElementById('version-banner-reopen');
+  var hasError = false;
+  function setReopenError() {
+    hasError = true;
+    reopenBtn.style.background = '#ff3030';
+    reopenBtn.style.color = '#fff';
+    reopenBtn.textContent = '!';
+  }
+  function addLog(line, color, isError) {
     logBox.style.display = 'block';
     var span = document.createElement('div');
     span.style.color = color || '#0f0';
     span.textContent = line;
     logBox.appendChild(span);
     logBox.scrollTop = logBox.scrollHeight;
+    if (isError) setReopenError();
   }
   // Capture window-level errors (uncaught JS, including from Godot WASM)
   window.addEventListener('error', function (e) {
-    addLog('[ERR] ' + (e.message || '') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?'), '#ff6');
+    addLog('[ERR] ' + (e.message || '') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?'), '#ff6', true);
   });
   window.addEventListener('unhandledrejection', function (e) {
-    addLog('[REJ] ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), '#ff6');
+    addLog('[REJ] ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), '#ff6', true);
   });
   // Patch console.error and console.warn so Godot's print_error / push_error surface here
   ['error', 'warn', 'log'].forEach(function (level) {
@@ -37,15 +47,20 @@
           }
           return String(a);
         }).join(' ');
-        // Limit length so the banner doesn't explode
         if (line.length > 500) line = line.substring(0, 500) + '...';
-        addLog(line, level === 'error' ? '#ff6' : (level === 'warn' ? '#fc6' : '#0f0'));
+        var color = level === 'error' ? '#ff6' : (level === 'warn' ? '#fc6' : '#0f0');
+        addLog(line, color, level === 'error');
       } catch (_) {}
       orig.apply(null, arguments);
     };
   });
   document.getElementById('version-banner-close').addEventListener('click', function () {
     banner.style.display = 'none';
+    reopenBtn.style.display = 'block';
+  });
+  reopenBtn.addEventListener('click', function () {
+    banner.style.display = 'block';
+    reopenBtn.style.display = 'none';
   });
   document.getElementById('version-banner-reset').addEventListener('click', function () {
     var done = function (msg) {
