@@ -422,7 +422,10 @@ func _render_transgressions() -> void:
 
 # --- Debug buttons --------------------------------------------------------
 
-func _on_btn_new_game() -> void: new_game()
+func _on_btn_new_game() -> void:
+	new_game()
+	state.add_log("*** NOUVELLE PARTIE COMMENCÉE à %s ***" % Time.get_time_string_from_system())
+	_render_log()
 func _on_btn_force_next_station() -> void:
 	if state.game_over: return
 	state.current_pulse = GameEnums.STATION_PULSES[state.current_station]
