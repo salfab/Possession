@@ -147,7 +147,7 @@ func _test_seal_rules() -> void:
 	# Coût et placement
 	var s2 := _new_state()
 	s2.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
-	var before := s2.available_corruption[GameEnums.PlayerId.RED]
+	var before: int = s2.available_corruption[GameEnums.PlayerId.RED]
 	var r := ActionResolver.sceller(s2, GameEnums.PlayerId.RED, GameEnums.DomainId.AMBITION)
 	_assert(r["ok"], "Scellement légal OK")
 	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == before - 1,
@@ -236,7 +236,7 @@ func _test_tribut_volonte() -> void:
 		"Fissure Volonté avec 1 Corruption -> illégale")
 	# Avec 2 -> légal, et Bleu reçoit 1
 	s.available_corruption[GameEnums.PlayerId.RED] = 2
-	var blue_before := s.available_corruption[GameEnums.PlayerId.BLUE]
+	var blue_before: int = s.available_corruption[GameEnums.PlayerId.BLUE]
 	var r := ActionResolver.fissurer(s, GameEnums.PlayerId.RED, GameEnums.DomainId.VOLONTE)
 	_assert(r["ok"], "Fissure Volonté avec 2 Corruptions OK")
 	_assert(s.available_corruption[GameEnums.PlayerId.RED] == 0,
@@ -252,7 +252,7 @@ func _test_transgressions() -> void:
 	var s := _new_state()
 	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 2)
 	var asc_before := s.ascendant
-	var corr_before := s.available_corruption[GameEnums.PlayerId.RED]
+	var corr_before: int = s.available_corruption[GameEnums.PlayerId.RED]
 	var r := ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_NEPOTISME)
 	_assert(r["ok"], "Provoquer Népotisme OK")
 	# Coût Scandale 2 puis +1 effet Scandale -> net -1 sur la pool
