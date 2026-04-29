@@ -51,6 +51,12 @@ et un résumé `X/Y PASS — Z FAIL`.
 
 Voir [docs/deploy_web.md](docs/deploy_web.md).
 
+## CI/CD
+
+Pipeline GitHub Actions complet : tests headless → export Web → publication
+automatique sur itch.io (et Netlify en option). Voir [docs/cicd.md](docs/cicd.md)
+pour la configuration des secrets et variables.
+
 ## Architecture
 
 ```

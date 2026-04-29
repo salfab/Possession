@@ -1,0 +1,181 @@
+name: CI/CD — Possession V1g
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# All jobs share the same Godot version. Bump here to upgrade.
+env:
+  GODOT_VERSION: "4.2.2"
+  EXPORT_PRESET: "Web"
+  EXPORT_DIR: "export"
+  ARTIFACT_NAME: "possession-v1g-web"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Run the rules engine tests headlessly.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Tests (rules engine)
+    runs-on: ubuntu-22.04
+    container:
+      image: barichello/godot-ci:4.2.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run rules engine tests
+        run: |
+          set -e
+          godot --headless --path . --script res://scripts/cli/run_tests.gd | tee tests.log
+          # Defensive: fail the job if the summary line shows any FAIL.
+          if grep -E "=== [0-9]+/[0-9]+ PASS, ([1-9][0-9]*) FAIL ===" tests.log > /dev/null; then
+            echo "::error::Some rules tests failed."
+            exit 1
+          fi
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: tests.log
+
+  # ---------------------------------------------------------------------------
+  # 2. Build the Web/HTML5 export.
+  # ---------------------------------------------------------------------------
+  build-web:
+    name: Build Web/HTML5
+    runs-on: ubuntu-22.04
+    needs: test
+    container:
+      image: barichello/godot-ci:4.2.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stage export templates
+        # The barichello image ships the templates at /root/.local/share/godot/...
+        # Godot also looks under $HOME — make sure they're visible there.
+        run: |
+          set -e
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          cp -rn /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable/* \
+                  ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ || true
+
+      - name: Export Web build
+        run: |
+          set -e
+          mkdir -p ${EXPORT_DIR}
+          godot --headless --path . --export-release "${EXPORT_PRESET}" ${EXPORT_DIR}/index.html
+          # Sanity check — at least index.html, .wasm, .pck must be present.
+          test -f ${EXPORT_DIR}/index.html
+          test -f ${EXPORT_DIR}/index.wasm
+          test -f ${EXPORT_DIR}/index.pck
+
+      - name: Add Netlify _headers (COOP/COEP)
+        run: |
+          {
+            echo '/*'
+            echo '  Cross-Origin-Opener-Policy: same-origin'
+            echo '  Cross-Origin-Embedder-Policy: require-corp'
+          } > ${EXPORT_DIR}/_headers
+
+      - name: Zip the build
+        run: |
+          set -e
+          cd ${EXPORT_DIR}
+          zip -r ../${ARTIFACT_NAME}.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.zip
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 3. Deploy to itch.io via butler. Skipped on PRs and forks.
+  # ---------------------------------------------------------------------------
+  deploy-itch:
+    name: Deploy to itch.io
+    runs-on: ubuntu-22.04
+    needs: build-web
+    if: |
+      github.event_name != 'pull_request'
+      && github.repository_owner == 'salfab'
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+
+      - name: Unzip build
+        run: |
+          mkdir -p web
+          unzip -o ${ARTIFACT_NAME}.zip -d web
+
+      - name: Install butler
+        run: |
+          set -e
+          curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -o butler.zip -d butler
+          chmod +x butler/butler
+          ./butler/butler -V
+
+      - name: Push to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_USER: ${{ vars.ITCH_USER }}
+          ITCH_GAME: ${{ vars.ITCH_GAME }}
+          ITCH_CHANNEL: ${{ vars.ITCH_CHANNEL || 'web' }}
+        run: |
+          set -e
+          if [ -z "$BUTLER_API_KEY" ]; then
+            echo "::warning::BUTLER_API_KEY secret missing — skipping itch.io deploy."
+            exit 0
+          fi
+          if [ -z "$ITCH_USER" ] || [ -z "$ITCH_GAME" ]; then
+            echo "::warning::ITCH_USER / ITCH_GAME variables missing — skipping itch.io deploy."
+            exit 0
+          fi
+          ./butler/butler push web "$ITCH_USER/$ITCH_GAME:$ITCH_CHANNEL" \
+            --userversion "${GITHUB_SHA::7}"
+
+  # ---------------------------------------------------------------------------
+  # 4. Optional Netlify deploy. Opt-in via repo variable ENABLE_NETLIFY=true.
+  # ---------------------------------------------------------------------------
+  deploy-netlify:
+    name: Deploy to Netlify
+    runs-on: ubuntu-22.04
+    needs: build-web
+    if: |
+      github.event_name != 'pull_request'
+      && vars.ENABLE_NETLIFY == 'true'
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+
+      - name: Unzip build
+        run: |
+          mkdir -p web
+          unzip -o ${ARTIFACT_NAME}.zip -d web
+
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: ./web
+          production-deploy: true
+          deploy-message: "GitHub Actions ${{ github.sha }}"
+          enable-pull-request-comment: false
+          enable-commit-comment: false
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

@@ -73,6 +73,13 @@ Puis activez Pages depuis `gh-pages` dans les Settings.
 
 `netlify deploy --dir=export --prod`
 
+## 4bis. Publication automatique (CI/CD)
+
+Le pipeline GitHub Actions (`.github/workflows/ci.yml`) publie automatiquement
+sur itch.io à chaque push sur `main` ou tag `v*`, et optionnellement sur Netlify.
+
+Voir [docs/cicd.md](cicd.md) pour la liste des secrets et variables à configurer.
+
 ## 5. Limitations connues
 
 - Pas de réseau, pas de matchmaking, pas de bots.
