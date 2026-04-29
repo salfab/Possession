@@ -22,6 +22,7 @@ LiturgicalResponseData="*res://scripts/data/LiturgicalResponseData.gd"
 
 window/size/viewport_width=1280
 window/size/viewport_height=800
+window/handheld/orientation=1
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
