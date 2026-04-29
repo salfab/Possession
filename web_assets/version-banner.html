@@ -1,11 +1,49 @@
-<div id="version-banner" style="position:fixed;top:0;left:0;right:0;background:#ffeb3b;color:#000;padding:6px 8px;z-index:99999;font-family:monospace;font-size:11px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;gap:6px;">
-  <span style="flex:1;">v=__SHA__ — __TIMESTAMP__</span>
-  <button id="version-banner-reset" style="font-size:11px;padding:4px 8px;">Reset SW + cache</button>
-  <button id="version-banner-close" style="font-size:11px;padding:4px 8px;">&times;</button>
+<div id="version-banner" style="position:fixed;top:0;left:0;right:0;background:#ffeb3b;color:#000;padding:6px 8px;z-index:99999;font-family:monospace;font-size:11px;border-bottom:2px solid #000;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+    <span style="flex:1;">v=__SHA__ — __TIMESTAMP__</span>
+    <button id="version-banner-reset" style="font-size:11px;padding:4px 8px;">Reset SW + cache</button>
+    <button id="version-banner-close" style="font-size:11px;padding:4px 8px;">&times;</button>
+  </div>
+  <div id="version-banner-log" style="max-height:200px;overflow:auto;font-size:10px;background:#000;color:#0f0;padding:4px;margin-top:4px;display:none;white-space:pre-wrap;word-break:break-all;"></div>
 </div>
 <script>
 (function () {
   var banner = document.getElementById('version-banner');
+  var logBox = document.getElementById('version-banner-log');
+  function addLog(line, color) {
+    logBox.style.display = 'block';
+    var span = document.createElement('div');
+    span.style.color = color || '#0f0';
+    span.textContent = line;
+    logBox.appendChild(span);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+  // Capture window-level errors (uncaught JS, including from Godot WASM)
+  window.addEventListener('error', function (e) {
+    addLog('[ERR] ' + (e.message || '') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?'), '#ff6');
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    addLog('[REJ] ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), '#ff6');
+  });
+  // Patch console.error and console.warn so Godot's print_error / push_error surface here
+  ['error', 'warn', 'log'].forEach(function (level) {
+    var orig = console[level].bind(console);
+    console[level] = function () {
+      try {
+        var line = '[' + level.toUpperCase() + '] ' + Array.prototype.slice.call(arguments).map(function (a) {
+          if (a == null) return String(a);
+          if (typeof a === 'object') {
+            try { return JSON.stringify(a); } catch (_) { return String(a); }
+          }
+          return String(a);
+        }).join(' ');
+        // Limit length so the banner doesn't explode
+        if (line.length > 500) line = line.substring(0, 500) + '...';
+        addLog(line, level === 'error' ? '#ff6' : (level === 'warn' ? '#fc6' : '#0f0'));
+      } catch (_) {}
+      orig.apply(null, arguments);
+    };
+  });
   document.getElementById('version-banner-close').addEventListener('click', function () {
     banner.style.display = 'none';
   });
