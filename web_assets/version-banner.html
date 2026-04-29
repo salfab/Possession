@@ -1,0 +1,36 @@
+<div id="version-banner" style="position:fixed;top:0;left:0;right:0;background:#ffeb3b;color:#000;padding:6px 8px;z-index:99999;font-family:monospace;font-size:11px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;gap:6px;">
+  <span style="flex:1;">v=__SHA__ — __TIMESTAMP__</span>
+  <button id="version-banner-reset" style="font-size:11px;padding:4px 8px;">Reset SW + cache</button>
+  <button id="version-banner-close" style="font-size:11px;padding:4px 8px;">&times;</button>
+</div>
+<script>
+(function () {
+  var banner = document.getElementById('version-banner');
+  document.getElementById('version-banner-close').addEventListener('click', function () {
+    banner.style.display = 'none';
+  });
+  document.getElementById('version-banner-reset').addEventListener('click', function () {
+    var done = function (msg) {
+      alert(msg + ' — la page va se recharger.');
+      location.reload();
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (rs) {
+        Promise.all(rs.map(function (r) { return r.unregister(); })).then(function () {
+          if ('caches' in window) {
+            caches.keys().then(function (keys) {
+              Promise.all(keys.map(function (k) { return caches.delete(k); })).then(function () {
+                done(rs.length + ' SW supprimé(s), ' + keys.length + ' caches vidés');
+              });
+            });
+          } else {
+            done(rs.length + ' SW supprimé(s)');
+          }
+        });
+      });
+    } else {
+      done('Aucun SW supporté');
+    }
+  });
+})();
+</script>

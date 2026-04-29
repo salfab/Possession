@@ -99,6 +99,33 @@ jobs:
           sed -i -E 's|<head([^>]*)>|<head\1>\n<script src="coi-serviceworker.js"></script>|' ${EXPORT_DIR}/index.html
           grep -q 'coi-serviceworker.js' ${EXPORT_DIR}/index.html
 
+      - name: Inject version banner + service worker reset button
+        # Banner HTML/JS injecté dans <body> AVANT que Godot ne se charge.
+        # Permet (1) de voir si le navigateur sert la dernière version (timestamp + SHA)
+        # et (2) de désinscrire les service workers anciens d'un clic, sans avoir
+        # accès aux outils développeur.
+        run: |
+          set -e
+          TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
+          SHA=${GITHUB_SHA::7}
+          # Render banner into a temp file (safer than shell escaping)
+          sed -e "s|__SHA__|$SHA|g" -e "s|__TIMESTAMP__|$TIMESTAMP|g" \
+              web_assets/version-banner.html > ${EXPORT_DIR}/_banner.html
+          # Insert the rendered banner right after the opening <body...> tag
+          python3 <<'PY'
+          import re, os
+          export_dir = os.environ['EXPORT_DIR']
+          with open(f'{export_dir}/index.html', 'r') as f:
+              html = f.read()
+          with open(f'{export_dir}/_banner.html', 'r') as f:
+              banner = f.read()
+          html = re.sub(r'(<body[^>]*>)', r'\1\n' + banner, html, count=1)
+          with open(f'{export_dir}/index.html', 'w') as f:
+              f.write(html)
+          PY
+          rm -f ${EXPORT_DIR}/_banner.html
+          grep -q 'version-banner' ${EXPORT_DIR}/index.html
+
       - name: Zip the build
         run: |
           set -e
