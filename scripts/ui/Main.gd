@@ -9,29 +9,6 @@ var manager: TurnManager
 var pending_action: int = -1
 var pending_kwargs: Dictionary = {}
 
-# Diagnostic — compte les taps reçus par le viewport
-var _tap_count: int = 0
-
-
-func _input(event: InputEvent) -> void:
-	var pressed := false
-	var pos := Vector2.ZERO
-	if event is InputEventScreenTouch:
-		pressed = event.pressed
-		pos = event.position
-	elif event is InputEventMouseButton:
-		pressed = event.pressed
-		pos = event.position
-	else:
-		return
-	if not pressed:
-		return
-	_tap_count += 1
-	# Ne plus toucher au bg ici — laissé aux diagnostics _ready/_on_btn_new_game.
-	if state != null:
-		state.add_log("[TAP #%d à (%d,%d)]" % [_tap_count, int(pos.x), int(pos.y)])
-		_render_log()
-
 # Top-level UI nodes (created in _ready)
 @onready var root_h: HBoxContainer = $Root
 @onready var board_v: VBoxContainer = $Root/BoardArea
@@ -49,14 +26,7 @@ const SAVE_PATH := "user://save_game.json"
 
 
 func _ready() -> void:
-	# Diagnostic visuel : bg vert si _ready() atteint
-	var bg := get_node_or_null("Background") as ColorRect
-	if bg:
-		bg.color = Color(0.0, 0.3, 0.0, 1.0)
 	new_game()
-	# Diagnostic visuel : bg vert clair si new_game() a réussi
-	if bg:
-		bg.color = Color(0.0, 0.5, 0.1, 1.0)
 
 
 func new_game() -> void:
@@ -453,14 +423,7 @@ func _render_transgressions() -> void:
 # --- Debug buttons --------------------------------------------------------
 
 func _on_btn_new_game() -> void:
-	# Diagnostic visuel : bg orange dès que le handler s'exécute
-	var bg := get_node_or_null("Background") as ColorRect
-	if bg:
-		bg.color = Color(1.0, 0.5, 0.0, 1.0)
 	new_game()
-	# Diagnostic visuel : bg violet si new_game() retourne OK
-	if bg:
-		bg.color = Color(0.5, 0.0, 0.5, 1.0)
 	state.add_log("*** NOUVELLE PARTIE COMMENCÉE à %s ***" % Time.get_time_string_from_system())
 	_render_log()
 func _on_btn_force_next_station() -> void:
