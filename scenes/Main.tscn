@@ -10,4 +10,80 @@ script = ExtResource("1_main")
 [node name="Background" type="ColorRect" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.039, 0.051, 0.102, 1)
+color = Color(0.04, 0.05, 0.1, 1)
+
+[node name="Root" type="HBoxContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="BoardArea" type="VBoxContainer" parent="Root"]
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+
+[node name="StatusBar" type="PanelContainer" parent="Root/BoardArea"]
+
+[node name="StatusLabel" type="Label" parent="Root/BoardArea/StatusBar"]
+text = "..."
+
+[node name="DebugButtonsRow" type="HFlowContainer" parent="Root/BoardArea"]
+
+[node name="BtnNew" type="Button" parent="Root/BoardArea/DebugButtonsRow"]
+text = "Nouvelle partie"
+
+[node name="BtnNextStation" type="Button" parent="Root/BoardArea/DebugButtonsRow"]
+text = "Forcer Station suivante"
+
+[node name="BtnForceExorcism" type="Button" parent="Root/BoardArea/DebugButtonsRow"]
+text = "Forcer Exorcisme"
+
+[node name="BtnAddCorruption" type="Button" parent="Root/BoardArea/DebugButtonsRow"]
+text = "+1 Corruption joueur actif"
+
+[node name="BtnRunTests" type="Button" parent="Root/BoardArea/DebugButtonsRow"]
+text = "Lancer tests"
+
+[node name="BtnSave" type="Button" parent="Root/BoardArea/DebugButtonsRow"]
+text = "Sauvegarder"
+
+[node name="BtnLoad" type="Button" parent="Root/BoardArea/DebugButtonsRow"]
+text = "Charger"
+
+[node name="DomainsGrid" type="GridContainer" parent="Root/BoardArea"]
+columns = 3
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ActionsBox" type="HFlowContainer" parent="Root/BoardArea"]
+
+[node name="PromptLabel" type="Label" parent="Root/BoardArea"]
+text = "Choisissez une action."
+
+[node name="PromptButtons" type="HFlowContainer" parent="Root/BoardArea"]
+
+[node name="SideArea" type="VBoxContainer" parent="Root"]
+size_flags_horizontal = 3
+
+[node name="DebugLabel" type="RichTextLabel" parent="Root/SideArea"]
+size_flags_vertical = 3
+bbcode_enabled = true
+fit_content = true
+custom_minimum_size = Vector2(280, 220)
+
+[node name="TransgressionsBox" type="VBoxContainer" parent="Root/SideArea"]
+
+[node name="LogScroll" type="ScrollContainer" parent="Root/SideArea"]
+size_flags_vertical = 3
+custom_minimum_size = Vector2(280, 240)
+
+[node name="LogLabel" type="RichTextLabel" parent="Root/SideArea/LogScroll"]
+bbcode_enabled = true
+fit_content = true
+size_flags_horizontal = 3
+
+[connection signal="pressed" from="Root/BoardArea/DebugButtonsRow/BtnNew" to="." method="_on_btn_new_game"]
+[connection signal="pressed" from="Root/BoardArea/DebugButtonsRow/BtnNextStation" to="." method="_on_btn_force_next_station"]
+[connection signal="pressed" from="Root/BoardArea/DebugButtonsRow/BtnForceExorcism" to="." method="_on_btn_force_exorcism"]
+[connection signal="pressed" from="Root/BoardArea/DebugButtonsRow/BtnAddCorruption" to="." method="_on_btn_add_corruption"]
+[connection signal="pressed" from="Root/BoardArea/DebugButtonsRow/BtnRunTests" to="." method="_on_btn_run_tests"]
+[connection signal="pressed" from="Root/BoardArea/DebugButtonsRow/BtnSave" to="." method="_on_btn_save"]
+[connection signal="pressed" from="Root/BoardArea/DebugButtonsRow/BtnLoad" to="." method="_on_btn_load"]
