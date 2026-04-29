@@ -61,12 +61,13 @@ func _make_button(text: String, color: Color = C_TEXT) -> Button:
     var b := Button.new()
     b.text = text
     b.add_theme_color_override("font_color", color)
+    b.add_theme_font_size_override("font_size", 18)
     var normal := StyleBoxFlat.new()
     normal.bg_color = C_PANEL2
     normal.border_color = C_BORDER
     normal.set_border_width_all(1)
     normal.set_corner_radius_all(4)
-    normal.set_content_margin_all(8)
+    normal.set_content_margin_all(12)
     b.add_theme_stylebox_override("normal", normal)
     var hover := normal.duplicate()
     hover.bg_color = C_BORDER
@@ -74,7 +75,7 @@ func _make_button(text: String, color: Color = C_TEXT) -> Button:
     var pressed_style := normal.duplicate()
     pressed_style.bg_color = Color(C_GOLD, 0.25)
     b.add_theme_stylebox_override("pressed", pressed_style)
-    b.custom_minimum_size.y = 44
+    b.custom_minimum_size.y = 56
     return b
 
 func _build_ui() -> void:
@@ -85,7 +86,7 @@ func _build_ui() -> void:
 
     var root := VBoxContainer.new()
     root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    root.add_theme_constant_override("separation", 6)
+    root.add_theme_constant_override("separation", 12)
     scroll.add_child(root)
 
     _build_header(root)
@@ -107,14 +108,17 @@ func _build_header(parent: VBoxContainer) -> void:
     title.text = "✦ POSSESSION — FIAT TENEBRIS ✦"
     title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     title.add_theme_color_override("font_color", C_GOLD)
+    title.add_theme_font_size_override("font_size", 18)
     col.add_child(title)
     _station_label = Label.new()
     _station_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _station_label.add_theme_color_override("font_color", C_MUTED)
+    _station_label.add_theme_font_size_override("font_size", 13)
     col.add_child(_station_label)
     _status_label = Label.new()
     _status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _status_label.add_theme_color_override("font_color", C_TEXT)
+    _status_label.add_theme_font_size_override("font_size", 14)
     _status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     col.add_child(_status_label)
 
@@ -183,6 +187,7 @@ func _build_prompt_panel(parent: VBoxContainer) -> void:
     panel.add_child(col)
     _prompt_label = Label.new()
     _prompt_label.add_theme_color_override("font_color", C_GOLD)
+    _prompt_label.add_theme_font_size_override("font_size", 16)
     _prompt_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     col.add_child(_prompt_label)
     _prompt_box = VBoxContainer.new()
@@ -300,7 +305,7 @@ func _build_debug_buttons(parent: VBoxContainer) -> void:
     ]
     for a in actions:
         var btn := _make_button(a[0], C_MUTED)
-        btn.custom_minimum_size = Vector2(120, 36)
+        btn.custom_minimum_size = Vector2(100, 48)
         btn.pressed.connect(a[1])
         row.add_child(btn)
 
