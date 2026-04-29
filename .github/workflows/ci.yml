@@ -107,7 +107,7 @@ jobs:
         run: |
           set -e
           TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
-          SHA=${GITHUB_SHA::7}
+          SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           # Render banner into a temp file (safer than shell escaping)
           sed -e "s|__SHA__|$SHA|g" -e "s|__TIMESTAMP__|$TIMESTAMP|g" \
               web_assets/version-banner.html > ${EXPORT_DIR}/_banner.html
