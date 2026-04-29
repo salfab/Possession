@@ -91,6 +91,10 @@ static func amplifier(state: GameState, player: int, def_id: String) -> Dictiona
 	state.ascendant += (1 if player == GameEnums.PlayerId.RED else -1)
 	state.add_log("%s amplifie « %s » en Infamie en %s. +1 Ascendant." %
 		[GameEnums.player_name(player), def["name"], GameEnums.DOMAIN_NAMES[ti.origin_domain]])
+	# Simonie Infamie : arme l'effet « prochaine Réponse ciblant Foi devient Impedita ».
+	if def_id == TransgressionData.T_SIMONIE:
+		state.foi_next_response_impedita = true
+		state.add_log("Simonie Infamie : la prochaine Réponse ciblant Foi sera Impedita.")
 	return ok("Transgression amplifiée.")
 
 # --- Sceller / Fissurer -----------------------------------------------------

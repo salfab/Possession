@@ -42,13 +42,25 @@ Le prototype choisit **automatiquement** le Domaine au plus haut rendement
 L'initiative par Station est figée selon la liste donnée dans la spec
 (R, B, R, B, R, B). Aucun mécanisme dynamique n'est implémenté à ce stade.
 
-## 4bis. Simonie (Infamie)
+## 4bis. Simonie (Infamie) — câblé
 
 Spec : « La prochaine Réponse liturgique qui cible Foi est automatiquement Impedita. »
-Pour le prototype, l'effet est seulement journalisé : la Réponse n'est pas
-forcée à Impedita au niveau du résolveur. À implémenter dans une itération suivante.
+**Implémenté** : l'amplification de Simonie arme le flag
+`state.foi_next_response_impedita`. La prochaine Réponse qui cible Foi
+consomme le flag et résout en mode Impedita.
 
-> TODO core : forcer l'Impedita en cas d'Infamie Simonie active et cible = Foi.
+## 2bis. Confession — câblé en interactif
+
+Le démon ciblé reçoit une **PendingDecision** dans `state.pending_decisions`.
+La modale UI propose les 3 pénitences applicables ; le démon clique 1 ou 2
+fois (selon Impedita) et la résolution se poursuit. Tant que la décision
+n'est pas résolue, la Station n'avance pas.
+
+## 3bis. Exploitation gratuite — câblée en interactif
+
+Au début de chaque Station I à V, deux **PendingDecision** `free_exploit`
+sont mises en file (joueur initiative en premier). Chaque démon clique le
+Domaine qu'il veut exploiter (ou « Passer »).
 
 ## 5. Trafic de charges (Scandale)
 

@@ -147,7 +147,48 @@ jobs:
             --userversion "${GITHUB_SHA::7}"
 
   # ---------------------------------------------------------------------------
-  # 4. Optional Netlify deploy. Opt-in via repo variable ENABLE_NETLIFY=true.
+  # 4. GitHub Pages deploy. Activate by enabling Pages with source
+  # "GitHub Actions" in the repo Settings.
+  # ---------------------------------------------------------------------------
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-22.04
+    needs: build-web
+    if: |
+      github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+
+      - name: Unzip build
+        run: |
+          mkdir -p web
+          unzip -o ${ARTIFACT_NAME}.zip -d web
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ---------------------------------------------------------------------------
+  # 5. Optional Netlify deploy. Opt-in via repo variable ENABLE_NETLIFY=true.
   # ---------------------------------------------------------------------------
   deploy-netlify:
     name: Deploy to Netlify

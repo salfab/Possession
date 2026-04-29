@@ -26,6 +26,8 @@ func run_all() -> Dictionary:
 	_test_final_ascendant()
 	_test_communion()
 	_test_station_six()
+	_test_simonie_infamy()
+	_test_confession_pending_decision()
 	return {
 		"pass": pass_count, "fail": fail_count,
 		"total": pass_count + fail_count, "lines": results,
@@ -518,3 +520,74 @@ func _test_station_six() -> void:
 	var s := _new_state()
 	_assert(not GameRules.can_entraver(s, GameEnums.PlayerId.RED, GameEnums.StationId.EXORCISME),
 		"L'Exorcisme final ne peut pas être Entravé")
+
+
+# ---------------------------------------------------------------------------
+# Simonie Infamy — forces Impedita on the next Foi-targeting response
+# ---------------------------------------------------------------------------
+func _test_simonie_infamy() -> void:
+	var s := _new_state()
+	# Place a Simonie Infamy on Foi (owner Rouge), and arm the trigger.
+	var ti := GameState.TransgressionInstance.new()
+	ti.def_id = TransgressionData.T_SIMONIE
+	ti.owner = GameEnums.PlayerId.RED
+	ti.face = GameEnums.TransgressionFace.INFAMIE
+	ti.origin_domain = GameEnums.DomainId.FOI
+	s.domain(GameEnums.DomainId.FOI).infamies.append(ti)
+	s.foi_next_response_impedita = true
+	# Communion targets Foi: it's sealed by RED and dominant.
+	s.current_station = GameEnums.StationId.OFFICE
+	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.RED, 4)
+	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.BLUE, 1)
+	s.domain(GameEnums.DomainId.FOI).seal_owner = GameEnums.PlayerId.RED
+	# No external Entrave: would normally be In Integro, but Simonie forces Impedita.
+	LiturgyResolver.resolve_station_response(s)
+	_assert(s.domain(GameEnums.DomainId.FOI).seal_owner == GameEnums.PlayerId.NONE,
+		"Simonie Infamie : Sceau retiré (Communion forcée Impedita)")
+	_assert(s.domain(GameEnums.DomainId.FOI).red_corruption == 4,
+		"Simonie Infamie : Domination NON brisée (effet Impedita)")
+	_assert(not s.foi_next_response_impedita,
+		"Simonie Infamie : trigger consommé après usage")
+	_assert(not s.domain(GameEnums.DomainId.FOI).cannot_be_sealed_until_exorcism,
+		"Simonie Infamie : pas d'interdiction de rescellement (Impedita)")
+
+
+# ---------------------------------------------------------------------------
+# Confession — pushes a pending decision and pauses station advance
+# ---------------------------------------------------------------------------
+func _test_confession_pending_decision() -> void:
+	var s := _new_state()
+	s.current_station = GameEnums.StationId.CONFESSION
+	# RED has a Scandale, BLUE has nothing -> RED is targeted.
+	var ti := GameState.TransgressionInstance.new()
+	ti.def_id = TransgressionData.T_FESTIN
+	ti.owner = GameEnums.PlayerId.RED
+	ti.face = GameEnums.TransgressionFace.SCANDALE
+	ti.origin_domain = GameEnums.DomainId.DESIR
+	s.domain(GameEnums.DomainId.DESIR).scandals.append(ti)
+	# Make sure RED has spendable Corruption + a controlled, sealed domain so penitences are applicable.
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
+	s.domain(GameEnums.DomainId.AMBITION).seal_owner = GameEnums.PlayerId.RED
+	LiturgyResolver.resolve_station_response(s)
+	_assert(s.has_pending_decisions(),
+		"Confession : décision en attente après résolution")
+	var dec: GameState.PendingDecision = s.pending_decisions[0]
+	_assert(dec.kind == "confession" and dec.player == GameEnums.PlayerId.RED,
+		"Confession : cible = Rouge, kind = confession")
+	_assert(dec.picks_remaining == 2,
+		"Confession In Integro : 2 pénitences à choisir")
+	# Apply two distinct picks via apply_confession_pick.
+	var pool_before: int = s.available_corruption[GameEnums.PlayerId.RED]
+	var r1 := LiturgyResolver.apply_confession_pick(s, dec, "lose2", -1)
+	_assert(r1["ok"] and not r1.get("done", false),
+		"Confession : 1ère pénitence appliquée, encore 1 à choisir")
+	_assert(s.available_corruption[GameEnums.PlayerId.RED] == pool_before - 2,
+		"Confession lose2 : -2 Corruptions disponibles")
+	var r2 := LiturgyResolver.apply_confession_pick(s, dec, "fissure", GameEnums.DomainId.AMBITION)
+	_assert(r2["ok"] and r2.get("done", false),
+		"Confession : 2ème pénitence appliquée, décision terminée")
+	_assert(s.domain(GameEnums.DomainId.AMBITION).seal_owner == GameEnums.PlayerId.NONE,
+		"Confession fissure : Sceau retiré")
+	# Cannot re-pick the same kind.
+	var r3 := LiturgyResolver.apply_confession_pick(s, dec, "lose2", -1)
+	_assert(not r3["ok"], "Confession : impossible de choisir deux fois la même pénitence")

@@ -130,6 +130,12 @@ func _render_actions() -> void:
 		c.queue_free()
 	if state.game_over:
 		return
+	# When a decision is pending, normal actions are disabled.
+	if state.has_pending_decisions():
+		var hint := Label.new()
+		hint.text = "(Décision en attente — voir le panneau ci-dessous.)"
+		actions_box.add_child(hint)
+		return
 	var p := state.active_player
 	var actions := [
 		[GameEnums.ActionId.INVESTIR, "Investir"],
@@ -200,6 +206,10 @@ func _on_action_chosen(action: int) -> void:
 func _render_prompt() -> void:
 	for c in prompt_buttons.get_children():
 		c.queue_free()
+	# A pending decision (free exploit / confession) takes priority over actions.
+	if state.has_pending_decisions():
+		_render_decision_prompt()
+		return
 	if pending_action < 0:
 		prompt_label.text = "Choisissez une action."
 		return
@@ -256,6 +266,64 @@ func _add_prompt_button(text: String, cb: Callable) -> void:
 	b.text = text
 	b.pressed.connect(cb)
 	prompt_buttons.add_child(b)
+
+
+func _render_decision_prompt() -> void:
+	var dec = state.pending_decisions[0]
+	if dec.kind == "free_exploit":
+		var opts: Array = dec.data.get("options", [])
+		prompt_label.text = "Exploitation gratuite — %s : choisissez un Domaine que vous contrôlez." % GameEnums.player_name(dec.player)
+		for d_id in opts:
+			var prod := GameRules.production_of(state, d_id, dec.player)
+			_add_prompt_button("%s (+%d)" % [GameEnums.DOMAIN_NAMES[d_id], prod],
+				func(): _resolve_decision({"domain": d_id}))
+		_add_prompt_button("Passer", func(): _resolve_decision({"skip": true}))
+	elif dec.kind == "confession":
+		var impedita: bool = dec.data.get("impedita", false)
+		prompt_label.text = "Confession (%s) — %s : choisissez %d pénitence(s) %s. Déjà choisies : %s" % [
+			"Impedita" if impedita else "In Integro",
+			GameEnums.player_name(dec.player),
+			dec.picks_remaining,
+			"différente(s)" if not impedita else "",
+			", ".join(dec.picks_done) if dec.picks_done.size() > 0 else "—",
+		]
+		var avail := LiturgyResolver.available_confession_kinds(state, dec)
+		if "lose2" in avail:
+			_add_prompt_button("Perdre 2 Corruptions disponibles",
+				func(): _resolve_decision({"kind": "lose2"}))
+		if "penitence" in avail:
+			for d_id in DomainData.DOMAINS:
+				if state.controller_of(d_id) == dec.player and not state.is_in_penitence(d_id):
+					_add_prompt_button("Pénitence sur %s" % GameEnums.DOMAIN_NAMES[d_id],
+						func(): _resolve_decision({"kind": "penitence", "domain": d_id}))
+		if "fissure" in avail:
+			for d_id in DomainData.DOMAINS:
+				if state.controller_of(d_id) == dec.player and state.is_sealed(d_id) and state.domain(d_id).seal_owner == dec.player:
+					_add_prompt_button("Fissurer son Sceau sur %s" % GameEnums.DOMAIN_NAMES[d_id],
+						func(): _resolve_decision({"kind": "fissure", "domain": d_id}))
+		if avail.is_empty():
+			# No applicable penitence available — let the player skip.
+			_add_prompt_button("(Aucune pénitence applicable — passer)",
+				func(): _force_pop_decision())
+
+
+func _resolve_decision(picks: Dictionary) -> void:
+	var r := manager.resolve_decision(picks)
+	if not r.get("ok", false):
+		state.add_log("[DÉCISION REFUSÉE] " + r.get("message", "?"))
+	_rebuild_all()
+
+
+func _force_pop_decision() -> void:
+	# Used when no penitence is applicable; pop and continue.
+	if state.has_pending_decisions():
+		state.pending_decisions.pop_front()
+		# If we were waiting to advance and the queue is now empty, do it.
+		if not state.has_pending_decisions() and manager._pending_advance_to_station >= 0:
+			var s = manager._pending_advance_to_station
+			manager._pending_advance_to_station = -1
+			manager._advance_to_station(s)
+	_rebuild_all()
 
 
 func _cancel_pending() -> void:
