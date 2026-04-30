@@ -43,3 +43,11 @@ const RESPONSES := {
 
 func get_response(station: int) -> Dictionary:
 	return RESPONSES.get(station, {})
+
+func card_image_path(station: int, impedita: bool) -> String:
+	var resp: Dictionary = get_response(station)
+	if resp.is_empty():
+		return ""
+	var id: String = String(resp.get("id", ""))
+	var mode: String = "impedita" if impedita else "in_integro"
+	return "res://assets/cards/liturgies/%s_%s.png" % [id, mode]

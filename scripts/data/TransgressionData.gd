@@ -148,3 +148,8 @@ func get_def(tid: String) -> Dictionary:
 func name_of(tid: String) -> String:
 	var d := get_def(tid)
 	return d.get("name", "?")
+
+func card_image_path(tid: String, face: int) -> String:
+	# face: GameEnums.TransgressionFace.SCANDALE / INFAMIE
+	var f := "scandale" if face == GameEnums.TransgressionFace.SCANDALE else "infamie"
+	return "res://assets/cards/transgressions/%s_%s.png" % [tid, f]
