@@ -38,6 +38,8 @@ var _log_rtl: RichTextLabel
 var _log_panel: PanelContainer
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
+var _decision_dialog: AcceptDialog
+var _decision_content: VBoxContainer
 
 # Zoom / pan state
 var _zoom: float = 1.0
@@ -192,6 +194,8 @@ func _build_overlays() -> void:
 
 	# Liturgy dialog (full-screen modal at end of station)
 	_build_liturgy_dialog()
+	# Decision dialog (free exploitation, confession picks)
+	_build_decision_dialog()
 
 
 func _build_liturgy_dialog() -> void:
@@ -287,6 +291,7 @@ func _refresh_all() -> void:
 	_refresh_overlays()
 	_refresh_log()
 	_maybe_show_liturgy_dialog()
+	_maybe_show_decision_dialog()
 
 
 func _refresh_status() -> void:
@@ -457,6 +462,133 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 
 func _on_liturgy_acknowledged() -> void:
 	manager.acknowledge_liturgy()
+	_refresh_all()
+
+
+# ─── DECISION DIALOG (free_exploit, confession) ───────────────────────────────
+
+func _build_decision_dialog() -> void:
+	_decision_dialog = AcceptDialog.new()
+	_decision_dialog.exclusive = true
+	_decision_dialog.title = "Décision"
+	_decision_dialog.dialog_text = ""
+	_decision_dialog.min_size = Vector2i(560, 420)
+	_decision_dialog.confirmed.connect(_on_decision_skip)
+	add_child(_decision_dialog)
+	_decision_content = VBoxContainer.new()
+	_decision_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_decision_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_decision_content.add_theme_constant_override("separation", 8)
+	_decision_dialog.add_child(_decision_content)
+
+
+func _maybe_show_decision_dialog() -> void:
+	if state == null or manager == null:
+		return
+	if not state.has_pending_decisions():
+		return
+	if _decision_dialog.visible:
+		return
+	# Show liturgy first if pending
+	if not manager.pending_liturgy.is_empty():
+		return
+	if _liturgy_dialog.visible:
+		return
+	_populate_decision_dialog(state.pending_decisions[0])
+	_decision_dialog.popup_centered()
+
+
+func _populate_decision_dialog(dec: GameState.PendingDecision) -> void:
+	for c in _decision_content.get_children():
+		c.queue_free()
+
+	if dec.kind == "free_exploit":
+		_decision_dialog.title = "Exploitation gratuite — %s" % GameEnums.player_name(dec.player)
+		_decision_dialog.ok_button_text = "Passer (ne pas exploiter)"
+		_decision_dialog.get_ok_button().disabled = false
+		var hint := Label.new()
+		hint.text = "%s : choisis un domaine à exploiter, ou clique « Passer »." % GameEnums.player_name(dec.player)
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.add_theme_font_size_override("font_size", 22)
+		_decision_content.add_child(hint)
+		var options: Array = dec.data.get("options", [])
+		for d_id in options:
+			var did: int = d_id
+			var btn := Button.new()
+			btn.text = "Exploiter %s" % GameEnums.DOMAIN_NAMES[d_id]
+			btn.custom_minimum_size = Vector2(0, 56)
+			btn.add_theme_font_size_override("font_size", 22)
+			btn.pressed.connect(func(): _on_decision_pick({"domain": did}))
+			_decision_content.add_child(btn)
+
+	elif dec.kind == "confession":
+		_decision_dialog.title = "Confession — %s" % GameEnums.player_name(dec.player)
+		_decision_dialog.ok_button_text = "(choix obligatoire)"
+		_decision_dialog.get_ok_button().disabled = true
+		var imp: bool = dec.data.get("impedita", false)
+		var n: int = dec.picks_remaining
+		var s_plural: String = "s" if n > 1 else ""
+		var hint := Label.new()
+		hint.text = "%s doit choisir %d pénitence%s parmi 3 (mode %s)." % [
+			GameEnums.player_name(dec.player), n, s_plural,
+			"Impedita" if imp else "In Integro",
+		]
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.add_theme_font_size_override("font_size", 22)
+		_decision_content.add_child(hint)
+		var avail: Array = LiturgyResolver.available_confession_kinds(state, dec)
+		if "lose2" in avail:
+			var btn := Button.new()
+			btn.text = "Perdre 2 Corruptions disponibles"
+			btn.custom_minimum_size = Vector2(0, 56)
+			btn.add_theme_font_size_override("font_size", 22)
+			btn.pressed.connect(func(): _on_decision_pick({"kind": "lose2"}))
+			_decision_content.add_child(btn)
+		if "penitence" in avail:
+			for d_id in DomainData.DOMAINS:
+				if state.controller_of(d_id) == dec.player and not state.is_in_penitence(d_id):
+					var did: int = d_id
+					var btn := Button.new()
+					btn.text = "Pénitence : %s" % GameEnums.DOMAIN_NAMES[d_id]
+					btn.custom_minimum_size = Vector2(0, 56)
+					btn.add_theme_font_size_override("font_size", 22)
+					btn.pressed.connect(func(): _on_decision_pick({"kind": "penitence", "domain": did}))
+					_decision_content.add_child(btn)
+		if "fissure" in avail:
+			for d_id in DomainData.DOMAINS:
+				var dd := state.domain(d_id)
+				if state.controller_of(d_id) == dec.player and state.is_sealed(d_id) and dd.seal_owner == dec.player:
+					var did: int = d_id
+					var btn := Button.new()
+					btn.text = "Fissurer mon Sceau sur %s" % GameEnums.DOMAIN_NAMES[d_id]
+					btn.custom_minimum_size = Vector2(0, 56)
+					btn.add_theme_font_size_override("font_size", 22)
+					btn.pressed.connect(func(): _on_decision_pick({"kind": "fissure", "domain": did}))
+					_decision_content.add_child(btn)
+
+
+func _on_decision_pick(picks: Dictionary) -> void:
+	# Hide first so the AcceptDialog "confirmed" signal is NOT emitted.
+	_decision_dialog.hide()
+	var r := manager.resolve_decision(picks)
+	if not r.get("ok", false):
+		state.add_log("[REFUSÉ] " + r.get("message", "?"))
+	_refresh_all()
+
+
+func _on_decision_skip() -> void:
+	# Triggered when the user clicks the OK ("Passer") button — only valid
+	# for free_exploit (the OK button is disabled for confession).
+	if not state.has_pending_decisions():
+		_refresh_all()
+		return
+	var dec: GameState.PendingDecision = state.pending_decisions[0]
+	if dec.kind != "free_exploit":
+		_refresh_all()
+		return
+	var r := manager.resolve_decision({"skip": true})
+	if not r.get("ok", false):
+		state.add_log("[REFUSÉ] " + r.get("message", "?"))
 	_refresh_all()
 
 
