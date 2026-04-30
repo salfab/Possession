@@ -40,6 +40,11 @@ var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
 var _decision_dialog: AcceptDialog
 var _decision_content: VBoxContainer
+var _endgame_dialog: AcceptDialog
+var _endgame_rtl: RichTextLabel
+var _endgame_shown: bool = false
+var _trans_dialog: AcceptDialog
+var _trans_content: VBoxContainer
 
 # Zoom / pan state
 var _zoom: float = 1.0
@@ -85,6 +90,7 @@ func new_game() -> void:
 	manager = TurnManager.new(state)
 	pending_action = -1
 	pending_kwargs.clear()
+	_endgame_shown = false
 	_refresh_all()
 
 
@@ -196,6 +202,10 @@ func _build_overlays() -> void:
 	_build_liturgy_dialog()
 	# Decision dialog (free exploitation, confession picks)
 	_build_decision_dialog()
+	# Endgame dialog (Exorcisme final)
+	_build_endgame_dialog()
+	# Transgressions catalog dialog
+	_build_transgressions_dialog()
 
 
 func _build_liturgy_dialog() -> void:
@@ -238,6 +248,7 @@ func _build_debug_bar() -> void:
 		["−", _on_btn_zoom_out],
 		["⊙", _on_btn_zoom_reset],
 		["+", _on_btn_zoom_in],
+		["Trans.", _on_btn_transgressions],
 		["Nouvelle", _on_btn_new_game],
 		["Station →", _on_btn_force_next_station],
 		["Passer", _on_btn_pass],
@@ -292,6 +303,7 @@ func _refresh_all() -> void:
 	_refresh_log()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
+	_maybe_show_endgame_dialog()
 
 
 func _refresh_status() -> void:
@@ -354,23 +366,27 @@ func _on_domain_clicked(d_id: int) -> void:
 		return
 	_selected_domain = d_id
 	var p: int = state.active_player
-	# Disable items based on legality
+	# Build labels enriched with the legality reason if illegal.
 	for idx in POPUP_ACTIONS.size():
 		var aid: int = POPUP_ACTIONS[idx]
-		var legal: bool = false
+		var why: String = ""
 		if aid == GameEnums.ActionId.INVESTIR:
-			legal = GameRules.can_investir(state, p, d_id)
+			why = GameRules.why_cannot_investir(state, p, d_id)
 		elif aid == GameEnums.ActionId.EXPLOITER:
-			legal = GameRules.can_exploiter(state, p, d_id)
+			why = GameRules.why_cannot_exploiter(state, p, d_id)
 		elif aid == GameEnums.ActionId.SCELLER:
-			legal = GameRules.can_sceller(state, p, d_id)
+			why = GameRules.why_cannot_sceller(state, p, d_id)
 		elif aid == GameEnums.ActionId.FISSURER:
-			legal = GameRules.can_fissurer(state, p, d_id)
-		_action_popup.set_item_disabled(idx, not legal)
+			why = GameRules.why_cannot_fissurer(state, p, d_id)
+		var label_str: String = "%s %s" % [POPUP_LABELS[aid], GameEnums.DOMAIN_NAMES[d_id]]
+		if why != "":
+			label_str += "  —  " + why
+		_action_popup.set_item_text(idx, label_str)
+		_action_popup.set_item_disabled(idx, why != "")
 	# Position the popup near the touch
 	var mp: Vector2 = get_viewport().get_mouse_position()
 	_action_popup.position = Vector2i(int(mp.x), int(mp.y))
-	_action_popup.size = Vector2i(320, 0)
+	_action_popup.size = Vector2i(540, 0)
 	_action_popup.popup()
 
 
@@ -587,6 +603,238 @@ func _on_decision_skip() -> void:
 		_refresh_all()
 		return
 	var r := manager.resolve_decision({"skip": true})
+	if not r.get("ok", false):
+		state.add_log("[REFUSÉ] " + r.get("message", "?"))
+	_refresh_all()
+
+
+# ─── ENDGAME DIALOG (Exorcisme final) ─────────────────────────────────────────
+
+func _build_endgame_dialog() -> void:
+	_endgame_dialog = AcceptDialog.new()
+	_endgame_dialog.exclusive = true
+	_endgame_dialog.title = "Exorcisme final"
+	_endgame_dialog.ok_button_text = "Nouvelle partie"
+	_endgame_dialog.dialog_text = ""
+	_endgame_dialog.min_size = Vector2i(720, 520)
+	_endgame_dialog.confirmed.connect(_on_endgame_acknowledged)
+	add_child(_endgame_dialog)
+	_endgame_rtl = RichTextLabel.new()
+	_endgame_rtl.bbcode_enabled = true
+	_endgame_rtl.fit_content = true
+	_endgame_rtl.scroll_active = true
+	_endgame_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_endgame_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_endgame_rtl.custom_minimum_size = Vector2(680, 420)
+	_endgame_rtl.add_theme_font_size_override("normal_font_size", 22)
+	_endgame_rtl.add_theme_font_size_override("bold_font_size", 24)
+	_endgame_dialog.add_child(_endgame_rtl)
+
+
+func _maybe_show_endgame_dialog() -> void:
+	if state == null or not state.game_over:
+		return
+	if _endgame_shown:
+		return
+	if _endgame_dialog.visible:
+		return
+	_show_endgame_dialog()
+	_endgame_shown = true
+
+
+func _show_endgame_dialog() -> void:
+	var rupture := EndGameResolver.check_rupture(state)
+	var winner_str: String = GameEnums.player_name(state.winner) if state.winner != GameEnums.PlayerId.NONE else "Pape sauvé (aucun démon)"
+	var s := ""
+	s += "[font_size=30][b]%s[/b][/font_size]\n\n" % winner_str
+	s += "[i]%s[/i]\n\n" % state.winner_reason
+	s += "[b]Rupture de l'âme :[/b]\n"
+	s += "  • Profondeur : %s\n" % ("[color=#8e8]✓ remplie[/color]" if rupture.profondeur else "[color=#888]— non remplie[/color]")
+	s += "  • Étendue : %s\n" % ("[color=#8e8]✓ remplie[/color]" if rupture.etendue else "[color=#888]— non remplie[/color]")
+	s += "  • Ancrage : %s\n" % ("[color=#8e8]✓ rempli[/color]" if rupture.ancrage else "[color=#888]— non rempli[/color]")
+	s += "  • [b]Complète : %s[/b]\n\n" % ("[color=#8e8]OUI — l'exorcisme échoue[/color]" if rupture.complete else "[color=#e88]NON — l'exorcisme réussit[/color]")
+	s += "[b]Ascendant final :[/b] %+d\n\n" % state.ascendant
+	s += "[b]Résolution (dernières lignes du journal) :[/b]\n"
+	var lines: Array = state.log
+	var last_n: int = min(12, lines.size())
+	for i in range(lines.size() - last_n, lines.size()):
+		s += "  • " + String(lines[i]) + "\n"
+	_endgame_rtl.clear()
+	_endgame_rtl.append_text(s)
+	_endgame_dialog.popup_centered()
+
+
+func _on_endgame_acknowledged() -> void:
+	new_game()
+
+
+# ─── TRANSGRESSIONS DIALOG ────────────────────────────────────────────────────
+
+func _build_transgressions_dialog() -> void:
+	_trans_dialog = AcceptDialog.new()
+	_trans_dialog.exclusive = true
+	_trans_dialog.title = "Transgressions"
+	_trans_dialog.ok_button_text = "Fermer"
+	_trans_dialog.dialog_text = ""
+	_trans_dialog.min_size = Vector2i(700, 520)
+	add_child(_trans_dialog)
+	var sc := ScrollContainer.new()
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.custom_minimum_size = Vector2(660, 460)
+	_trans_dialog.add_child(sc)
+	_trans_content = VBoxContainer.new()
+	_trans_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_trans_content.add_theme_constant_override("separation", 10)
+	sc.add_child(_trans_content)
+
+
+func _on_btn_transgressions() -> void:
+	if state == null:
+		return
+	_populate_transgressions_dialog()
+	_trans_dialog.popup_centered()
+
+
+func _populate_transgressions_dialog() -> void:
+	for c in _trans_content.get_children():
+		c.queue_free()
+	var p: int = state.active_player
+	_trans_dialog.title = "Transgressions — Joueur actif : %s" % GameEnums.player_name(p)
+	for tid in TransgressionData.ALL_IDS:
+		var def: Dictionary = TransgressionData.get_def(tid)
+		var card := _make_transgression_card(p, String(tid), def)
+		_trans_content.add_child(card)
+
+
+func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Control:
+	var panel := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.10, 0.10, 0.16, 0.95)
+	sb.border_color = Color(0.55, 0.45, 0.20)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(10)
+	panel.add_theme_stylebox_override("panel", sb)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	panel.add_child(vbox)
+
+	# Header: name + state
+	var header := HBoxContainer.new()
+	vbox.add_child(header)
+	var name_lbl := Label.new()
+	name_lbl.text = String(def.get("name", "?"))
+	name_lbl.add_theme_font_size_override("font_size", 24)
+	name_lbl.add_theme_color_override("font_color", Color(1, 0.90, 0.55))
+	header.add_child(name_lbl)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(spacer)
+	var owner: int = state.transgression_owner(tid)
+	var state_lbl := Label.new()
+	if owner == GameEnums.PlayerId.NONE:
+		state_lbl.text = "Libre"
+		state_lbl.add_theme_color_override("font_color", Color(0.7, 1, 0.7))
+	else:
+		var inf_inst: GameState.TransgressionInstance = state.find_transgression_instance(owner, tid, GameEnums.TransgressionFace.INFAMIE)
+		if inf_inst != null:
+			state_lbl.text = "Infamie · " + GameEnums.player_name(owner)
+			state_lbl.add_theme_color_override("font_color", Color(1, 0.6, 1))
+		else:
+			state_lbl.text = "Scandale · " + GameEnums.player_name(owner)
+			state_lbl.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
+	state_lbl.add_theme_font_size_override("font_size", 18)
+	header.add_child(state_lbl)
+
+	# Domain requirement
+	var req: Array = def.get("domain_requirement", [])
+	var req_str := ""
+	for r in req:
+		if req_str != "":
+			req_str += " ou "
+		req_str += GameEnums.DOMAIN_NAMES[r]
+	var req_lbl := Label.new()
+	req_lbl.text = "Domaine requis : %s" % req_str
+	req_lbl.add_theme_font_size_override("font_size", 16)
+	req_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.85))
+	vbox.add_child(req_lbl)
+
+	# Texts
+	var sc_lbl := Label.new()
+	sc_lbl.text = "Scandale (coût %d) : %s" % [int(def.get("scandal_cost", 0)), String(def.get("scandal_text", ""))]
+	sc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sc_lbl.add_theme_font_size_override("font_size", 17)
+	vbox.add_child(sc_lbl)
+
+	var inf_lbl := Label.new()
+	inf_lbl.text = "Infamie (Amplifier coût %d) : %s" % [int(def.get("amplification_cost", 0)), String(def.get("infamy_text", ""))]
+	inf_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inf_lbl.add_theme_font_size_override("font_size", 17)
+	inf_lbl.add_theme_color_override("font_color", Color(0.85, 0.7, 0.85))
+	vbox.add_child(inf_lbl)
+
+	# Action buttons row
+	var btn_row := HFlowContainer.new()
+	btn_row.add_theme_constant_override("h_separation", 6)
+	btn_row.add_theme_constant_override("v_separation", 6)
+	vbox.add_child(btn_row)
+
+	var why_prov: String = GameRules.why_cannot_provoquer(state, player, tid)
+	var origins: Array = GameRules.transgression_origin_options(player, tid)
+	for origin_d in origins:
+		var btn := Button.new()
+		var origin_int: int = origin_d
+		if origins.size() > 1:
+			btn.text = "Provoquer (%s)" % GameEnums.DOMAIN_NAMES[origin_d]
+		else:
+			btn.text = "Provoquer"
+		btn.disabled = (why_prov != "")
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.tooltip_text = why_prov
+		btn.pressed.connect(func(): _on_provoquer_clicked(tid, origin_int))
+		btn_row.add_child(btn)
+
+	var why_amp: String = GameRules.why_cannot_amplifier(state, player, tid)
+	var amp_btn := Button.new()
+	amp_btn.text = "Amplifier"
+	amp_btn.disabled = (why_amp != "")
+	amp_btn.add_theme_font_size_override("font_size", 18)
+	amp_btn.tooltip_text = why_amp
+	amp_btn.pressed.connect(func(): _on_amplifier_clicked(tid))
+	btn_row.add_child(amp_btn)
+
+	# If illegal, show the reason inline (small text under buttons).
+	if why_prov != "" or why_amp != "":
+		var hint := Label.new()
+		var bits := ""
+		if why_prov != "":
+			bits += "Provoquer : %s" % why_prov
+		if why_amp != "":
+			if bits != "":
+				bits += "    "
+			bits += "Amplifier : %s" % why_amp
+		hint.text = bits
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.add_theme_font_size_override("font_size", 14)
+		hint.add_theme_color_override("font_color", Color(0.85, 0.5, 0.5))
+		vbox.add_child(hint)
+
+	return panel
+
+
+func _on_provoquer_clicked(tid: String, origin: int) -> void:
+	_trans_dialog.hide()
+	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": tid, "origin": origin})
+	if not r.get("ok", false):
+		state.add_log("[REFUSÉ] " + r.get("message", "?"))
+	_refresh_all()
+
+
+func _on_amplifier_clicked(tid: String) -> void:
+	_trans_dialog.hide()
+	var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
 	if not r.get("ok", false):
 		state.add_log("[REFUSÉ] " + r.get("message", "?"))
 	_refresh_all()
