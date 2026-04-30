@@ -39,15 +39,18 @@ var _log_panel: PanelContainer
 var _log_scroll: ScrollContainer
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
-var _liturgy_image: TextureRect
+var _liturgy_image: TextureButton
 var _decision_dialog: AcceptDialog
 var _decision_content: VBoxContainer
 var _endgame_dialog: AcceptDialog
 var _endgame_rtl: RichTextLabel
-var _endgame_image: TextureRect
+var _endgame_image: TextureButton
 var _endgame_shown: bool = false
 var _trans_dialog: AcceptDialog
 var _trans_content: VBoxContainer
+var _trans_scroll: ScrollContainer
+var _fullscreen_card_dialog: AcceptDialog
+var _fullscreen_card_image: TextureRect
 
 # Zoom / pan state
 var _zoom: float = 1.0
@@ -209,6 +212,8 @@ func _build_overlays() -> void:
 	_build_endgame_dialog()
 	# Transgressions catalog dialog
 	_build_transgressions_dialog()
+	# Full-screen card viewer
+	_build_fullscreen_card_dialog()
 
 
 func _build_liturgy_dialog() -> void:
@@ -227,10 +232,12 @@ func _build_liturgy_dialog() -> void:
 	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_liturgy_dialog.add_child(hbox)
 
-	_liturgy_image = TextureRect.new()
-	_liturgy_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_liturgy_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_liturgy_image = TextureButton.new()
+	_liturgy_image.ignore_texture_size = true
+	_liturgy_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	_liturgy_image.custom_minimum_size = Vector2(300, 420)
+	_liturgy_image.tooltip_text = "Cliquer pour agrandir"
+	_liturgy_image.pressed.connect(_on_liturgy_image_clicked)
 	hbox.add_child(_liturgy_image)
 
 	_liturgy_rtl = RichTextLabel.new()
@@ -504,7 +511,7 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 	# Card image
 	var img_path: String = LiturgicalResponseData.card_image_path(st, imp)
 	var img_tex: Texture2D = load(img_path) if img_path != "" else null
-	_liturgy_image.texture = img_tex
+	_liturgy_image.texture_normal = img_tex
 	_liturgy_image.visible = (img_tex != null)
 	# Text panel
 	_liturgy_rtl.clear()
@@ -667,11 +674,13 @@ func _build_endgame_dialog() -> void:
 	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_endgame_dialog.add_child(hbox)
 
-	_endgame_image = TextureRect.new()
-	_endgame_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_endgame_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_endgame_image = TextureButton.new()
+	_endgame_image.ignore_texture_size = true
+	_endgame_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	_endgame_image.custom_minimum_size = Vector2(320, 448)
-	_endgame_image.texture = load("res://assets/cards/special/exorcisme_final.png")
+	_endgame_image.texture_normal = load("res://assets/cards/special/exorcisme_final.png")
+	_endgame_image.tooltip_text = "Cliquer pour agrandir"
+	_endgame_image.pressed.connect(_on_endgame_image_clicked)
 	hbox.add_child(_endgame_image)
 
 	var sc := ScrollContainer.new()
@@ -737,17 +746,18 @@ func _build_transgressions_dialog() -> void:
 	_trans_dialog.title = "Transgressions"
 	_trans_dialog.ok_button_text = "Fermer"
 	_trans_dialog.dialog_text = ""
-	_trans_dialog.min_size = Vector2i(700, 520)
+	_trans_dialog.min_size = Vector2i(720, 520)
 	add_child(_trans_dialog)
-	var sc := ScrollContainer.new()
-	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.custom_minimum_size = Vector2(660, 460)
-	_trans_dialog.add_child(sc)
+	_trans_scroll = ScrollContainer.new()
+	_trans_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_trans_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_trans_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_trans_scroll.custom_minimum_size = Vector2(680, 460)
+	_trans_dialog.add_child(_trans_scroll)
 	_trans_content = VBoxContainer.new()
 	_trans_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_trans_content.add_theme_constant_override("separation", 10)
-	sc.add_child(_trans_content)
+	_trans_scroll.add_child(_trans_content)
 
 
 func _on_btn_transgressions() -> void:
@@ -790,15 +800,19 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		if inf_inst != null:
 			face = GameEnums.TransgressionFace.INFAMIE
 
-	# Card image (left)
+	# Card image (left) — clickable to view full-screen
 	var img_path: String = TransgressionData.card_image_path(tid, face)
 	var img_tex: Texture2D = load(img_path)
 	if img_tex != null:
-		var img := TextureRect.new()
-		img.texture = img_tex
-		img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		var img := TextureButton.new()
+		img.texture_normal = img_tex
+		img.ignore_texture_size = true
+		img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		img.custom_minimum_size = Vector2(180, 252)
+		img.tooltip_text = "Cliquer pour agrandir"
+		var captured_tex: Texture2D = img_tex
+		var captured_name: String = String(def.get("name", ""))
+		img.pressed.connect(func(): _show_fullscreen_card(captured_tex, captured_name))
 		hbox.add_child(img)
 
 	# Right column: state badge + buttons + reason
@@ -872,6 +886,43 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	vbox.add_child(spacer)
 
 	return panel
+
+
+# ─── FULLSCREEN CARD VIEWER ───────────────────────────────────────────────────
+
+func _build_fullscreen_card_dialog() -> void:
+	_fullscreen_card_dialog = AcceptDialog.new()
+	_fullscreen_card_dialog.exclusive = true
+	_fullscreen_card_dialog.title = "Carte"
+	_fullscreen_card_dialog.ok_button_text = "Fermer"
+	_fullscreen_card_dialog.dialog_text = ""
+	_fullscreen_card_dialog.min_size = Vector2i(360, 440)
+	add_child(_fullscreen_card_dialog)
+	_fullscreen_card_image = TextureRect.new()
+	_fullscreen_card_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_fullscreen_card_image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fullscreen_card_image.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_fullscreen_card_image.custom_minimum_size = Vector2(340, 420)
+	_fullscreen_card_dialog.add_child(_fullscreen_card_image)
+
+
+func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte") -> void:
+	if tex == null:
+		return
+	_fullscreen_card_image.texture = tex
+	_fullscreen_card_dialog.title = title_str
+	_fullscreen_card_dialog.popup_centered_ratio(0.95)
+
+
+func _on_liturgy_image_clicked() -> void:
+	if _liturgy_image.texture_normal != null:
+		_show_fullscreen_card(_liturgy_image.texture_normal, _liturgy_dialog.title)
+
+
+func _on_endgame_image_clicked() -> void:
+	if _endgame_image.texture_normal != null:
+		_show_fullscreen_card(_endgame_image.texture_normal, "Exorcisme final")
 
 
 func _on_provoquer_clicked(tid: String, origin: int) -> void:
