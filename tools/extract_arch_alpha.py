@@ -51,11 +51,7 @@ def process(in_path: str, out_path: str) -> None:
     in_bot = (fy > ARCH_CY) & (fy <= ARCH_BOTTOM) & (np.abs(fx - ARCH_CX) <= ARCH_RX)
     in_arch = in_top | in_bot
 
-    alpha = np.where(
-        in_arch,
-        np.clip(255 * ornament_strength, 0, 255),
-        255,
-    ).astype(np.uint8)
+    alpha = np.where(in_arch, np.clip((ornament_strength - 0.2) * 320, 0, 255), 255).astype(np.uint8)
     arr[:, :, 3] = alpha
     Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="RGBA").save(
         out_path, optimize=True
