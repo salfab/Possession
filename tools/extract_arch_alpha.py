@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Convert ChatGPT-generated card templates into RGBA. Uses connected-component
-detection of the parchment region around the image center, then keeps
-true ornaments (skull, doves, candles, crosses) opaque inside that region.
-
-Output is binary alpha (0 or 255) so edges are crisp and the parchment
-inside the arch is fully transparent regardless of palette.
+Convert ChatGPT-generated card templates into RGBA via color keying:
+1. Detect the arch parchment region as a connected component.
+2. Sample the median (key) color of that region.
+3. For each pixel inside the region, alpha is proportional to the
+   euclidean color distance from the key — pixels matching the key
+   are transparent, ornaments (saturated/dark/colored) stay opaque,
+   and intermediate pixels get a graduated semi-transparency.
+4. A 1.5 px gaussian blur on the alpha mask softens the edge.
 
 Usage:
     python3 tools/extract_arch_alpha.py <input.png> <output.png>
@@ -13,11 +15,14 @@ Usage:
 import sys
 from PIL import Image
 import numpy as np
-from scipy.ndimage import label, binary_closing
+from scipy.ndimage import label, binary_closing, gaussian_filter
 
 SEARCH_Y = (0.13, 0.74)
 SEARCH_X = (0.13, 0.87)
 CLOSING_ITER = 6
+DIST_TRANSPARENT = 25
+DIST_OPAQUE = 80
+EDGE_BLUR_SIGMA = 1.5
 
 
 def process(in_path: str, out_path: str) -> None:
@@ -40,7 +45,6 @@ def process(in_path: str, out_path: str) -> None:
     y0, y1 = int(h * SEARCH_Y[0]), int(h * SEARCH_Y[1])
     x0, x1 = int(w * SEARCH_X[0]), int(w * SEARCH_X[1])
     box[y0:y1, x0:x1] = parchment[y0:y1, x0:x1]
-
     labeled, _ = label(box)
     cy, cx = h // 2, w // 2
     seed = labeled[cy, cx]
@@ -57,14 +61,21 @@ def process(in_path: str, out_path: str) -> None:
     arch_zone = labeled == seed if seed else np.zeros_like(labeled, dtype=bool)
     arch_zone = ~binary_closing(~arch_zone, iterations=CLOSING_ITER)
 
-    s_sat = np.clip((desat - 30) / 30.0, 0, 1)
-    s_dark = np.clip((130 - lum) / 60.0, 0, 1)
-    s_gold = np.clip((90 - B) / 40.0, 0, 1)
-    ornament_strength = np.maximum(np.maximum(s_sat, s_dark), s_gold)
-    is_inner_ornament = ornament_strength > 0.45
+    if arch_zone.any():
+        key_R = float(np.median(R[arch_zone]))
+        key_G = float(np.median(G[arch_zone]))
+        key_B = float(np.median(B[arch_zone]))
+    else:
+        key_R, key_G, key_B = 220, 200, 175
 
-    transparent_zone = arch_zone & ~is_inner_ornament
-    alpha = np.where(transparent_zone, 0, 255).astype(np.uint8)
+    dist = np.sqrt((R - key_R) ** 2 + (G - key_G) ** 2 + (B - key_B) ** 2)
+    alpha_from_dist = np.clip(
+        (dist - DIST_TRANSPARENT) / (DIST_OPAQUE - DIST_TRANSPARENT) * 255,
+        0, 255,
+    )
+    alpha = np.where(arch_zone, alpha_from_dist, 255).astype(np.float32)
+    alpha = gaussian_filter(alpha, sigma=EDGE_BLUR_SIGMA)
+    alpha = np.clip(alpha, 0, 255).astype(np.uint8)
     arr[:, :, 3] = alpha
     Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="RGBA").save(
         out_path, optimize=True
