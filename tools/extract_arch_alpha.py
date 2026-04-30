@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 """
-Convert ChatGPT-generated card templates into RGBA with the central arch
-made transparent. Uses connected-component detection of the parchment
-region around the image center, then preserves ornaments inside that
-region (skull, doves, candles, snakes, etc.) by alpha-keying their
-"ornament-likeness".
+Convert ChatGPT-generated card templates into RGBA. Uses connected-component
+detection of the parchment region around the image center, then keeps
+true ornaments (skull, doves, candles, crosses) opaque inside that region.
+
+Output is binary alpha (0 or 255) so edges are crisp and the parchment
+inside the arch is fully transparent regardless of palette.
 
 Usage:
     python3 tools/extract_arch_alpha.py <input.png> <output.png>
 """
-
 import sys
 from PIL import Image
 import numpy as np
 from scipy.ndimage import label, binary_closing
 
-# Where to look for the arch's parchment (central rectangle, in fractions)
 SEARCH_Y = (0.13, 0.74)
 SEARCH_X = (0.13, 0.87)
 CLOSING_ITER = 6
@@ -37,7 +36,6 @@ def process(in_path: str, out_path: str) -> None:
         & (lum > 160) & (lum < 248)
         & (desat < 90)
     )
-
     box = np.zeros_like(parchment, dtype=bool)
     y0, y1 = int(h * SEARCH_Y[0]), int(h * SEARCH_Y[1])
     x0, x1 = int(w * SEARCH_X[0]), int(w * SEARCH_X[1])
@@ -56,18 +54,17 @@ def process(in_path: str, out_path: str) -> None:
                     break
             if seed:
                 break
-
     arch_zone = labeled == seed if seed else np.zeros_like(labeled, dtype=bool)
-    # Close small holes inside the arch (gaps between ornament details)
     arch_zone = ~binary_closing(~arch_zone, iterations=CLOSING_ITER)
 
-    s_sat = np.clip((desat - 20) / 50.0, 0, 1)
-    s_dark = np.clip((140 - lum) / 60.0, 0, 1)
-    s_gold = np.clip((100 - B) / 40.0, 0, 1)
+    s_sat = np.clip((desat - 30) / 30.0, 0, 1)
+    s_dark = np.clip((130 - lum) / 60.0, 0, 1)
+    s_gold = np.clip((90 - B) / 40.0, 0, 1)
     ornament_strength = np.maximum(np.maximum(s_sat, s_dark), s_gold)
-    alpha_in = np.clip((ornament_strength - 0.2) * 320, 0, 255)
+    is_inner_ornament = ornament_strength > 0.45
 
-    alpha = np.where(arch_zone, alpha_in, 255).astype(np.uint8)
+    transparent_zone = arch_zone & ~is_inner_ornament
+    alpha = np.where(transparent_zone, 0, 255).astype(np.uint8)
     arr[:, :, 3] = alpha
     Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="RGBA").save(
         out_path, optimize=True
