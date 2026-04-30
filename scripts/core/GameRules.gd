@@ -146,6 +146,100 @@ static func is_response_entraved(state: GameState, station: int) -> bool:
 			return true
 	return false
 
+
+# --- Reasons (why an action is illegal — empty string means it's legal) -----
+
+static func why_cannot_investir(state: GameState, player: int, d_id: int) -> String:
+	if state.available_corruption[player] < 1:
+		return "0 Corruption disponible"
+	if state.is_sealed(d_id) and state.domain(d_id).seal_owner != player:
+		return "scellé par l'adversaire"
+	return ""
+
+
+static func why_cannot_exploiter(state: GameState, player: int, d_id: int) -> String:
+	if state.controller_of(d_id) != player:
+		return "non contrôlé par toi"
+	var d := state.domain(d_id)
+	if player == GameEnums.PlayerId.RED and d.exploited_by_red_this_station:
+		return "déjà exploité cette Station"
+	if player == GameEnums.PlayerId.BLUE and d.exploited_by_blue_this_station:
+		return "déjà exploité cette Station"
+	return ""
+
+
+static func why_cannot_sceller(state: GameState, player: int, d_id: int) -> String:
+	if state.is_sealed(d_id):
+		return "déjà scellé"
+	var d := state.domain(d_id)
+	if d.cannot_be_sealed_until_exorcism and state.current_station < GameEnums.StationId.EXORCISME:
+		return "Sceau interdit jusqu'à l'Exorcisme (Communion)"
+	if state.is_in_penitence(d_id):
+		return "en Pénitence"
+	if state.controller_of(d_id) != player:
+		return "non contrôlé par toi"
+	if not state.has_net_domination(d_id, player):
+		return "Domination nette ≥2 requise"
+	if state.available_corruption[player] < 1:
+		return "0 Corruption disponible"
+	return ""
+
+
+static func why_cannot_fissurer(state: GameState, player: int, d_id: int) -> String:
+	var d := state.domain(d_id)
+	if d.seal_owner == GameEnums.PlayerId.NONE:
+		return "pas scellé"
+	if d.seal_owner == player:
+		return "tu ne peux pas fissurer ton propre Sceau"
+	var cost := fissurer_total_cost(state, player, d_id)
+	if state.available_corruption[player] < cost:
+		return "pas assez de Corruption (coût %d)" % cost
+	return ""
+
+
+static func why_cannot_provoquer(state: GameState, player: int, def_id: String) -> String:
+	var def: Dictionary = TransgressionData.get_def(def_id)
+	if def.is_empty():
+		return "Transgression inconnue"
+	var owner := state.transgression_owner(def_id)
+	if owner != GameEnums.PlayerId.NONE:
+		return "déjà possédée par " + GameEnums.player_name(owner)
+	var requirement: Array = def.get("domain_requirement", [])
+	var controls_one := false
+	for d_id in requirement:
+		if state.controller_of(d_id) == player:
+			controls_one = true
+			break
+	if not controls_one:
+		var names := ""
+		for d_id in requirement:
+			if names != "":
+				names += " ou "
+			names += GameEnums.DOMAIN_NAMES[d_id]
+		return "doit contrôler : " + names
+	var cost := transgression_scandal_cost(state, player, def_id)
+	if state.available_corruption[player] < cost:
+		return "pas assez de Corruption (coût %d)" % cost
+	return ""
+
+
+static func why_cannot_amplifier(state: GameState, player: int, def_id: String) -> String:
+	var ti: GameState.TransgressionInstance = state.find_transgression_instance(player, def_id, GameEnums.TransgressionFace.SCANDALE)
+	if ti == null:
+		return "tu ne possèdes pas cette Transgression en Scandale"
+	var origin: int = ti.origin_domain
+	var d := state.domain(origin)
+	if d.seal_owner != player:
+		return "Domaine d'origine (%s) non scellé par toi" % GameEnums.DOMAIN_NAMES[origin]
+	if state.is_in_penitence(origin):
+		return "Domaine d'origine (%s) en Pénitence" % GameEnums.DOMAIN_NAMES[origin]
+	var def: Dictionary = TransgressionData.get_def(def_id)
+	var cost: int = def.get("amplification_cost", 0)
+	if state.available_corruption[player] < cost:
+		return "pas assez de Corruption (coût %d)" % cost
+	return ""
+
+
 # --- Misc helpers -----------------------------------------------------------
 
 static func production_of(state: GameState, d_id: int, player: int) -> int:
