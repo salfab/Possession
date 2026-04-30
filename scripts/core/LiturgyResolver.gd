@@ -17,6 +17,7 @@ static func resolve_station_response(state: GameState) -> Dictionary:
 	# This is checked *after* selecting the target.
 	state.add_log("--- Réponse liturgique : %s (%s) ---" %
 		[response["name"], "Impedita" if entraved else "In Integro"])
+	var log_start: int = state.log.size()
 	match st:
 		GameEnums.StationId.MURMURES:
 			_signe_de_croix(state, entraved)
@@ -28,7 +29,18 @@ static func resolve_station_response(state: GameState) -> Dictionary:
 			_confession(state, entraved)
 		GameEnums.StationId.OFFICE:
 			_communion(state, entraved)
-	return {"resolved": true, "impedita": entraved}
+	var produced: Array = []
+	for i in range(log_start, state.log.size()):
+		produced.append(String(state.log[i]))
+	var desc_key := "text_impedita" if entraved else "text_in_integro"
+	return {
+		"resolved": true,
+		"impedita": entraved,
+		"station": st,
+		"name": String(response["name"]),
+		"description": String(response.get(desc_key, "")),
+		"log_lines": produced,
+	}
 
 
 # --- Targeting helpers ------------------------------------------------------
