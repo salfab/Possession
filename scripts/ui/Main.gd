@@ -60,8 +60,20 @@ const POPUP_LABELS := {
 
 
 func _ready() -> void:
+	_apply_theme()
 	_build_overlays()
 	new_game()
+
+
+func _apply_theme() -> void:
+	var t := Theme.new()
+	t.default_font_size = 22
+	t.set_font_size("font_size", "Button", 22)
+	t.set_font_size("font_size", "PopupMenu", 28)
+	t.set_constant("v_separation", "PopupMenu", 14)
+	t.set_constant("h_separation", "PopupMenu", 14)
+	t.set_font_size("font_size", "Label", 22)
+	theme = t
 
 
 func new_game() -> void:
@@ -126,31 +138,31 @@ func _build_overlays() -> void:
 		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lbl.add_theme_color_override("font_color", Color(1, 1, 1))
 		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 4)
-		lbl.add_theme_font_size_override("font_size", 14)
+		lbl.add_theme_constant_override("outline_size", 5)
+		lbl.add_theme_font_size_override("font_size", 22)
 		_zoom_layer.add_child(lbl)
 		_domain_labels[d_id] = lbl
 
 	# Top status bar (HUD — fixed, not zoomed)
 	_status_label = Label.new()
-	_status_label.anchor_left = 0.05
-	_status_label.anchor_right = 0.95
+	_status_label.anchor_left = 0.02
+	_status_label.anchor_right = 0.98
 	_status_label.anchor_top = 0.0
-	_status_label.anchor_bottom = 0.05
+	_status_label.anchor_bottom = 0.08
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_label.add_theme_color_override("font_color", Color(1, 0.95, 0.7))
 	_status_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_status_label.add_theme_constant_override("outline_size", 4)
-	_status_label.add_theme_font_size_override("font_size", 16)
+	_status_label.add_theme_constant_override("outline_size", 5)
+	_status_label.add_theme_font_size_override("font_size", 26)
 	stage.add_child(_status_label)
 
 	# Ascendant label over the bottom bar
 	_ascendant_label = Label.new()
-	_ascendant_label.anchor_left = 0.4
-	_ascendant_label.anchor_right = 0.6
-	_ascendant_label.anchor_top = 0.92
-	_ascendant_label.anchor_bottom = 0.99
+	_ascendant_label.anchor_left = 0.25
+	_ascendant_label.anchor_right = 0.75
+	_ascendant_label.anchor_top = 0.78
+	_ascendant_label.anchor_bottom = 0.86
 	_ascendant_label.offset_left = 0
 	_ascendant_label.offset_right = 0
 	_ascendant_label.offset_top = 0
@@ -159,8 +171,8 @@ func _build_overlays() -> void:
 	_ascendant_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ascendant_label.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
 	_ascendant_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_ascendant_label.add_theme_constant_override("outline_size", 4)
-	_ascendant_label.add_theme_font_size_override("font_size", 18)
+	_ascendant_label.add_theme_constant_override("outline_size", 5)
+	_ascendant_label.add_theme_font_size_override("font_size", 28)
 	stage.add_child(_ascendant_label)
 
 	# Bottom debug bar (top-level Control overlay, not in stage)
@@ -181,14 +193,14 @@ func _build_debug_bar() -> void:
 	var bar := HBoxContainer.new()
 	bar.anchor_left = 0.0
 	bar.anchor_right = 1.0
-	bar.anchor_top = 0.92
+	bar.anchor_top = 0.86
 	bar.anchor_bottom = 1.0
-	bar.offset_left = 8
-	bar.offset_right = -8
-	bar.offset_top = 0
-	bar.offset_bottom = -4
+	bar.offset_left = 10
+	bar.offset_right = -10
+	bar.offset_top = 4
+	bar.offset_bottom = -8
 	bar.alignment = BoxContainer.ALIGNMENT_END
-	bar.add_theme_constant_override("separation", 6)
+	bar.add_theme_constant_override("separation", 8)
 	add_child(bar)
 
 	var actions := [
@@ -203,19 +215,20 @@ func _build_debug_bar() -> void:
 	for a in actions:
 		var btn := Button.new()
 		btn.text = a[0]
-		btn.add_theme_font_size_override("font_size", 12)
+		btn.custom_minimum_size = Vector2(64, 56)
+		btn.add_theme_font_size_override("font_size", 22)
 		btn.pressed.connect(a[1])
 		bar.add_child(btn)
 
 
 func _build_log_panel() -> void:
 	_log_panel = PanelContainer.new()
-	_log_panel.anchor_left = 0.6
+	_log_panel.anchor_left = 0.45
 	_log_panel.anchor_right = 1.0
-	_log_panel.anchor_top = 0.05
-	_log_panel.anchor_bottom = 0.9
+	_log_panel.anchor_top = 0.08
+	_log_panel.anchor_bottom = 0.85
 	_log_panel.offset_left = 0
-	_log_panel.offset_right = -8
+	_log_panel.offset_right = -10
 	_log_panel.offset_top = 0
 	_log_panel.offset_bottom = 0
 	_log_panel.visible = false
@@ -225,8 +238,8 @@ func _build_log_panel() -> void:
 	sb.bg_color = Color(0, 0, 0, 0.85)
 	sb.border_color = Color(0.8, 0.7, 0.3)
 	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(6)
-	sb.set_content_margin_all(6)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(10)
 	_log_panel.add_theme_stylebox_override("panel", sb)
 
 	var sc := ScrollContainer.new()
@@ -236,7 +249,7 @@ func _build_log_panel() -> void:
 	_log_rtl.fit_content = true
 	_log_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_log_rtl.add_theme_color_override("default_color", Color(0.95, 0.9, 0.75))
-	_log_rtl.add_theme_font_size_override("normal_font_size", 11)
+	_log_rtl.add_theme_font_size_override("normal_font_size", 18)
 	sc.add_child(_log_rtl)
 
 
@@ -324,7 +337,7 @@ func _on_domain_clicked(d_id: int) -> void:
 	# Position the popup near the touch
 	var mp: Vector2 = get_viewport().get_mouse_position()
 	_action_popup.position = Vector2i(int(mp.x), int(mp.y))
-	_action_popup.size = Vector2i(220, 0)
+	_action_popup.size = Vector2i(320, 0)
 	_action_popup.popup()
 
 
