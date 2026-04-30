@@ -25,6 +25,7 @@ window/size/viewport_height=800
 window/handheld/orientation=1
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+window/stretch/scale=1.5
 
 [rendering]
 

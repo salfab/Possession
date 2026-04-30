@@ -11,6 +11,9 @@ extends RefCounted
 var state: GameState
 var _pulse_actions_done: Dictionary = {GameEnums.PlayerId.RED: false, GameEnums.PlayerId.BLUE: false}
 var _pending_advance_to_station: int = -1   # set when waiting for Confession decisions
+# Set after the liturgical response of a station resolves; the UI must
+# acknowledge before the game advances to the next station.
+var pending_liturgy: Dictionary = {}
 
 func _init(s: GameState, fresh_game: bool = true) -> void:
 	state = s
@@ -82,13 +85,27 @@ func _end_station() -> void:
 	if state.current_station == GameEnums.StationId.EXORCISME:
 		EndGameResolver.resolve_final_exorcism(state)
 		return
-	# Resolve liturgical response
-	LiturgyResolver.resolve_station_response(state)
-	# If the response queued any decisions (Confession), wait for them.
-	if state.has_pending_decisions():
-		_pending_advance_to_station = state.current_station + 1
+	# Resolve liturgical response and pause: the UI must acknowledge the
+	# response (full-screen dialog) before we advance to the next station.
+	pending_liturgy = LiturgyResolver.resolve_station_response(state)
+	_pending_advance_to_station = state.current_station + 1
+
+
+func acknowledge_liturgy() -> void:
+	pending_liturgy = {}
+	_try_advance_after_liturgy()
+
+
+func _try_advance_after_liturgy() -> void:
+	if not pending_liturgy.is_empty():
 		return
-	_advance_to_station(state.current_station + 1)
+	if state.has_pending_decisions():
+		return
+	if _pending_advance_to_station < 0:
+		return
+	var s := _pending_advance_to_station
+	_pending_advance_to_station = -1
+	_advance_to_station(s)
 
 
 func _advance_to_station(s: int) -> void:
@@ -171,11 +188,9 @@ func resolve_decision(picks: Dictionary) -> Dictionary:
 		return ActionResolver.fail("Décision inconnue : %s" % dec.kind)
 	if done:
 		state.pending_decisions.pop_front()
-	# If the queue is empty and we were waiting to advance the station, do it now.
-	if not state.has_pending_decisions() and _pending_advance_to_station >= 0:
-		var s := _pending_advance_to_station
-		_pending_advance_to_station = -1
-		_advance_to_station(s)
+	# If the queue is empty and we were waiting to advance the station, try.
+	# (Will no-op if the liturgy dialog hasn't been acknowledged yet.)
+	_try_advance_after_liturgy()
 	return ActionResolver.ok("Décision résolue.")
 
 
@@ -187,6 +202,8 @@ func force_advance_to_exorcism() -> void:
 		_pulse_actions_done[GameEnums.PlayerId.RED] = true
 		_pulse_actions_done[GameEnums.PlayerId.BLUE] = true
 		_end_pulse()
+		if not pending_liturgy.is_empty():
+			acknowledge_liturgy()
 		_drain_pending_decisions()
 
 
@@ -205,10 +222,7 @@ func _drain_pending_decisions() -> void:
 			if avail.is_empty():
 				# Nothing applicable — pop without effect.
 				state.pending_decisions.pop_front()
-				if not state.has_pending_decisions() and _pending_advance_to_station >= 0:
-					var s := _pending_advance_to_station
-					_pending_advance_to_station = -1
-					_advance_to_station(s)
+				_try_advance_after_liturgy()
 			else:
 				var pick := {"kind": avail[0]}
 				if avail[0] != "lose2":

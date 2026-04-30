@@ -36,6 +36,8 @@ var _action_popup: PopupMenu
 var _selected_domain: int = -1
 var _log_rtl: RichTextLabel
 var _log_panel: PanelContainer
+var _liturgy_dialog: AcceptDialog
+var _liturgy_rtl: RichTextLabel
 
 # Zoom / pan state
 var _zoom: float = 1.0
@@ -188,6 +190,31 @@ func _build_overlays() -> void:
 	_action_popup.id_pressed.connect(_on_popup_action)
 	add_child(_action_popup)
 
+	# Liturgy dialog (full-screen modal at end of station)
+	_build_liturgy_dialog()
+
+
+func _build_liturgy_dialog() -> void:
+	_liturgy_dialog = AcceptDialog.new()
+	_liturgy_dialog.exclusive = true
+	_liturgy_dialog.title = "Réponse liturgique"
+	_liturgy_dialog.ok_button_text = "Continuer"
+	_liturgy_dialog.dialog_text = ""
+	_liturgy_dialog.min_size = Vector2i(680, 460)
+	_liturgy_dialog.confirmed.connect(_on_liturgy_acknowledged)
+	add_child(_liturgy_dialog)
+	# Custom RichTextLabel as the dialog content (replaces the default Label).
+	_liturgy_rtl = RichTextLabel.new()
+	_liturgy_rtl.bbcode_enabled = true
+	_liturgy_rtl.fit_content = true
+	_liturgy_rtl.scroll_active = true
+	_liturgy_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_liturgy_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_liturgy_rtl.custom_minimum_size = Vector2(640, 360)
+	_liturgy_rtl.add_theme_font_size_override("normal_font_size", 22)
+	_liturgy_rtl.add_theme_font_size_override("bold_font_size", 24)
+	_liturgy_dialog.add_child(_liturgy_rtl)
+
 
 func _build_debug_bar() -> void:
 	var bar := HBoxContainer.new()
@@ -259,6 +286,7 @@ func _refresh_all() -> void:
 	_refresh_status()
 	_refresh_overlays()
 	_refresh_log()
+	_maybe_show_liturgy_dialog()
 
 
 func _refresh_status() -> void:
@@ -386,6 +414,50 @@ func _on_btn_toggle_log() -> void:
 	_log_panel.visible = not _log_panel.visible
 	if _log_panel.visible:
 		_refresh_log()
+
+
+# ─── LITURGY DIALOG ───────────────────────────────────────────────────────────
+
+func _maybe_show_liturgy_dialog() -> void:
+	if manager == null:
+		return
+	if manager.pending_liturgy.is_empty():
+		return
+	if _liturgy_dialog.visible:
+		return
+	_show_liturgy_dialog(manager.pending_liturgy)
+
+
+func _show_liturgy_dialog(info: Dictionary) -> void:
+	var resp_name: String = String(info.get("name", "?"))
+	var imp: bool = bool(info.get("impedita", false))
+	var desc: String = String(info.get("description", ""))
+	var lines: Array = info.get("log_lines", [])
+	var st: int = int(info.get("station", 0))
+	var st_name: String = GameEnums.STATION_NAMES.get(st, "?")
+	var mode_str: String = "Impedita" if imp else "In Integro"
+	var mode_color: String = "#e88" if imp else "#8e8"
+
+	var details := ""
+	for l in lines:
+		details += "• " + String(l) + "\n"
+	if details == "":
+		details = "(aucun effet)"
+
+	_liturgy_dialog.title = "Fin de la Station %s" % st_name
+	_liturgy_rtl.clear()
+	_liturgy_rtl.append_text("[font_size=30][b]%s[/b][/font_size]\n" % resp_name)
+	_liturgy_rtl.append_text("[font_size=22][color=%s][b]%s[/b][/color][/font_size]\n\n" % [mode_color, mode_str])
+	_liturgy_rtl.append_text("[i]%s[/i]\n\n" % desc)
+	_liturgy_rtl.append_text("[b]Résolution :[/b]\n")
+	_liturgy_rtl.append_text(details)
+
+	_liturgy_dialog.popup_centered()
+
+
+func _on_liturgy_acknowledged() -> void:
+	manager.acknowledge_liturgy()
+	_refresh_all()
 
 
 # ─── ZOOM / PAN ───────────────────────────────────────────────────────────────
