@@ -511,9 +511,9 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 		details = "(aucun effet)"
 
 	_liturgy_dialog.title = "Fin de la Station %s" % st_name
-	# Card image
-	var img_path: String = LiturgicalResponseData.card_image_path(st, imp)
-	var img_tex: Texture2D = load(img_path) if img_path != "" else null
+	# Card image (preloaded via CardImages autoload)
+	var resp_id: String = String(LiturgicalResponseData.get_response(st).get("id", ""))
+	var img_tex: Texture2D = CardImages.liturgy(resp_id, imp) if resp_id != "" else null
 	_liturgy_image.texture_normal = img_tex
 	_liturgy_image.visible = (img_tex != null)
 	# Text panel
@@ -681,7 +681,7 @@ func _build_endgame_dialog() -> void:
 	_endgame_image.ignore_texture_size = true
 	_endgame_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	_endgame_image.custom_minimum_size = Vector2(320, 448)
-	_endgame_image.texture_normal = load("res://assets/cards/special/exorcisme_final.png")
+	_endgame_image.texture_normal = CardImages.exorcisme()
 	_endgame_image.tooltip_text = "Cliquer pour agrandir"
 	_endgame_image.pressed.connect(_on_endgame_image_clicked)
 	hbox.add_child(_endgame_image)
@@ -806,8 +806,7 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 			face = GameEnums.TransgressionFace.INFAMIE
 
 	# Card image (left) — clickable to view full-screen
-	var img_path: String = TransgressionData.card_image_path(tid, face)
-	var img_tex: Texture2D = load(img_path)
+	var img_tex: Texture2D = CardImages.transgression(tid, face)
 	if img_tex != null:
 		var img := TextureButton.new()
 		img.texture_normal = img_tex
