@@ -13,8 +13,8 @@ from PIL import Image
 import numpy as np
 from scipy.ndimage import binary_closing
 
-ARCH_CX, ARCH_CY = 0.50, 0.32
-ARCH_RX, ARCH_RY = 0.35, 0.22
+ARCH_CX, ARCH_CY = 0.50, 0.34
+ARCH_RX, ARCH_RY = 0.42, 0.26
 ARCH_BOTTOM = 0.74
 CLOSING_ITER = 8
 
