@@ -30,7 +30,7 @@ def process(in_path: str, out_path: str) -> None:
     #   greenness >= 150 → α=0   (pure green)
     #   greenness <= 50  → α=255 (no green domination)
     #   between          → linear (anti-alias on edges)
-    alpha = np.clip((150 - greenness) * 255 / 100, 0, 255).astype(np.uint8)
+    alpha = np.clip((150 - greenness.astype(np.float32)) * 255.0 / 100.0, 0, 255).astype(np.uint8)
 
     # When alpha < 255 we are partially seeing the green; suppress the green
     # contamination of the visible (bleeding) pixels by reducing the green
