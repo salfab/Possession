@@ -39,10 +39,12 @@ var _log_panel: PanelContainer
 var _log_scroll: ScrollContainer
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
+var _liturgy_image: TextureRect
 var _decision_dialog: AcceptDialog
 var _decision_content: VBoxContainer
 var _endgame_dialog: AcceptDialog
 var _endgame_rtl: RichTextLabel
+var _endgame_image: TextureRect
 var _endgame_shown: bool = false
 var _trans_dialog: AcceptDialog
 var _trans_content: VBoxContainer
@@ -215,20 +217,32 @@ func _build_liturgy_dialog() -> void:
 	_liturgy_dialog.title = "Réponse liturgique"
 	_liturgy_dialog.ok_button_text = "Continuer"
 	_liturgy_dialog.dialog_text = ""
-	_liturgy_dialog.min_size = Vector2i(680, 460)
+	_liturgy_dialog.min_size = Vector2i(820, 520)
 	_liturgy_dialog.confirmed.connect(_on_liturgy_acknowledged)
 	add_child(_liturgy_dialog)
-	# Custom RichTextLabel as the dialog content (replaces the default Label).
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 16)
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_liturgy_dialog.add_child(hbox)
+
+	_liturgy_image = TextureRect.new()
+	_liturgy_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_liturgy_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_liturgy_image.custom_minimum_size = Vector2(300, 420)
+	hbox.add_child(_liturgy_image)
+
 	_liturgy_rtl = RichTextLabel.new()
 	_liturgy_rtl.bbcode_enabled = true
 	_liturgy_rtl.fit_content = true
-	_liturgy_rtl.scroll_active = true
+	_liturgy_rtl.scroll_active = false
 	_liturgy_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_liturgy_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_liturgy_rtl.custom_minimum_size = Vector2(640, 360)
+	_liturgy_rtl.custom_minimum_size = Vector2(420, 420)
 	_liturgy_rtl.add_theme_font_size_override("normal_font_size", 22)
 	_liturgy_rtl.add_theme_font_size_override("bold_font_size", 24)
-	_liturgy_dialog.add_child(_liturgy_rtl)
+	hbox.add_child(_liturgy_rtl)
 
 
 func _build_debug_bar() -> void:
@@ -487,6 +501,12 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 		details = "(aucun effet)"
 
 	_liturgy_dialog.title = "Fin de la Station %s" % st_name
+	# Card image
+	var img_path: String = LiturgicalResponseData.card_image_path(st, imp)
+	var img_tex: Texture2D = load(img_path) if img_path != "" else null
+	_liturgy_image.texture = img_tex
+	_liturgy_image.visible = (img_tex != null)
+	# Text panel
 	_liturgy_rtl.clear()
 	_liturgy_rtl.append_text("[font_size=30][b]%s[/b][/font_size]\n" % resp_name)
 	_liturgy_rtl.append_text("[font_size=22][color=%s][b]%s[/b][/color][/font_size]\n\n" % [mode_color, mode_str])
@@ -637,19 +657,39 @@ func _build_endgame_dialog() -> void:
 	_endgame_dialog.title = "Exorcisme final"
 	_endgame_dialog.ok_button_text = "Nouvelle partie"
 	_endgame_dialog.dialog_text = ""
-	_endgame_dialog.min_size = Vector2i(720, 520)
+	_endgame_dialog.min_size = Vector2i(880, 540)
 	_endgame_dialog.confirmed.connect(_on_endgame_acknowledged)
 	add_child(_endgame_dialog)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 16)
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_endgame_dialog.add_child(hbox)
+
+	_endgame_image = TextureRect.new()
+	_endgame_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_endgame_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_endgame_image.custom_minimum_size = Vector2(320, 448)
+	_endgame_image.texture = load("res://assets/cards/special/exorcisme_final.png")
+	hbox.add_child(_endgame_image)
+
+	var sc := ScrollContainer.new()
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.custom_minimum_size = Vector2(440, 448)
+	hbox.add_child(sc)
+
 	_endgame_rtl = RichTextLabel.new()
 	_endgame_rtl.bbcode_enabled = true
 	_endgame_rtl.fit_content = true
-	_endgame_rtl.scroll_active = true
+	_endgame_rtl.scroll_active = false
 	_endgame_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_endgame_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_endgame_rtl.custom_minimum_size = Vector2(680, 420)
 	_endgame_rtl.add_theme_font_size_override("normal_font_size", 22)
 	_endgame_rtl.add_theme_font_size_override("bold_font_size", 24)
-	_endgame_dialog.add_child(_endgame_rtl)
+	sc.add_child(_endgame_rtl)
 
 
 func _maybe_show_endgame_dialog() -> void:
@@ -738,65 +778,50 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	sb.set_content_margin_all(10)
 	panel.add_theme_stylebox_override("panel", sb)
 
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4)
-	panel.add_child(vbox)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 12)
+	panel.add_child(hbox)
 
-	# Header: name + state
-	var header := HBoxContainer.new()
-	vbox.add_child(header)
-	var name_lbl := Label.new()
-	name_lbl.text = String(def.get("name", "?"))
-	name_lbl.add_theme_font_size_override("font_size", 24)
-	name_lbl.add_theme_color_override("font_color", Color(1, 0.90, 0.55))
-	header.add_child(name_lbl)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(spacer)
+	# Determine current face (Scandale by default; Infamie if any owner amplified it).
 	var owner: int = state.transgression_owner(tid)
-	var state_lbl := Label.new()
-	if owner == GameEnums.PlayerId.NONE:
-		state_lbl.text = "Libre"
-		state_lbl.add_theme_color_override("font_color", Color(0.7, 1, 0.7))
-	else:
+	var face: int = GameEnums.TransgressionFace.SCANDALE
+	if owner != GameEnums.PlayerId.NONE:
 		var inf_inst: GameState.TransgressionInstance = state.find_transgression_instance(owner, tid, GameEnums.TransgressionFace.INFAMIE)
 		if inf_inst != null:
+			face = GameEnums.TransgressionFace.INFAMIE
+
+	# Card image (left)
+	var img_path: String = TransgressionData.card_image_path(tid, face)
+	var img_tex: Texture2D = load(img_path)
+	if img_tex != null:
+		var img := TextureRect.new()
+		img.texture = img_tex
+		img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		img.custom_minimum_size = Vector2(180, 252)
+		hbox.add_child(img)
+
+	# Right column: state badge + buttons + reason
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(vbox)
+
+	var state_lbl := Label.new()
+	if owner == GameEnums.PlayerId.NONE:
+		state_lbl.text = "Libre (face Scandale)"
+		state_lbl.add_theme_color_override("font_color", Color(0.7, 1, 0.7))
+	else:
+		if face == GameEnums.TransgressionFace.INFAMIE:
 			state_lbl.text = "Infamie · " + GameEnums.player_name(owner)
 			state_lbl.add_theme_color_override("font_color", Color(1, 0.6, 1))
 		else:
 			state_lbl.text = "Scandale · " + GameEnums.player_name(owner)
 			state_lbl.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
-	state_lbl.add_theme_font_size_override("font_size", 18)
-	header.add_child(state_lbl)
+	state_lbl.add_theme_font_size_override("font_size", 22)
+	vbox.add_child(state_lbl)
 
-	# Domain requirement
-	var req: Array = def.get("domain_requirement", [])
-	var req_str := ""
-	for r in req:
-		if req_str != "":
-			req_str += " ou "
-		req_str += GameEnums.DOMAIN_NAMES[r]
-	var req_lbl := Label.new()
-	req_lbl.text = "Domaine requis : %s" % req_str
-	req_lbl.add_theme_font_size_override("font_size", 16)
-	req_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.85))
-	vbox.add_child(req_lbl)
-
-	# Texts
-	var sc_lbl := Label.new()
-	sc_lbl.text = "Scandale (coût %d) : %s" % [int(def.get("scandal_cost", 0)), String(def.get("scandal_text", ""))]
-	sc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sc_lbl.add_theme_font_size_override("font_size", 17)
-	vbox.add_child(sc_lbl)
-
-	var inf_lbl := Label.new()
-	inf_lbl.text = "Infamie (Amplifier coût %d) : %s" % [int(def.get("amplification_cost", 0)), String(def.get("infamy_text", ""))]
-	inf_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	inf_lbl.add_theme_font_size_override("font_size", 17)
-	inf_lbl.add_theme_color_override("font_color", Color(0.85, 0.7, 0.85))
-	vbox.add_child(inf_lbl)
-
-	# Action buttons row
+	# Action buttons
 	var btn_row := HFlowContainer.new()
 	btn_row.add_theme_constant_override("h_separation", 6)
 	btn_row.add_theme_constant_override("v_separation", 6)
@@ -826,7 +851,6 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	amp_btn.pressed.connect(func(): _on_amplifier_clicked(tid))
 	btn_row.add_child(amp_btn)
 
-	# If illegal, show the reason inline (small text under buttons).
 	if why_prov != "" or why_amp != "":
 		var hint := Label.new()
 		var bits := ""
@@ -834,13 +858,18 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 			bits += "Provoquer : %s" % why_prov
 		if why_amp != "":
 			if bits != "":
-				bits += "    "
+				bits += "\n"
 			bits += "Amplifier : %s" % why_amp
 		hint.text = bits
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hint.add_theme_font_size_override("font_size", 14)
+		hint.add_theme_font_size_override("font_size", 15)
 		hint.add_theme_color_override("font_color", Color(0.85, 0.5, 0.5))
 		vbox.add_child(hint)
+
+	# Push content to top of the right column
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(spacer)
 
 	return panel
 
