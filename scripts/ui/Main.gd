@@ -36,6 +36,7 @@ var _action_popup: PopupMenu
 var _selected_domain: int = -1
 var _log_rtl: RichTextLabel
 var _log_panel: PanelContainer
+var _log_scroll: ScrollContainer
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
 var _decision_dialog: AcceptDialog
@@ -284,12 +285,20 @@ func _build_log_panel() -> void:
 	sb.set_content_margin_all(10)
 	_log_panel.add_theme_stylebox_override("panel", sb)
 
-	var sc := ScrollContainer.new()
-	_log_panel.add_child(sc)
+	_log_scroll = ScrollContainer.new()
+	_log_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_log_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_log_panel.add_child(_log_scroll)
+	var sc: ScrollContainer = _log_scroll
 	_log_rtl = RichTextLabel.new()
 	_log_rtl.bbcode_enabled = true
 	_log_rtl.fit_content = true
+	_log_rtl.scroll_active = false  # let the parent ScrollContainer handle scrolling
 	_log_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_log_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_log_rtl.mouse_filter = Control.MOUSE_FILTER_PASS
+	_log_rtl.selection_enabled = false
 	_log_rtl.add_theme_color_override("default_color", Color(0.95, 0.9, 0.75))
 	_log_rtl.add_theme_font_size_override("normal_font_size", 18)
 	sc.add_child(_log_rtl)
@@ -347,12 +356,24 @@ func _refresh_log() -> void:
 	if _log_rtl == null:
 		return
 	var lines: Array = state.log
-	var max_lines := 60
+	var max_lines := 200
 	var start: int = max(0, lines.size() - max_lines)
 	var s := ""
 	for i in range(start, lines.size()):
 		s += String(lines[i]) + "\n"
 	_log_rtl.text = s
+	# Auto-scroll to the bottom (after the layout has had a frame to update).
+	if _log_scroll != null and _log_panel.visible:
+		_scroll_log_to_bottom()
+
+
+func _scroll_log_to_bottom() -> void:
+	await get_tree().process_frame
+	if _log_scroll == null:
+		return
+	var vbar := _log_scroll.get_v_scroll_bar()
+	if vbar != null:
+		_log_scroll.scroll_vertical = int(vbar.max_value)
 
 
 # ─── INTERACTION ──────────────────────────────────────────────────────────────
