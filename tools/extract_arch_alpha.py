@@ -21,7 +21,7 @@ import numpy as np
 # Arch shape in fractional coordinates: half-ellipse on top + rectangle
 # extending downward. Tweak per-template if the arch layout shifts.
 ARCH_CX, ARCH_CY = 0.50, 0.32
-ARCH_RX, ARCH_RY = 0.31, 0.22
+ARCH_RX, ARCH_RY = 0.35, 0.22
 ARCH_BOTTOM = 0.74
 
 
