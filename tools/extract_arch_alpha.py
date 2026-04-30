@@ -11,12 +11,12 @@ Usage:
 import sys
 from PIL import Image
 import numpy as np
-from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_closing
 
 ARCH_CX, ARCH_CY = 0.50, 0.32
 ARCH_RX, ARCH_RY = 0.35, 0.22
 ARCH_BOTTOM = 0.74
-DILATE_ITER = 25
+CLOSING_ITER = 30
 
 
 def process(in_path: str, out_path: str) -> None:
@@ -35,7 +35,7 @@ def process(in_path: str, out_path: str) -> None:
     ornament_strength = np.maximum(np.maximum(s_sat, s_dark), s_gold)
 
     is_ornament = ornament_strength > 0.2
-    ornament_blob = binary_dilation(is_ornament, iterations=DILATE_ITER)
+    ornament_blob = binary_closing(is_ornament, iterations=CLOSING_ITER)
 
     yy, xx = np.indices((h, w))
     fx = xx / float(w)
