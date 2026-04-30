@@ -15,6 +15,10 @@ const DOMAIN_POS := {
 }
 const DOMAIN_HALF := Vector2(0.09, 0.11)  # demi-taille du hotspot, normalisée
 
+const ZOOM_MIN := 1.0
+const ZOOM_MAX := 4.0
+const ZOOM_STEP := 1.25
+
 @onready var stage: Control = $BoardAspect/Stage
 
 var state: GameState
@@ -23,6 +27,7 @@ var pending_action: int = -1
 var pending_kwargs: Dictionary = {}
 
 # Created in _build_overlays
+var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
 var _domain_labels: Dictionary = {} # domain_id -> Label
 var _status_label: Label
@@ -31,6 +36,13 @@ var _action_popup: PopupMenu
 var _selected_domain: int = -1
 var _log_rtl: RichTextLabel
 var _log_panel: PanelContainer
+
+# Zoom / pan state
+var _zoom: float = 1.0
+var _is_panning: bool = false
+var _pan_last: Vector2 = Vector2.ZERO
+var _touches: Dictionary = {}       # event.index -> position
+var _pinch_prev_dist: float = 0.0
 
 # Action ids exposed in the popup
 const POPUP_ACTIONS := [
@@ -63,18 +75,26 @@ func new_game() -> void:
 # ─── UI CONSTRUCTION ──────────────────────────────────────────────────────────
 
 func _build_overlays() -> void:
-	# Top status bar (over the board, top-center)
-	_status_label = Label.new()
-	_status_label.anchor_left = 0.05
-	_status_label.anchor_right = 0.95
-	_status_label.anchor_top = 0.0
-	_status_label.anchor_bottom = 0.05
-	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.add_theme_color_override("font_color", Color(1, 0.95, 0.7))
-	_status_label.add_theme_font_size_override("font_size", 16)
-	stage.add_child(_status_label)
+	# Stage: clip + capture inputs (wheel/pinch/middle-pan)
+	stage.clip_contents = true
+	stage.mouse_filter = Control.MOUSE_FILTER_PASS
+	stage.gui_input.connect(_on_stage_gui_input)
 
-	# Hotspots and per-domain overlay labels
+	# Move BoardImage into a ZoomLayer (so we can scale/translate the whole board)
+	var board_image: Node = stage.get_node_or_null("BoardImage")
+	_zoom_layer = Control.new()
+	_zoom_layer.name = "ZoomLayer"
+	_zoom_layer.anchor_right = 1.0
+	_zoom_layer.anchor_bottom = 1.0
+	_zoom_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(_zoom_layer)
+	if board_image != null:
+		stage.remove_child(board_image)
+		_zoom_layer.add_child(board_image)
+		stage.move_child(_zoom_layer, 0)
+
+	# Hotspots and per-domain overlay labels — inside the ZoomLayer so they
+	# stay aligned with the image when zooming/panning.
 	for d_id in DOMAIN_POS.keys():
 		var pos: Vector2 = DOMAIN_POS[d_id]
 		var btn := Button.new()
@@ -90,7 +110,7 @@ func _build_overlays() -> void:
 		btn.offset_bottom = 0
 		var did: int = d_id
 		btn.pressed.connect(func(): _on_domain_clicked(did))
-		stage.add_child(btn)
+		_zoom_layer.add_child(btn)
 		_hotspots[d_id] = btn
 
 		var lbl := Label.new()
@@ -103,12 +123,27 @@ func _build_overlays() -> void:
 		lbl.offset_top = 0
 		lbl.offset_bottom = 0
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lbl.add_theme_color_override("font_color", Color(1, 1, 1))
 		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 		lbl.add_theme_constant_override("outline_size", 4)
 		lbl.add_theme_font_size_override("font_size", 14)
-		stage.add_child(lbl)
+		_zoom_layer.add_child(lbl)
 		_domain_labels[d_id] = lbl
+
+	# Top status bar (HUD — fixed, not zoomed)
+	_status_label = Label.new()
+	_status_label.anchor_left = 0.05
+	_status_label.anchor_right = 0.95
+	_status_label.anchor_top = 0.0
+	_status_label.anchor_bottom = 0.05
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_label.add_theme_color_override("font_color", Color(1, 0.95, 0.7))
+	_status_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_status_label.add_theme_constant_override("outline_size", 4)
+	_status_label.add_theme_font_size_override("font_size", 16)
+	stage.add_child(_status_label)
 
 	# Ascendant label over the bottom bar
 	_ascendant_label = Label.new()
@@ -121,6 +156,7 @@ func _build_overlays() -> void:
 	_ascendant_label.offset_top = 0
 	_ascendant_label.offset_bottom = 0
 	_ascendant_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ascendant_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ascendant_label.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
 	_ascendant_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_ascendant_label.add_theme_constant_override("outline_size", 4)
@@ -156,6 +192,9 @@ func _build_debug_bar() -> void:
 	add_child(bar)
 
 	var actions := [
+		["−", _on_btn_zoom_out],
+		["⊙", _on_btn_zoom_reset],
+		["+", _on_btn_zoom_in],
 		["Nouvelle", _on_btn_new_game],
 		["Station →", _on_btn_force_next_station],
 		["Passer", _on_btn_pass],
@@ -334,3 +373,106 @@ func _on_btn_toggle_log() -> void:
 	_log_panel.visible = not _log_panel.visible
 	if _log_panel.visible:
 		_refresh_log()
+
+
+# ─── ZOOM / PAN ───────────────────────────────────────────────────────────────
+
+func _on_btn_zoom_in() -> void:
+	_apply_zoom(_zoom * ZOOM_STEP, stage.size * 0.5)
+
+
+func _on_btn_zoom_out() -> void:
+	_apply_zoom(_zoom / ZOOM_STEP, stage.size * 0.5)
+
+
+func _on_btn_zoom_reset() -> void:
+	_zoom = 1.0
+	_zoom_layer.scale = Vector2.ONE
+	_zoom_layer.position = Vector2.ZERO
+
+
+func _apply_zoom(new_zoom: float, focus: Vector2) -> void:
+	new_zoom = clamp(new_zoom, ZOOM_MIN, ZOOM_MAX)
+	if is_equal_approx(new_zoom, _zoom):
+		return
+	# Keep the world point under "focus" stationary on screen.
+	var local: Vector2 = (focus - _zoom_layer.position) / _zoom
+	_zoom = new_zoom
+	_zoom_layer.scale = Vector2(new_zoom, new_zoom)
+	_zoom_layer.position = focus - local * new_zoom
+	_clamp_pan()
+
+
+func _clamp_pan() -> void:
+	var stage_size: Vector2 = stage.size
+	var scaled: Vector2 = stage_size * _zoom
+	var min_x: float = stage_size.x - scaled.x
+	var min_y: float = stage_size.y - scaled.y
+	var p: Vector2 = _zoom_layer.position
+	if min_x >= 0.0:
+		p.x = (stage_size.x - scaled.x) * 0.5
+	else:
+		p.x = clamp(p.x, min_x, 0.0)
+	if min_y >= 0.0:
+		p.y = (stage_size.y - scaled.y) * 0.5
+	else:
+		p.y = clamp(p.y, min_y, 0.0)
+	_zoom_layer.position = p
+
+
+func _on_stage_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			_apply_zoom(_zoom * ZOOM_STEP, mb.position)
+			stage.accept_event()
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			_apply_zoom(_zoom / ZOOM_STEP, mb.position)
+			stage.accept_event()
+		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
+			_is_panning = mb.pressed
+			_pan_last = mb.position
+			stage.accept_event()
+	elif event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		if _is_panning:
+			_zoom_layer.position += mm.position - _pan_last
+			_pan_last = mm.position
+			_clamp_pan()
+			stage.accept_event()
+	elif event is InputEventMagnifyGesture:
+		var mg: InputEventMagnifyGesture = event
+		_apply_zoom(_zoom * mg.factor, mg.position)
+		stage.accept_event()
+	elif event is InputEventPanGesture:
+		var pg: InputEventPanGesture = event
+		if _zoom > 1.0:
+			_zoom_layer.position -= pg.delta * 8.0
+			_clamp_pan()
+			stage.accept_event()
+	elif event is InputEventScreenTouch:
+		var st: InputEventScreenTouch = event
+		if st.pressed:
+			_touches[st.index] = st.position
+		else:
+			_touches.erase(st.index)
+			if _touches.size() < 2:
+				_pinch_prev_dist = 0.0
+	elif event is InputEventScreenDrag:
+		var sd: InputEventScreenDrag = event
+		_touches[sd.index] = sd.position
+		if _touches.size() == 2:
+			var keys: Array = _touches.keys()
+			var p1: Vector2 = _touches[keys[0]]
+			var p2: Vector2 = _touches[keys[1]]
+			var d: float = p1.distance_to(p2)
+			var center: Vector2 = (p1 + p2) * 0.5
+			if _pinch_prev_dist > 0.0 and d > 0.0:
+				var factor: float = d / _pinch_prev_dist
+				_apply_zoom(_zoom * factor, center)
+			_pinch_prev_dist = d
+			stage.accept_event()
+		elif _touches.size() == 1 and _zoom > 1.0:
+			_zoom_layer.position += sd.relative
+			_clamp_pan()
+			stage.accept_event()
