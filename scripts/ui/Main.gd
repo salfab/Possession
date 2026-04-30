@@ -19,6 +19,8 @@ const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
 const ZOOM_STEP := 1.25
 
+const SCROLL_DRAG_THRESHOLD := 8.0
+
 @onready var stage: Control = $BoardAspect/Stage
 
 var state: GameState
@@ -311,6 +313,7 @@ func _build_log_panel() -> void:
 	_log_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_log_panel.add_child(_log_scroll)
+	_enable_drag_scroll(_log_scroll)
 	var sc: ScrollContainer = _log_scroll
 	_log_rtl = RichTextLabel.new()
 	_log_rtl.bbcode_enabled = true
@@ -689,6 +692,7 @@ func _build_endgame_dialog() -> void:
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	sc.custom_minimum_size = Vector2(440, 448)
 	hbox.add_child(sc)
+	_enable_drag_scroll(sc)
 
 	_endgame_rtl = RichTextLabel.new()
 	_endgame_rtl.bbcode_enabled = true
@@ -754,6 +758,7 @@ func _build_transgressions_dialog() -> void:
 	_trans_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_trans_scroll.custom_minimum_size = Vector2(680, 460)
 	_trans_dialog.add_child(_trans_scroll)
+	_enable_drag_scroll(_trans_scroll)
 	_trans_content = VBoxContainer.new()
 	_trans_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_trans_content.add_theme_constant_override("separation", 10)
@@ -810,6 +815,7 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		img.custom_minimum_size = Vector2(180, 252)
 		img.tooltip_text = "Cliquer pour agrandir"
+		img.mouse_filter = Control.MOUSE_FILTER_PASS  # let scroll-drag pass through
 		var captured_tex: Texture2D = img_tex
 		var captured_name: String = String(def.get("name", ""))
 		img.pressed.connect(func(): _show_fullscreen_card(captured_tex, captured_name))
@@ -851,6 +857,7 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		else:
 			btn.text = "Provoquer"
 		btn.disabled = (why_prov != "")
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		btn.add_theme_font_size_override("font_size", 18)
 		btn.tooltip_text = why_prov
 		btn.pressed.connect(func(): _on_provoquer_clicked(tid, origin_int))
@@ -860,6 +867,7 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	var amp_btn := Button.new()
 	amp_btn.text = "Amplifier"
 	amp_btn.disabled = (why_amp != "")
+	amp_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	amp_btn.add_theme_font_size_override("font_size", 18)
 	amp_btn.tooltip_text = why_amp
 	amp_btn.pressed.connect(func(): _on_amplifier_clicked(tid))
@@ -885,7 +893,21 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(spacer)
 
+	# Let drag events bubble up to the parent ScrollContainer (Labels and
+	# basic Controls default to MOUSE_FILTER_STOP, which would swallow the
+	# drag and prevent the dialog from scrolling by drag).
+	_set_pass_through(panel)
+
 	return panel
+
+
+func _set_pass_through(node: Node) -> void:
+	if node is Control:
+		var c: Control = node
+		if c.mouse_filter == Control.MOUSE_FILTER_STOP:
+			c.mouse_filter = Control.MOUSE_FILTER_PASS
+	for child in node.get_children():
+		_set_pass_through(child)
 
 
 # ─── FULLSCREEN CARD VIEWER ───────────────────────────────────────────────────
@@ -939,6 +961,67 @@ func _on_amplifier_clicked(tid: String) -> void:
 	if not r.get("ok", false):
 		state.add_log("[REFUSÉ] " + r.get("message", "?"))
 	_refresh_all()
+
+
+# ─── DRAG-TO-SCROLL HELPER ────────────────────────────────────────────────────
+
+func _enable_drag_scroll(sc: ScrollContainer) -> void:
+	# Adds drag-to-scroll to the given ScrollContainer (mouse + touch).
+	# Children should set mouse_filter = MOUSE_FILTER_PASS so the events
+	# bubble up to the scroll container's gui_input.
+	var st := {"active": false, "start_y": 0.0, "start_scroll": 0, "captured": false}
+	sc.set_meta("drag_state", st)
+	sc.gui_input.connect(_on_drag_scroll_input.bind(sc))
+
+
+func _on_drag_scroll_input(event: InputEvent, sc: ScrollContainer) -> void:
+	var st: Dictionary = sc.get_meta("drag_state", {})
+	if st.is_empty():
+		return
+	var begin: bool = false
+	var end: bool = false
+	var moved: bool = false
+	var pos_y: float = 0.0
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			pos_y = mb.position.y
+			if mb.pressed:
+				begin = true
+			else:
+				end = true
+	elif event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		pos_y = mm.position.y
+		if (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			moved = true
+	elif event is InputEventScreenTouch:
+		var stt: InputEventScreenTouch = event
+		pos_y = stt.position.y
+		if stt.pressed:
+			begin = true
+		else:
+			end = true
+	elif event is InputEventScreenDrag:
+		var sd: InputEventScreenDrag = event
+		pos_y = sd.position.y
+		moved = true
+
+	if begin:
+		st["active"] = true
+		st["start_y"] = pos_y
+		st["start_scroll"] = sc.scroll_vertical
+		st["captured"] = false
+	elif end:
+		st["active"] = false
+		st["captured"] = false
+	elif moved and st.get("active", false):
+		var dy: float = pos_y - float(st["start_y"])
+		if not st["captured"] and abs(dy) > SCROLL_DRAG_THRESHOLD:
+			st["captured"] = true
+		if st["captured"]:
+			sc.scroll_vertical = int(float(st["start_scroll"]) - dy)
+			sc.accept_event()
 
 
 # ─── ZOOM / PAN ───────────────────────────────────────────────────────────────
