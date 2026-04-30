@@ -17,6 +17,7 @@ GameEnums="*res://scripts/core/GameEnums.gd"
 DomainData="*res://scripts/data/DomainData.gd"
 TransgressionData="*res://scripts/data/TransgressionData.gd"
 LiturgicalResponseData="*res://scripts/data/LiturgicalResponseData.gd"
+CardImages="*res://scripts/data/CardImages.gd"
 
 [display]
 
