@@ -22,7 +22,7 @@ import numpy as np
 # extending downward. Tweak per-template if the arch layout shifts.
 ARCH_CX, ARCH_CY = 0.50, 0.32
 ARCH_RX, ARCH_RY = 0.31, 0.22
-ARCH_BOTTOM = 0.66
+ARCH_BOTTOM = 0.74
 
 
 def process(in_path: str, out_path: str) -> None:
