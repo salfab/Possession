@@ -327,7 +327,7 @@ func _build_liturgy_dialog() -> void:
 
 	# Composed card thumbnail (Card.tscn) on the left of the dialog. The
 	# concrete content is set in _show_liturgy_dialog().
-	_liturgy_card_thumb = _make_card_thumb(Vector2(300, 420))
+	_liturgy_card_thumb = _make_card_thumb(Vector2(180, 252))
 	(_liturgy_card_thumb.get_meta("click_btn") as Button).pressed.connect(_on_liturgy_image_clicked)
 	hbox.add_child(_liturgy_card_thumb)
 
@@ -337,7 +337,7 @@ func _build_liturgy_dialog() -> void:
 	_liturgy_rtl.scroll_active = false
 	_liturgy_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_liturgy_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_liturgy_rtl.custom_minimum_size = Vector2(420, 420)
+	_liturgy_rtl.custom_minimum_size = Vector2(200, 240)
 	_liturgy_rtl.add_theme_font_size_override("normal_font_size", 22)
 	_liturgy_rtl.add_theme_font_size_override("bold_font_size", 24)
 	hbox.add_child(_liturgy_rtl)
@@ -1133,7 +1133,7 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 	_liturgy_rtl.append_text("[b]%s[/b]\n" % I18n.t("ui.liturgy.resolution_header"))
 	_liturgy_rtl.append_text(details)
 
-	_liturgy_dialog.popup_centered()
+	_popup_dialog_fullscreen(_liturgy_dialog)
 
 
 func _on_liturgy_acknowledged() -> void:
@@ -1172,7 +1172,7 @@ func _maybe_show_decision_dialog() -> void:
 	if _liturgy_dialog.visible:
 		return
 	_populate_decision_dialog(state.pending_decisions[0])
-	_decision_dialog.popup_centered()
+	_popup_dialog_fullscreen(_decision_dialog)
 
 
 func _populate_decision_dialog(dec: GameState.PendingDecision) -> void:
@@ -1295,7 +1295,7 @@ func _build_endgame_dialog() -> void:
 	_endgame_image = TextureButton.new()
 	_endgame_image.ignore_texture_size = true
 	_endgame_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-	_endgame_image.custom_minimum_size = Vector2(320, 448)
+	_endgame_image.custom_minimum_size = Vector2(160, 224)
 	_endgame_image.texture_normal = CardImages.exorcisme()
 	_endgame_image.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
 	_endgame_image.pressed.connect(_on_endgame_image_clicked)
@@ -1305,7 +1305,7 @@ func _build_endgame_dialog() -> void:
 	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	sc.custom_minimum_size = Vector2(440, 448)
+	sc.custom_minimum_size = Vector2(220, 240)
 	hbox.add_child(sc)
 	_enable_drag_scroll(sc)
 
@@ -1356,7 +1356,7 @@ func _show_endgame_dialog() -> void:
 		s += "  • " + String(lines[i]) + "\n"
 	_endgame_rtl.clear()
 	_endgame_rtl.append_text(s)
-	_endgame_dialog.popup_centered()
+	_popup_dialog_fullscreen(_endgame_dialog)
 
 
 func _on_endgame_acknowledged() -> void:
