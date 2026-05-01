@@ -1090,7 +1090,11 @@ func _populate_decision_dialog(dec: GameState.PendingDecision) -> void:
 		for d_id in options:
 			var did: int = d_id
 			var btn := Button.new()
-			btn.text = I18n.t("ui.decision.btn.exploit", [GameEnums.DOMAIN_NAMES[d_id]])
+			# Show the actual Corruption gain so the player can choose informed.
+			var gain: int = GameRules.production_of(state, d_id, dec.player)
+			btn.text = I18n.t("ui.decision.btn.exploit_gain", [
+				GameEnums.DOMAIN_NAMES[d_id], gain, ("s" if gain != 1 else ""),
+			])
 			btn.custom_minimum_size = Vector2(0, 56)
 			btn.add_theme_font_size_override("font_size", 22)
 			btn.pressed.connect(func(): _on_decision_pick({"domain": did}))
