@@ -31,7 +31,8 @@ var pending_kwargs: Dictionary = {}
 # Created in _build_overlays
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
-var _domain_labels: Dictionary = {} # domain_id -> Label
+var _domain_labels: Dictionary = {} # domain_id -> Label (badges only — controller / sealed / penitence)
+var _domain_dots: Dictionary = {}   # domain_id -> CorruptionDots
 var _domain_marker_rows: Dictionary = {} # domain_id -> HFlowContainer (owned-Transgression chips)
 var _status_label: Label
 var _ascendant_label: Label
@@ -68,6 +69,8 @@ var _player_panel_red: PanelContainer
 var _player_panel_blue: PanelContainer
 var _player_list_red: HFlowContainer
 var _player_list_blue: HFlowContainer
+var _player_reserve_red: Label
+var _player_reserve_blue: Label
 
 # Bottom action bar (kept as a ref so we can rebuild localised button text
 # when the user toggles the language).
@@ -101,10 +104,12 @@ const POPUP_LABEL_KEYS := {
 	GameEnums.ActionId.FISSURER:  "action.fissurer",
 }
 
-# Domain-popup item ids ≥ this offset are "Provoke <Transgression> in <Domain>"
-# entries appended dynamically when at least one Transgression is legal here.
-# Kept well above ActionId enum values (which start at 0) to avoid collisions.
+# Domain-popup item ids ≥ these offsets are dynamic entries appended each
+# time the popup opens. Both ranges sit well above the ActionId enum (0-7)
+# to avoid collisions. We reserve 100 ids per kind, which is plenty (the
+# game has 10 transgressions max).
 const PROVOKE_ITEM_ID_BASE := 100
+const AMPLIFY_ITEM_ID_BASE := 200
 
 
 func _ready() -> void:
@@ -175,22 +180,32 @@ func _build_overlays() -> void:
 		_zoom_layer.add_child(btn)
 		_hotspots[d_id] = btn
 
+		var info_row := HBoxContainer.new()
+		info_row.anchor_left = pos.x - DOMAIN_HALF.x
+		info_row.anchor_right = pos.x + DOMAIN_HALF.x
+		info_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.04
+		info_row.anchor_bottom = pos.y + DOMAIN_HALF.y
+		info_row.offset_left = 0
+		info_row.offset_right = 0
+		info_row.offset_top = 0
+		info_row.offset_bottom = 0
+		info_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		info_row.add_theme_constant_override("separation", 6)
+		info_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_zoom_layer.add_child(info_row)
+
+		var dots := CorruptionDots.new()
+		info_row.add_child(dots)
+		_domain_dots[d_id] = dots
+
 		var lbl := Label.new()
-		lbl.anchor_left = pos.x - DOMAIN_HALF.x
-		lbl.anchor_right = pos.x + DOMAIN_HALF.x
-		lbl.anchor_top = pos.y + DOMAIN_HALF.y - 0.04
-		lbl.anchor_bottom = pos.y + DOMAIN_HALF.y
-		lbl.offset_left = 0
-		lbl.offset_right = 0
-		lbl.offset_top = 0
-		lbl.offset_bottom = 0
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lbl.add_theme_color_override("font_color", Color(1, 1, 1))
 		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 		lbl.add_theme_constant_override("outline_size", 5)
 		lbl.add_theme_font_size_override("font_size", 22)
-		_zoom_layer.add_child(lbl)
+		info_row.add_child(lbl)
 		_domain_labels[d_id] = lbl
 
 		# Row of TransgressionMarker chips, anchored just above the domain label
@@ -429,10 +444,13 @@ func _refresh_overlays() -> void:
 			continue
 		var d := state.domain(d_id)
 		var lbl: Label = _domain_labels[d_id]
-		var line := "R:%d  B:%d" % [d.red_corruption, d.blue_corruption]
+		# Coloured corruption squares — one per Corruption per player.
+		_domain_dots[d_id].set_counts(d.red_corruption, d.blue_corruption)
+		# Badges only on the label; counts are visualised by the dots.
+		var line := ""
 		var ctrl: int = state.controller_of(d_id)
 		if ctrl != GameEnums.PlayerId.NONE:
-			line += "  ◆%s" % GameEnums.player_name(ctrl).substr(0, 1)
+			line += "◆%s" % GameEnums.player_name(ctrl).substr(0, 1)
 		if state.is_sealed(d_id):
 			line += "  ⚔"
 		if state.is_in_penitence(d_id):
@@ -440,12 +458,9 @@ func _refresh_overlays() -> void:
 		lbl.text = line
 		# Transgression markers placed on this domain (Scandales then Infamies).
 		_refresh_domain_markers(d_id)
-	# Ascendant
-	_ascendant_label.text = "Asc %+d  |  R:%d  B:%d" % [
-		state.ascendant,
-		state.available_corruption[GameEnums.PlayerId.RED],
-		state.available_corruption[GameEnums.PlayerId.BLUE],
-	]
+	# Ascendant only (per-player Corruption pool now shown inside each
+	# coloured player panel).
+	_ascendant_label.text = "Asc %+d" % state.ascendant
 
 
 # ─── Domain transgression markers ─────────────────────────────────────────────
@@ -628,8 +643,10 @@ func _build_player_transgression_panels() -> void:
 	var bundle_blue: Dictionary = _build_player_panel(GameEnums.PlayerId.BLUE, GameEnums.player_color_light(GameEnums.PlayerId.BLUE))
 	_player_panel_red = bundle_red["panel"]
 	_player_list_red = bundle_red["list"]
+	_player_reserve_red = bundle_red["reserve"]
 	_player_panel_blue = bundle_blue["panel"]
 	_player_list_blue = bundle_blue["list"]
+	_player_reserve_blue = bundle_blue["reserve"]
 	add_child(_player_panel_red)
 	add_child(_player_panel_blue)
 	# React to viewport rotation / window resize
@@ -668,6 +685,17 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
+	# Available-Corruption pool. Refreshed in _refresh_player_transgression_panels.
+	var reserve := Label.new()
+	reserve.text = ""
+	reserve.set_meta("i18n_reserve_pid", pid)
+	reserve.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+	reserve.add_theme_color_override("font_outline_color", Color.BLACK)
+	reserve.add_theme_constant_override("outline_size", 3)
+	reserve.add_theme_font_size_override("font_size", 18)
+	reserve.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(reserve)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -680,7 +708,7 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
 
-	return {"panel": panel, "list": list}
+	return {"panel": panel, "list": list, "reserve": reserve}
 
 
 func _layout_player_transgression_panels() -> void:
@@ -722,6 +750,13 @@ func _refresh_player_transgression_panels() -> void:
 		c.queue_free()
 	if state == null:
 		return
+	# Available-Corruption pool, displayed inside each player's coloured panel.
+	if _player_reserve_red != null:
+		var n_r: int = state.available_corruption[GameEnums.PlayerId.RED]
+		_player_reserve_red.text = I18n.t("ui.player_panel.reserve", [n_r, ("s" if n_r != 1 else "")])
+	if _player_reserve_blue != null:
+		var n_b: int = state.available_corruption[GameEnums.PlayerId.BLUE]
+		_player_reserve_blue.text = I18n.t("ui.player_panel.reserve", [n_b, ("s" if n_b != 1 else "")])
 	var n_red := 0
 	var n_blue := 0
 	for tid in TransgressionData.ALL_IDS:
@@ -837,12 +872,15 @@ func _on_domain_clicked(d_id: int) -> void:
 		_action_popup.set_item_text(idx, label_str)
 		_action_popup.set_item_disabled(idx, why != "")
 
-	# Append "Provoquer X en <domain>" entries for every Transgression the
-	# active player could provoke with this domain as origin. Item ids start
-	# at PROVOKE_ITEM_ID_BASE so they never collide with ActionId values.
-	# Strip any provoquer items left over from a previous click first.
+	# Append dynamic entries (Provoquer / Amplifier) below the four base
+	# actions. Item ids use distinct ranges to avoid colliding with the
+	# ActionId enum.
+	# Strip leftovers from a previous click first.
 	while _action_popup.get_item_count() > POPUP_ACTIONS.size():
 		_action_popup.remove_item(POPUP_ACTIONS.size())
+
+	# Provokable: any Transgression the active player can legally provoke
+	# using this domain as the origin.
 	var provokable_tids: Array = []
 	for tid in TransgressionData.ALL_IDS:
 		if GameRules.why_cannot_provoquer(state, p, tid) != "":
@@ -858,6 +896,24 @@ func _on_domain_clicked(d_id: int) -> void:
 	_action_popup.set_meta("provokable_tids", provokable_tids)
 	_action_popup.set_meta("provoke_origin", d_id)
 
+	# Amplifiable: any Scandale instance the active player owns whose origin
+	# domain is this one and that's currently amplifiable (sealed by them,
+	# not in penitence, enough Corruption).
+	var amplifiable_tids: Array = []
+	var dom: GameState.DomainState = state.domain(d_id)
+	for ti in dom.scandals:
+		if ti.owner != p:
+			continue
+		if GameRules.why_cannot_amplifier(state, p, ti.def_id) != "":
+			continue
+		amplifiable_tids.append(ti.def_id)
+	for i in amplifiable_tids.size():
+		var tid: String = amplifiable_tids[i]
+		var name_str: String = TransgressionData.name_of(tid)
+		var label: String = I18n.t("ui.popup.amplify_in", [name_str, GameEnums.DOMAIN_NAMES[d_id]])
+		_action_popup.add_item(label, AMPLIFY_ITEM_ID_BASE + i)
+	_action_popup.set_meta("amplifiable_tids", amplifiable_tids)
+
 	# Position the popup near the touch
 	var mp: Vector2 = get_viewport().get_mouse_position()
 	_action_popup.position = Vector2i(int(mp.x), int(mp.y))
@@ -869,7 +925,14 @@ func _on_popup_action(action_id: int) -> void:
 	if _selected_domain < 0:
 		return
 	var result: Dictionary
-	if action_id >= PROVOKE_ITEM_ID_BASE:
+	if action_id >= AMPLIFY_ITEM_ID_BASE:
+		var idx: int = action_id - AMPLIFY_ITEM_ID_BASE
+		var tids: Array = _action_popup.get_meta("amplifiable_tids", [])
+		if idx < 0 or idx >= tids.size():
+			_selected_domain = -1
+			return
+		result = manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": String(tids[idx])})
+	elif action_id >= PROVOKE_ITEM_ID_BASE:
 		var idx: int = action_id - PROVOKE_ITEM_ID_BASE
 		var tids: Array = _action_popup.get_meta("provokable_tids", [])
 		var origin: int = int(_action_popup.get_meta("provoke_origin", -1))
