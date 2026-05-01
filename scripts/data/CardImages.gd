@@ -41,7 +41,7 @@ const LITURGIES := {
 	"communion_impedita":              preload("res://assets/cards/liturgies/communion_impedita.png"),
 }
 
-const EXORCISME_FINAL := preload("res://assets/cards/special/exorcisme_final.png")
+const EXORCISME_FINAL := preload("res://assets/cards/special/exorcisme_final.jpg")
 
 
 func transgression(tid: String, face: int) -> Texture2D:
