@@ -287,6 +287,8 @@ const STRINGS := {
 	"ui.decision.title.free_exploit":  {"fr": "Exploitation gratuite — %s", "en": "Free Exploit — %s"},
 	"ui.decision.title.confession":    {"fr": "Confession — %s",            "en": "Confession — %s"},
 	"ui.decision.btn.exploit":         {"fr": "Exploiter %s",               "en": "Exploit %s"},
+	"ui.decision.btn.exploit_gain":    {"fr": "Exploiter %s  (+%d Corruption%s)",
+	                                    "en": "Exploit %s  (+%d Corruption%s)"},
 	"ui.decision.btn.lose2":           {"fr": "Perdre 2 Corruptions disponibles",
 	                                    "en": "Lose 2 available Corruptions"},
 	"ui.decision.btn.fissure_own":     {"fr": "Fissurer mon Sceau sur %s",  "en": "Crack my own Seal on %s"},
