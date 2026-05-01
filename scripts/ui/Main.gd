@@ -43,7 +43,7 @@ var _log_panel: PanelContainer
 var _log_scroll: ScrollContainer
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
-var _liturgy_image: TextureButton
+var _liturgy_card_thumb: Control      # Card.tscn wrapped + clickable
 var _decision_dialog: AcceptDialog
 var _decision_content: VBoxContainer
 var _endgame_dialog: AcceptDialog
@@ -76,12 +76,14 @@ var _player_reserve_blue: Label
 # when the user toggles the language).
 var _bottom_bar: HBoxContainer
 var _fullscreen_card_dialog: AcceptDialog
-var _fullscreen_card_image: TextureRect
+var _fullscreen_card_node: Card               # composed view (transgression / liturgy)
+var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
+var _fullscreen_card_aspect: AspectRatioContainer
 var _fullscreen_card_flip_btn: Button
-var _fullscreen_card_tex_a: Texture2D
-var _fullscreen_card_tex_b: Texture2D
-var _fullscreen_card_label_to_a: String
-var _fullscreen_card_label_to_b: String
+# Binding for the currently shown composed card.
+# {"kind": "transgression", "tid": String, "face": int}
+# {"kind": "liturgy", "station": int, "impedita": bool}
+var _fullscreen_card_binding: Dictionary = {}
 
 # Zoom / pan state
 var _zoom: float = 1.0
@@ -307,13 +309,11 @@ func _build_liturgy_dialog() -> void:
 	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_liturgy_dialog.add_child(hbox)
 
-	_liturgy_image = TextureButton.new()
-	_liturgy_image.ignore_texture_size = true
-	_liturgy_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-	_liturgy_image.custom_minimum_size = Vector2(300, 420)
-	_liturgy_image.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
-	_liturgy_image.pressed.connect(_on_liturgy_image_clicked)
-	hbox.add_child(_liturgy_image)
+	# Composed card thumbnail (Card.tscn) on the left of the dialog. The
+	# concrete content is set in _show_liturgy_dialog().
+	_liturgy_card_thumb = _make_card_thumb(Vector2(300, 420))
+	(_liturgy_card_thumb.get_meta("click_btn") as Button).pressed.connect(_on_liturgy_image_clicked)
+	hbox.add_child(_liturgy_card_thumb)
 
 	_liturgy_rtl = RichTextLabel.new()
 	_liturgy_rtl.bbcode_enabled = true
@@ -626,14 +626,8 @@ func _add_placed_entry(ti: GameState.TransgressionInstance, infamy: bool, domain
 
 
 func _open_placed_card(tid: String, name_str: String, is_infamy: bool) -> void:
-	var tex_s: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
-	var tex_i: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
-	var lbl_to_inf: String = I18n.t("ui.flip.see_infamy")
-	var lbl_to_sca: String = I18n.t("ui.flip.see_scandal")
-	if is_infamy:
-		_show_fullscreen_card_flippable(tex_i, lbl_to_sca, tex_s, lbl_to_inf, name_str)
-	else:
-		_show_fullscreen_card_flippable(tex_s, lbl_to_inf, tex_i, lbl_to_sca, name_str)
+	var face: int = GameEnums.TransgressionFace.INFAMIE if is_infamy else GameEnums.TransgressionFace.SCANDALE
+	_show_fullscreen_transgression(tid, face, name_str)
 
 
 # ─── Per-player owned-transgressions side panels ──────────────────────────────
@@ -799,14 +793,7 @@ func _make_empty_hint() -> Label:
 
 
 func _on_player_transgression_clicked(tid: String, face: int, name_str: String) -> void:
-	var tex_s: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
-	var tex_i: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
-	var lbl_to_inf: String = I18n.t("ui.flip.see_infamy")
-	var lbl_to_sca: String = I18n.t("ui.flip.see_scandal")
-	if face == GameEnums.TransgressionFace.SCANDALE:
-		_show_fullscreen_card_flippable(tex_s, lbl_to_inf, tex_i, lbl_to_sca, name_str)
-	else:
-		_show_fullscreen_card_flippable(tex_i, lbl_to_sca, tex_s, lbl_to_inf, name_str)
+	_show_fullscreen_transgression(tid, face, name_str)
 
 
 func _refresh_log() -> void:
@@ -1004,25 +991,26 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 	var lines: Array = info.get("log_lines", [])
 	var st: int = int(info.get("station", 0))
 	var st_name: String = GameEnums.STATION_NAMES.get(st, "?")
-	var mode_str: String = "Impedita" if imp else "In Integro"
+	var mode_str: String = I18n.t("liturgy.impedita") if imp else I18n.t("liturgy.in_integro")
 	var mode_color: String = "#e88" if imp else "#8e8"
 
 	var details := ""
 	for l in lines:
 		details += "• " + String(l) + "\n"
 	if details == "":
-		details = "(aucun effet)"
+		details = I18n.t("liturgy.no_effect")
 
-	_liturgy_dialog.title = "Fin de la Station %s" % st_name
-	# Card image (preloaded via CardImages autoload)
+	_liturgy_dialog.title = I18n.t("liturgy.station_end", [st_name])
+	# Composed card thumbnail. Clicking it pops it open fullscreen with flip
+	# (see _on_liturgy_image_clicked, which reads back from the meta).
 	var resp_id: String = String(LiturgicalResponseData.get_response(st).get("id", ""))
-	var img_tex: Texture2D = CardImages.liturgy(resp_id, imp) if resp_id != "" else null
-	_liturgy_image.texture_normal = img_tex
-	_liturgy_image.visible = (img_tex != null)
-	# Stash for the fullscreen flip viewer when the image is clicked.
-	_liturgy_image.set_meta("resp_id", resp_id)
-	_liturgy_image.set_meta("impedita", imp)
-	_liturgy_image.set_meta("name", resp_name)
+	var has_card: bool = resp_id != ""
+	_liturgy_card_thumb.visible = has_card
+	if has_card:
+		(_liturgy_card_thumb.get_meta("card_node") as Card).setup_liturgy(st, imp)
+	_liturgy_card_thumb.set_meta("station", st)
+	_liturgy_card_thumb.set_meta("impedita", imp)
+	_liturgy_card_thumb.set_meta("name", resp_name)
 	# Text panel
 	_liturgy_rtl.clear()
 	_liturgy_rtl.append_text("[font_size=30][b]%s[/b][/font_size]\n" % resp_name)
@@ -1334,19 +1322,15 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		if inf_inst != null:
 			face = GameEnums.TransgressionFace.INFAMIE
 
-	# Card image — bigger thumbnail, clickable to open fullscreen / flippable.
-	var img := TextureButton.new()
-	img.ignore_texture_size = true
-	img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-	img.custom_minimum_size = Vector2(240, 336)
-	img.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
-	img.mouse_filter = Control.MOUSE_FILTER_PASS
-	img.set_meta("face", face)
-	img.set_meta("tid", tid)
-	img.texture_normal = CardImages.transgression(tid, face)
+	# Card thumbnail — composed at runtime so text follows the locale.
 	var captured_name: String = String(def.get("name", ""))
 	var captured_tid: String = tid
-	img.pressed.connect(_on_transgression_image_clicked.bind(img, captured_tid, captured_name))
+	var img: Control = _make_card_thumb(Vector2(240, 336))
+	img.set_meta("face", face)
+	img.set_meta("tid", tid)
+	(img.get_meta("card_node") as Card).setup_transgression(tid, face)
+	(img.get_meta("click_btn") as Button).pressed.connect(
+		_on_transgression_image_clicked.bind(img, captured_tid, captured_name))
 	top_row.add_child(img)
 
 	# Right column next to the image: status badge + flip button + (if any)
@@ -1379,6 +1363,8 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	flip_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	flip_btn.text = _flip_button_label(face)
 	flip_btn.pressed.connect(_on_transgression_flip_pressed.bind(img, flip_btn, tid))
+	# Note: img here is the Control wrapper from _make_card_thumb;
+	# _on_transgression_flip_pressed reads img.get_meta("face") / "card_node".
 	info_vbox.add_child(flip_btn)
 
 	var why_prov: String = GameRules.why_cannot_provoquer(state, player, tid)
@@ -1447,6 +1433,42 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	return panel
 
 
+# Builds a clickable card thumbnail at the given minimum size: AspectRatio-
+# Container holding a Card.tscn instance, with an invisible Button on top
+# capturing click input.
+# Caller wires the click handler via wrapper.get_meta("click_btn").pressed.
+# Caller calls setup_* on wrapper.get_meta("card_node").
+# mouse_filter = PASS so drag-to-scroll still bubbles up to a parent
+# ScrollContainer.
+func _make_card_thumb(min_size: Vector2) -> Control:
+	var wrapper := Control.new()
+	wrapper.custom_minimum_size = min_size
+	wrapper.mouse_filter = Control.MOUSE_FILTER_PASS
+
+	var aspect := AspectRatioContainer.new()
+	aspect.ratio = 720.0 / 1008.0
+	aspect.anchor_right = 1.0
+	aspect.anchor_bottom = 1.0
+	aspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrapper.add_child(aspect)
+
+	var card: Card = preload("res://scenes/Card.tscn").instantiate()
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE  # pass clicks through to overlay
+	aspect.add_child(card)
+
+	var btn := Button.new()
+	btn.flat = true
+	btn.anchor_right = 1.0
+	btn.anchor_bottom = 1.0
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	btn.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
+	wrapper.add_child(btn)
+
+	wrapper.set_meta("card_node", card)
+	wrapper.set_meta("click_btn", btn)
+	return wrapper
+
+
 func _set_pass_through(node: Node) -> void:
 	if node is Control:
 		var c: Control = node
@@ -1486,12 +1508,23 @@ func _build_fullscreen_card_dialog() -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	_fullscreen_card_dialog.add_child(vbox)
 
+	# Composed card (Card.tscn) keeps proportions via an AspectRatioContainer.
+	_fullscreen_card_aspect = AspectRatioContainer.new()
+	_fullscreen_card_aspect.ratio = 720.0 / 1008.0
+	_fullscreen_card_aspect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fullscreen_card_aspect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_fullscreen_card_aspect)
+	_fullscreen_card_node = preload("res://scenes/Card.tscn").instantiate()
+	_fullscreen_card_aspect.add_child(_fullscreen_card_node)
+
+	# TextureRect fallback used for cards we still ship pre-composed (Exorcism).
 	_fullscreen_card_image = TextureRect.new()
 	_fullscreen_card_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_fullscreen_card_image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fullscreen_card_image.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_fullscreen_card_image.custom_minimum_size = Vector2(200, 280)
+	_fullscreen_card_image.visible = false
 	vbox.add_child(_fullscreen_card_image)
 
 	_fullscreen_card_flip_btn = Button.new()
@@ -1502,46 +1535,72 @@ func _build_fullscreen_card_dialog() -> void:
 	vbox.add_child(_fullscreen_card_flip_btn)
 
 
+# Static-image fallback (used by Exorcism only).
 func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte") -> void:
 	if tex == null:
 		return
+	_fullscreen_card_aspect.visible = false
+	_fullscreen_card_image.visible = true
 	_fullscreen_card_image.texture = tex
 	_fullscreen_card_flip_btn.visible = false
+	_fullscreen_card_binding = {}
 	_fullscreen_card_dialog.title = title_str
 	_popup_dialog_fullscreen(_fullscreen_card_dialog)
 
 
-# Show a flippable pair. tex_a is shown first; the button label is what the
-# user clicks to switch (so when tex_a is up, label = "Voir <B> ↻").
-func _show_fullscreen_card_flippable(tex_a: Texture2D, label_to_b: String,
-		tex_b: Texture2D, label_to_a: String, title_str: String) -> void:
-	if tex_a == null and tex_b == null:
-		return
-	# Fallback if one face is missing
-	if tex_a == null:
-		_show_fullscreen_card(tex_b, title_str)
-		return
-	if tex_b == null:
-		_show_fullscreen_card(tex_a, title_str)
-		return
-	_fullscreen_card_tex_a = tex_a
-	_fullscreen_card_tex_b = tex_b
-	_fullscreen_card_label_to_a = label_to_a
-	_fullscreen_card_label_to_b = label_to_b
-	_fullscreen_card_image.texture = tex_a
-	_fullscreen_card_flip_btn.text = label_to_b
-	_fullscreen_card_flip_btn.visible = true
+func _show_fullscreen_transgression(tid: String, face: int, title_str: String) -> void:
+	_fullscreen_card_aspect.visible = true
+	_fullscreen_card_image.visible = false
+	_fullscreen_card_node.setup_transgression(tid, face)
+	_fullscreen_card_binding = {"kind": "transgression", "tid": tid, "face": face}
+	_update_fullscreen_flip_button()
 	_fullscreen_card_dialog.title = title_str
 	_popup_dialog_fullscreen(_fullscreen_card_dialog)
+
+
+func _show_fullscreen_liturgy(station: int, impedita: bool, title_str: String) -> void:
+	_fullscreen_card_aspect.visible = true
+	_fullscreen_card_image.visible = false
+	_fullscreen_card_node.setup_liturgy(station, impedita)
+	_fullscreen_card_binding = {"kind": "liturgy", "station": station, "impedita": impedita}
+	_update_fullscreen_flip_button()
+	_fullscreen_card_dialog.title = title_str
+	_popup_dialog_fullscreen(_fullscreen_card_dialog)
+
+
+# Sets the flip button label to "switch to the other face" wording for the
+# currently-displayed face. Always shows the button when a binding is active.
+func _update_fullscreen_flip_button() -> void:
+	if _fullscreen_card_binding.is_empty():
+		_fullscreen_card_flip_btn.visible = false
+		return
+	var kind: String = _fullscreen_card_binding.get("kind", "")
+	if kind == "transgression":
+		var face: int = int(_fullscreen_card_binding.get("face", GameEnums.TransgressionFace.SCANDALE))
+		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_infamy") if face == GameEnums.TransgressionFace.SCANDALE else I18n.t("ui.flip.see_scandal")
+		_fullscreen_card_flip_btn.visible = true
+	elif kind == "liturgy":
+		var imp: bool = bool(_fullscreen_card_binding.get("impedita", false))
+		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_in_integro") if imp else I18n.t("ui.flip.see_impedita")
+		_fullscreen_card_flip_btn.visible = true
+	else:
+		_fullscreen_card_flip_btn.visible = false
 
 
 func _on_fullscreen_card_flip_pressed() -> void:
-	if _fullscreen_card_image.texture == _fullscreen_card_tex_a:
-		_fullscreen_card_image.texture = _fullscreen_card_tex_b
-		_fullscreen_card_flip_btn.text = _fullscreen_card_label_to_a
-	else:
-		_fullscreen_card_image.texture = _fullscreen_card_tex_a
-		_fullscreen_card_flip_btn.text = _fullscreen_card_label_to_b
+	if _fullscreen_card_binding.is_empty():
+		return
+	var kind: String = _fullscreen_card_binding.get("kind", "")
+	if kind == "transgression":
+		var cur: int = int(_fullscreen_card_binding.get("face", GameEnums.TransgressionFace.SCANDALE))
+		var nxt: int = GameEnums.TransgressionFace.INFAMIE if cur == GameEnums.TransgressionFace.SCANDALE else GameEnums.TransgressionFace.SCANDALE
+		_fullscreen_card_binding["face"] = nxt
+		_fullscreen_card_node.setup_transgression(String(_fullscreen_card_binding.get("tid", "")), nxt)
+	elif kind == "liturgy":
+		var imp: bool = not bool(_fullscreen_card_binding.get("impedita", false))
+		_fullscreen_card_binding["impedita"] = imp
+		_fullscreen_card_node.setup_liturgy(int(_fullscreen_card_binding.get("station", 0)), imp)
+	_update_fullscreen_flip_button()
 
 
 func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
@@ -1560,22 +1619,17 @@ func _flip_button_label(face: int) -> String:
 	return I18n.t("ui.flip.see_infamy") if face == GameEnums.TransgressionFace.SCANDALE else I18n.t("ui.flip.see_scandal")
 
 
-func _on_transgression_flip_pressed(img: TextureButton, btn: Button, tid: String) -> void:
+func _on_transgression_flip_pressed(img: Control, btn: Button, tid: String) -> void:
 	var cur: int = img.get_meta("face", GameEnums.TransgressionFace.SCANDALE)
 	var nxt: int = GameEnums.TransgressionFace.INFAMIE if cur == GameEnums.TransgressionFace.SCANDALE else GameEnums.TransgressionFace.SCANDALE
 	img.set_meta("face", nxt)
-	img.texture_normal = CardImages.transgression(tid, nxt)
+	(img.get_meta("card_node") as Card).setup_transgression(tid, nxt)
 	btn.text = _flip_button_label(nxt)
 
 
-func _on_transgression_image_clicked(img: TextureButton, tid: String, name_str: String) -> void:
+func _on_transgression_image_clicked(img: Control, tid: String, name_str: String) -> void:
 	var cur: int = img.get_meta("face", GameEnums.TransgressionFace.SCANDALE)
-	var tex_scandale: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
-	var tex_infamie: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
-	if cur == GameEnums.TransgressionFace.SCANDALE:
-		_show_fullscreen_card_flippable(tex_scandale, I18n.t("ui.flip.see_infamy"), tex_infamie, I18n.t("ui.flip.see_scandal"), name_str)
-	else:
-		_show_fullscreen_card_flippable(tex_infamie, I18n.t("ui.flip.see_scandal"), tex_scandale, I18n.t("ui.flip.see_infamy"), name_str)
+	_show_fullscreen_transgression(tid, cur, name_str)
 
 
 # ─── Status label: clickable → fullscreen liturgical card for current station ─
@@ -1598,41 +1652,26 @@ func _show_current_station_card() -> void:
 	var resp: Dictionary = LiturgicalResponseData.get_response(st)
 	if resp.is_empty():
 		return
-	var resp_id: String = String(resp.get("id", ""))
-	if resp_id == "":
-		return
 	var resp_name: String = String(resp.get("name", ""))
 	var st_name: String = GameEnums.STATION_NAMES.get(st, "")
 	var title_str: String = "%s — %s" % [st_name, resp_name] if st_name != "" else resp_name
-	var tex_in_integro: Texture2D = CardImages.liturgy(resp_id, false)
-	var tex_impedita: Texture2D = CardImages.liturgy(resp_id, true)
-	_show_fullscreen_card_flippable(
-		tex_in_integro, I18n.t("ui.flip.see_impedita"),
-		tex_impedita,   I18n.t("ui.flip.see_in_integro"),
-		title_str
-	)
+	_show_fullscreen_liturgy(st, false, title_str)
 
 
 func _on_liturgy_image_clicked() -> void:
-	if _liturgy_image.texture_normal == null:
+	if not _liturgy_card_thumb.visible:
 		return
-	var resp_id: String = String(_liturgy_image.get_meta("resp_id", ""))
-	if resp_id == "":
-		_show_fullscreen_card(_liturgy_image.texture_normal, _liturgy_dialog.title)
+	var st: int = int(_liturgy_card_thumb.get_meta("station", -1))
+	if st < 0:
 		return
-	var imp: bool = bool(_liturgy_image.get_meta("impedita", false))
-	var name_str: String = String(_liturgy_image.get_meta("name", ""))
-	var tex_in_integro: Texture2D = CardImages.liturgy(resp_id, false)
-	var tex_impedita: Texture2D = CardImages.liturgy(resp_id, true)
-	if imp:
-		_show_fullscreen_card_flippable(tex_impedita, I18n.t("ui.flip.see_in_integro"), tex_in_integro, I18n.t("ui.flip.see_impedita"), name_str)
-	else:
-		_show_fullscreen_card_flippable(tex_in_integro, I18n.t("ui.flip.see_impedita"), tex_impedita, I18n.t("ui.flip.see_in_integro"), name_str)
+	var imp: bool = bool(_liturgy_card_thumb.get_meta("impedita", false))
+	var name_str: String = String(_liturgy_card_thumb.get_meta("name", ""))
+	_show_fullscreen_liturgy(st, imp, name_str)
 
 
 func _on_endgame_image_clicked() -> void:
 	if _endgame_image.texture_normal != null:
-		_show_fullscreen_card(_endgame_image.texture_normal, "Exorcisme final")
+		_show_fullscreen_card(_endgame_image.texture_normal, I18n.t("ui.dialog.title.endgame"))
 
 
 func _on_provoquer_clicked(tid: String, origin: int) -> void:
