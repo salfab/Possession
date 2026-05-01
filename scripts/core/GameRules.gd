@@ -241,6 +241,20 @@ static func why_cannot_amplifier(state: GameState, player: int, def_id: String) 
 	return ""
 
 
+# Last-resort safety net so a player with an empty Corruption pool isn't
+# soft-locked into Passer for the rest of the Station. Only legal when the
+# active player's Réserve is at 0 — gaining Corruption normally has to come
+# from Exploiter / Provoquer side effects.
+static func can_puiser(state: GameState, player: int) -> bool:
+	return state.available_corruption[player] == 0
+
+
+static func why_cannot_puiser(state: GameState, player: int) -> String:
+	if state.available_corruption[player] > 0:
+		return I18n.t("err.puiser_only_when_empty")
+	return ""
+
+
 # --- Misc helpers -----------------------------------------------------------
 
 static func production_of(state: GameState, d_id: int, player: int) -> int:

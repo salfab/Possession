@@ -70,6 +70,7 @@ const STRINGS := {
 	"action.fissurer":      {"fr": "Fissurer",  "en": "Crack"},
 	"action.entraver":      {"fr": "Entraver",  "en": "Hinder"},
 	"action.passer":        {"fr": "Passer",    "en": "Pass"},
+	"action.puiser":        {"fr": "Puiser dans l'Ombre", "en": "Draw from the Shadow"},
 
 	# Card faces / liturgy modes
 	"face.scandale":        {"fr": "Scandale", "en": "Scandal"},
@@ -84,6 +85,9 @@ const STRINGS := {
 	"ui.btn.pass":          {"fr": "Passer",      "en": "Pass"},
 	"ui.btn.journal":       {"fr": "Journal",     "en": "Journal"},
 	"ui.btn.hotspots":      {"fr": "Zones",       "en": "Hotspots"},
+	"ui.btn.puiser":        {"fr": "Puiser",      "en": "Draw"},
+	"ui.btn.puiser.tooltip":{"fr": "Puiser dans l'Ombre — gagner 1 Corruption (uniquement si réserve à 0)",
+	                         "en": "Draw from the Shadow — gain 1 Corruption (only when your pool is empty)"},
 
 	# UI — dialogs
 	"ui.dialog.continue":           {"fr": "Continuer",       "en": "Continue"},
@@ -240,6 +244,10 @@ const STRINGS := {
 	"err.origin_in_penitence":         {"fr": "Domaine d'origine (%s) en Pénitence",
 	                                    "en": "Origin Domain (%s) in Penitence"},
 	"err.illegal_transgression":       {"fr": "Transgression illégale.",             "en": "Illegal Transgression."},
+	"err.puiser_only_when_empty":      {"fr": "Puiser dans l'Ombre n'est légal que si votre Réserve est à 0.",
+	                                    "en": "Draw from the Shadow is only legal when your Pool is empty."},
+	"log.puiser":                      {"fr": "%s puise dans l'Ombre : +1 Corruption disponible.",
+	                                    "en": "%s draws from the Shadow: +1 available Corruption."},
 	"err.no_corruption":               {"fr": "0 Corruption disponible",             "en": "0 available Corruption"},
 	"err.cannot_fissure_own":          {"fr": "tu ne peux pas fissurer ton propre Sceau",
 	                                    "en": "you cannot crack your own Seal"},

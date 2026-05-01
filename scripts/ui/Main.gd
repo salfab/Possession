@@ -83,6 +83,9 @@ var _player_reserve_blue: Label
 # Bottom action bar (kept as a ref so we can rebuild localised button text
 # when the user toggles the language).
 var _bottom_bar: HBoxContainer
+# Puiser dans l'Ombre — last-resort safety net. Enabled only when the
+# active player's available Corruption is 0.
+var _btn_puiser: Button
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_node: Card               # composed view (transgression / liturgy)
 var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
@@ -364,6 +367,7 @@ func _build_debug_bar() -> void:
 		["ui.btn.new_game",          _on_btn_new_game,           true],
 		["ui.btn.next_station",      _on_btn_force_next_station, true],
 		["ui.btn.pass",              _on_btn_pass,               true],
+		["ui.btn.puiser",            _on_btn_puiser,             true],
 		["ui.btn.journal",           _on_btn_toggle_log,         true],
 		["ui.btn.hotspots",          _on_btn_toggle_hotspots,    true],
 	]
@@ -379,6 +383,10 @@ func _build_debug_bar() -> void:
 		if a[0] == "ui.btn.toggle_lang":
 			btn.tooltip_text = I18n.t("ui.btn.toggle_lang.tooltip")
 			btn.set_meta("i18n_tooltip_key", "ui.btn.toggle_lang.tooltip")
+		elif a[0] == "ui.btn.puiser":
+			btn.tooltip_text = I18n.t("ui.btn.puiser.tooltip")
+			btn.set_meta("i18n_tooltip_key", "ui.btn.puiser.tooltip")
+			_btn_puiser = btn
 		bar.add_child(btn)
 	_bottom_bar = bar
 
@@ -431,9 +439,21 @@ func _refresh_all() -> void:
 	_refresh_overlays()
 	_refresh_log()
 	_refresh_player_transgression_panels()
+	_refresh_puiser_button()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
 	_maybe_show_endgame_dialog()
+
+
+func _refresh_puiser_button() -> void:
+	if _btn_puiser == null or state == null:
+		return
+	# Enable only when the active player's pool is empty AND the game is
+	# in a state where they can act.
+	var legal: bool = (not state.game_over) \
+		and (not state.has_pending_decisions()) \
+		and GameRules.can_puiser(state, state.active_player)
+	_btn_puiser.disabled = not legal
 
 
 func _refresh_status() -> void:
@@ -979,6 +999,22 @@ func _on_btn_pass() -> void:
 		_refresh_log()
 		return
 	var result := manager.perform_action(GameEnums.ActionId.PASSER, {})
+	if not result.get("ok", false):
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
+	_refresh_all()
+
+
+# Puiser dans l'Ombre — only legal when the active player's available
+# Corruption is 0. Granted as a safety net so an empty pool doesn't soft-lock
+# the player into Pass-ing for the rest of the Station.
+func _on_btn_puiser() -> void:
+	if state == null or state.game_over:
+		return
+	if state.has_pending_decisions():
+		state.add_log(I18n.t("log.decision_pending"))
+		_refresh_log()
+		return
+	var result := manager.perform_action(GameEnums.ActionId.PUISER, {})
 	if not result.get("ok", false):
 		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
 	_refresh_all()
