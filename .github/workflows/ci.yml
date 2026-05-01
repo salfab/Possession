@@ -113,6 +113,11 @@ jobs:
           grep -q 'possession-loading-style' "${EXPORT_DIR}/index.html"
 
       - name: Install combined service worker (COOP/COEP + offline cache) and PWA manifest
+        # Force bash as the shell — the default shell inside the
+        # barichello/godot-ci container is dash, which doesn't support the
+        # `< <(...)` process substitution we use to feed `find` output into
+        # the precache loop without spawning a subshell.
+        shell: bash
         # The Godot 4.2 web build needs SharedArrayBuffer, which requires
         # Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy response
         # headers. GitHub Pages / itch.io can't set them, so we inject them
