@@ -32,6 +32,7 @@ var pending_kwargs: Dictionary = {}
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
 var _domain_labels: Dictionary = {} # domain_id -> Label
+var _domain_marker_rows: Dictionary = {} # domain_id -> HFlowContainer (owned-Transgression chips)
 var _status_label: Label
 var _ascendant_label: Label
 var _action_popup: PopupMenu
@@ -179,6 +180,24 @@ func _build_overlays() -> void:
 		lbl.add_theme_font_size_override("font_size", 22)
 		_zoom_layer.add_child(lbl)
 		_domain_labels[d_id] = lbl
+
+		# Row of TransgressionMarker chips, anchored just above the domain label
+		# so it sits inside the hotspot. Populated/cleared by _refresh_overlays.
+		var marker_row := HFlowContainer.new()
+		marker_row.anchor_left = pos.x - DOMAIN_HALF.x
+		marker_row.anchor_right = pos.x + DOMAIN_HALF.x
+		marker_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.10
+		marker_row.anchor_bottom = pos.y + DOMAIN_HALF.y - 0.04
+		marker_row.offset_left = 0
+		marker_row.offset_right = 0
+		marker_row.offset_top = 0
+		marker_row.offset_bottom = 0
+		marker_row.alignment = HFlowContainer.ALIGNMENT_CENTER
+		marker_row.add_theme_constant_override("h_separation", 4)
+		marker_row.add_theme_constant_override("v_separation", 2)
+		marker_row.mouse_filter = Control.MOUSE_FILTER_PASS  # let drag-scroll pass through, individual markers still capture
+		_zoom_layer.add_child(marker_row)
+		_domain_marker_rows[d_id] = marker_row
 
 	# Top status bar (HUD — fixed, not zoomed)
 	_status_label = Label.new()
@@ -405,12 +424,58 @@ func _refresh_overlays() -> void:
 		if state.is_in_penitence(d_id):
 			line += "  ✝"
 		lbl.text = line
+		# Transgression markers placed on this domain (Scandales then Infamies).
+		_refresh_domain_markers(d_id)
 	# Ascendant
 	_ascendant_label.text = "Asc %+d  |  R:%d  B:%d" % [
 		state.ascendant,
 		state.available_corruption[GameEnums.PlayerId.RED],
 		state.available_corruption[GameEnums.PlayerId.BLUE],
 	]
+
+
+# ─── Domain transgression markers ─────────────────────────────────────────────
+
+func _refresh_domain_markers(d_id: int) -> void:
+	var row: HFlowContainer = _domain_marker_rows.get(d_id)
+	if row == null:
+		return
+	for c in row.get_children():
+		c.queue_free()
+	if state == null:
+		return
+	var d := state.domain(d_id)
+	# Scandales first (filled circles), then Infamies (diamonds) — easier to
+	# parse at a glance than mixed ordering.
+	for ti in d.scandals:
+		row.add_child(_make_transgression_marker(ti, false))
+	for ti in d.infamies:
+		row.add_child(_make_transgression_marker(ti, true))
+
+
+func _make_transgression_marker(ti: GameState.TransgressionInstance, infamy: bool) -> Control:
+	var col: Color = GameEnums.player_color_light(ti.owner)
+	var marker := TransgressionMarker.new(col, infamy)
+	var face_key: String = "face.infamie" if infamy else "face.scandale"
+	var name_str: String = TransgressionData.name_of(ti.def_id)
+	marker.tooltip_text = "%s — %s (%s)" % [name_str, I18n.t(face_key), GameEnums.player_name(ti.owner)]
+	# Capture by value for the lambda
+	var captured_tid: String = ti.def_id
+	var captured_name: String = name_str
+	var captured_face_is_infamy: bool = infamy
+	marker.pressed.connect(func(): _on_domain_marker_clicked(captured_tid, captured_name, captured_face_is_infamy))
+	return marker
+
+
+func _on_domain_marker_clicked(tid: String, name_str: String, is_infamy: bool) -> void:
+	var tex_s: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
+	var tex_i: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
+	var lbl_to_inf: String = I18n.t("ui.flip.see_infamy")
+	var lbl_to_sca: String = I18n.t("ui.flip.see_scandal")
+	if is_infamy:
+		_show_fullscreen_card_flippable(tex_i, lbl_to_sca, tex_s, lbl_to_inf, name_str)
+	else:
+		_show_fullscreen_card_flippable(tex_s, lbl_to_inf, tex_i, lbl_to_sca, name_str)
 
 
 # ─── Per-player owned-transgressions side panels ──────────────────────────────
