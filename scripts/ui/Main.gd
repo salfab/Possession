@@ -6,14 +6,21 @@ const SAVE_PATH := "user://save_game.json"
 
 # Positions normalisées (0..1) des centres de domaines sur l'image.
 # À ajuster en regardant l'image board.png si nécessaire.
+# Domain hotspot centres + half-extents, normalised to the board's
+# AspectRatioContainer (1.333 ratio). The board image places the 5 niches in
+# a quincunx, shifted right because the left ~22% of the canvas is the
+# STATIONS column. Each stone niche is roughly 13% of board width × 22% of
+# board height, so DOMAIN_HALF ≈ (0.065, 0.11).
+# If the alignment is still off, toggle the "Hot" debug button in the
+# bottom bar to see the hit areas overlaid in cyan.
 const DOMAIN_POS := {
-	GameEnums.DomainId.AMBITION: Vector2(0.50, 0.22),
-	GameEnums.DomainId.FOI:      Vector2(0.32, 0.52),
-	GameEnums.DomainId.VOLONTE:  Vector2(0.50, 0.55),
-	GameEnums.DomainId.DESIR:    Vector2(0.67, 0.52),
-	GameEnums.DomainId.PEUR:     Vector2(0.50, 0.78),
+	GameEnums.DomainId.AMBITION: Vector2(0.555, 0.265),
+	GameEnums.DomainId.FOI:      Vector2(0.360, 0.485),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.555, 0.540),
+	GameEnums.DomainId.DESIR:    Vector2(0.745, 0.485),
+	GameEnums.DomainId.PEUR:     Vector2(0.555, 0.730),
 }
-const DOMAIN_HALF := Vector2(0.09, 0.11)  # demi-taille du hotspot, normalisée
+const DOMAIN_HALF := Vector2(0.065, 0.105)
 
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
@@ -31,6 +38,7 @@ var pending_kwargs: Dictionary = {}
 # Created in _build_overlays
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
+var _debug_hotspots: bool = false   # cyan outline overlay for calibration
 var _domain_labels: Dictionary = {} # domain_id -> Label (badges only — controller / sealed / penitence)
 var _domain_dots: Dictionary = {}   # domain_id -> CorruptionDots
 var _domain_marker_rows: Dictionary = {} # domain_id -> HFlowContainer (owned-Transgression chips)
@@ -354,6 +362,7 @@ func _build_debug_bar() -> void:
 		["ui.btn.next_station",      _on_btn_force_next_station, true],
 		["ui.btn.pass",              _on_btn_pass,               true],
 		["ui.btn.journal",           _on_btn_toggle_log,         true],
+		["ui.btn.hotspots",          _on_btn_toggle_hotspots,    true],
 	]
 	for a in actions:
 		var btn := Button.new()
@@ -447,14 +456,16 @@ func _refresh_overlays() -> void:
 		# Coloured corruption squares — one per Corruption per player.
 		_domain_dots[d_id].set_counts(d.red_corruption, d.blue_corruption)
 		# Badges only on the label; counts are visualised by the dots.
+		# Glyphs picked from common Latin/symbol blocks — emoji-region chars
+		# (⚔ ✝) sometimes render as tofu boxes on web fonts.
 		var line := ""
 		var ctrl: int = state.controller_of(d_id)
 		if ctrl != GameEnums.PlayerId.NONE:
 			line += "◆%s" % GameEnums.player_name(ctrl).substr(0, 1)
 		if state.is_sealed(d_id):
-			line += "  ⚔"
+			line += "  ★"  # sealed
 		if state.is_in_penitence(d_id):
-			line += "  ✝"
+			line += "  †"  # penitence (Latin dagger, U+2020)
 		lbl.text = line
 		# Transgression markers placed on this domain (Scandales then Infamies).
 		_refresh_domain_markers(d_id)
@@ -970,6 +981,30 @@ func _on_btn_toggle_log() -> void:
 	_log_panel.visible = not _log_panel.visible
 	if _log_panel.visible:
 		_refresh_log()
+
+
+# Debug toggle — paints each domain hotspot with a translucent cyan
+# stylebox so the user can see where the click areas actually are. Useful
+# for re-calibrating DOMAIN_POS / DOMAIN_HALF against the board artwork.
+func _on_btn_toggle_hotspots() -> void:
+	_debug_hotspots = not _debug_hotspots
+	for d_id in _hotspots:
+		var btn: Button = _hotspots[d_id]
+		btn.flat = not _debug_hotspots
+		if _debug_hotspots:
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(0.2, 1.0, 1.0, 0.25)
+			sb.border_color = Color(0.0, 1.0, 1.0, 1.0)
+			sb.set_border_width_all(2)
+			btn.add_theme_stylebox_override("normal",  sb)
+			btn.add_theme_stylebox_override("hover",   sb)
+			btn.add_theme_stylebox_override("pressed", sb)
+			btn.add_theme_stylebox_override("focus",   sb)
+		else:
+			btn.remove_theme_stylebox_override("normal")
+			btn.remove_theme_stylebox_override("hover")
+			btn.remove_theme_stylebox_override("pressed")
+			btn.remove_theme_stylebox_override("focus")
 
 
 # ─── LITURGY DIALOG ───────────────────────────────────────────────────────────
