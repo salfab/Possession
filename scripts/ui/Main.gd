@@ -1729,8 +1729,8 @@ func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
 	# along the bottom. Without these the dialog window slides under those
 	# overlays and the OK button ends up off-screen even though the engine
 	# thinks it's at "viewport.y".
-	var top_margin: float = 30.0
-	var bottom_margin: float = 30.0
+	var top_margin: float = 0.0
+	var bottom_margin: float = 0.0
 	var sz_y: float = max(vp_size.y - top_margin - bottom_margin, 240.0)
 	var sz: Vector2 = Vector2(vp_size.x, sz_y)
 	var pos: Vector2 = Vector2(0.0, top_margin)
