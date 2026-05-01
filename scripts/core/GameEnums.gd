@@ -23,22 +23,79 @@ enum TransgressionFace { NONE, SCANDALE, INFAMIE }
 
 enum LiturgyMode { IN_INTEGRO, IMPEDITA }
 
-const DOMAIN_NAMES := {
-	DomainId.AMBITION: "Ambition",
-	DomainId.DESIR: "Désir",
-	DomainId.FOI: "Foi",
-	DomainId.PEUR: "Peur",
-	DomainId.VOLONTE: "Volonté",
+# ─── Player visual identity (single source of truth) ──────────────────────────
+# PlayerId.BLUE keeps its enum name (changing it would touch ~30 files), but
+# its visual identity is now violet/purple. All UI code reads from these
+# tables — never hardcode a player colour again.
+
+const PLAYER_COLORS := {
+	PlayerId.RED:  Color(0.92, 0.30, 0.32),  # warm crimson
+	PlayerId.BLUE: Color(0.65, 0.40, 0.95),  # demonic violet
 }
 
-const STATION_NAMES := {
-	StationId.MURMURES: "I — Murmures",
-	StationId.TENTATION: "II — Tentation",
-	StationId.CHUTE: "III — Chute",
-	StationId.CONFESSION: "IV — Confession",
-	StationId.OFFICE: "V — Office sacré",
-	StationId.EXORCISME: "VI — Exorcisme",
+# Lighter accent variants for badges, ascendant bars, glow effects.
+const PLAYER_COLORS_LIGHT := {
+	PlayerId.RED:  Color(1.00, 0.55, 0.55),
+	PlayerId.BLUE: Color(0.78, 0.55, 1.00),
 }
+
+# Translation keys — call I18n.t() to get the localised string.
+const PLAYER_NAME_KEYS := {
+	PlayerId.RED:  "player.red",
+	PlayerId.BLUE: "player.blue",
+}
+
+const DOMAIN_NAME_KEYS := {
+	DomainId.AMBITION: "domain.ambition",
+	DomainId.DESIR:    "domain.desir",
+	DomainId.FOI:      "domain.foi",
+	DomainId.PEUR:     "domain.peur",
+	DomainId.VOLONTE:  "domain.volonte",
+}
+
+const STATION_NAME_KEYS := {
+	StationId.MURMURES:   "station.murmures",
+	StationId.TENTATION:  "station.tentation",
+	StationId.CHUTE:      "station.chute",
+	StationId.CONFESSION: "station.confession",
+	StationId.OFFICE:     "station.office",
+	StationId.EXORCISME:  "station.exorcisme",
+}
+
+const ACTION_NAME_KEYS := {
+	ActionId.INVESTIR:  "action.investir",
+	ActionId.EXPLOITER: "action.exploiter",
+	ActionId.PROVOQUER: "action.provoquer",
+	ActionId.AMPLIFIER: "action.amplifier",
+	ActionId.SCELLER:   "action.sceller",
+	ActionId.FISSURER:  "action.fissurer",
+	ActionId.ENTRAVER:  "action.entraver",
+	ActionId.PASSER:    "action.passer",
+}
+
+# Backwards-compat dynamic dicts (built lazily — always reflect current locale).
+# Existing call sites that did `GameEnums.DOMAIN_NAMES[d]` keep working; they
+# now resolve through I18n at access time.
+var DOMAIN_NAMES: Dictionary:
+	get:
+		var d := {}
+		for k in DOMAIN_NAME_KEYS:
+			d[k] = I18n.t(DOMAIN_NAME_KEYS[k])
+		return d
+
+var STATION_NAMES: Dictionary:
+	get:
+		var d := {}
+		for k in STATION_NAME_KEYS:
+			d[k] = I18n.t(STATION_NAME_KEYS[k])
+		return d
+
+var ACTION_NAMES: Dictionary:
+	get:
+		var d := {}
+		for k in ACTION_NAME_KEYS:
+			d[k] = I18n.t(ACTION_NAME_KEYS[k])
+		return d
 
 const STATION_PULSES := {
 	StationId.MURMURES: 3,
@@ -67,17 +124,6 @@ const VOLONTE_PROXIMITY_PRIORITY := [
 	DomainId.AMBITION,
 ]
 
-const ACTION_NAMES := {
-	ActionId.INVESTIR: "Investir",
-	ActionId.EXPLOITER: "Exploiter",
-	ActionId.PROVOQUER: "Provoquer",
-	ActionId.AMPLIFIER: "Amplifier",
-	ActionId.SCELLER: "Sceller",
-	ActionId.FISSURER: "Fissurer",
-	ActionId.ENTRAVER: "Entraver",
-	ActionId.PASSER: "Passer",
-}
-
 const STARTING_CORRUPTION := 8
 
 
@@ -90,7 +136,12 @@ func opponent(p: int) -> int:
 
 
 func player_name(p: int) -> String:
-	match p:
-		PlayerId.RED: return "Rouge"
-		PlayerId.BLUE: return "Bleu"
-		_: return "—"
+	return I18n.t(PLAYER_NAME_KEYS.get(p, "player.none"))
+
+
+func player_color(p: int) -> Color:
+	return PLAYER_COLORS.get(p, Color.WHITE)
+
+
+func player_color_light(p: int) -> Color:
+	return PLAYER_COLORS_LIGHT.get(p, Color.WHITE)
