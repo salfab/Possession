@@ -439,7 +439,7 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	title.add_theme_color_override("font_color", accent)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
 	title.add_theme_constant_override("outline_size", 4)
-	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_font_size_override("font_size", 20)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
@@ -449,8 +449,8 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	vbox.add_child(scroll)
 
 	var list := HFlowContainer.new()
-	list.add_theme_constant_override("h_separation", 4)
-	list.add_theme_constant_override("v_separation", 4)
+	list.add_theme_constant_override("h_separation", 6)
+	list.add_theme_constant_override("v_separation", 6)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
@@ -509,7 +509,8 @@ func _refresh_player_transgression_panels() -> void:
 		var btn := Button.new()
 		var name_str: String = String(def.get("name", tid))
 		btn.text = name_str
-		btn.add_theme_font_size_override("font_size", 14)
+		btn.add_theme_font_size_override("font_size", 18)
+		btn.custom_minimum_size = Vector2(0, 40)
 		btn.tooltip_text = "Cliquer pour voir la carte"
 		# Magenta if the transgression has been amplified to Infamie, warm orange for Scandale.
 		var fcol: Color = Color(1.0, 0.55, 1.0) if face == GameEnums.TransgressionFace.INFAMIE else Color(1.0, 0.78, 0.45)
@@ -532,7 +533,7 @@ func _refresh_player_transgression_panels() -> void:
 func _make_empty_hint() -> Label:
 	var lbl := Label.new()
 	lbl.text = "(aucune)"
-	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_font_size_override("font_size", 16)
 	lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
 	return lbl
 
@@ -946,10 +947,7 @@ func _on_btn_transgressions() -> void:
 	if state == null:
 		return
 	_populate_transgressions_dialog()
-	# Plein écran : on aligne sur la taille du viewport
-	var vp_size: Vector2 = get_viewport_rect().size
-	_trans_dialog.size = vp_size
-	_trans_dialog.popup(Rect2i(Vector2i.ZERO, Vector2i(vp_size)))
+	_popup_dialog_fullscreen(_trans_dialog)
 
 
 func _populate_transgressions_dialog() -> void:
@@ -1186,6 +1184,10 @@ func _on_fullscreen_card_flip_pressed() -> void:
 
 
 func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
+	# On phones the dialog's static min_size (e.g. 720x520) was overriding the
+	# viewport-sized popup, pushing the OK button off the bottom edge. Clear
+	# it so the window snaps to the actual viewport.
+	dlg.min_size = Vector2i.ZERO
 	var vp_size: Vector2 = get_viewport_rect().size
 	dlg.size = vp_size
 	dlg.popup(Rect2i(Vector2i.ZERO, Vector2i(vp_size)))
