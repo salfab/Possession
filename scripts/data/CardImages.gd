@@ -1,87 +1,60 @@
 extends Node
 # Autoloaded singleton: CardImages
-# Preloads all card textures + illustrations + templates so they are
-# guaranteed to be packed into the Web/HTML5 export.
+# Preloads all card textures so they're guaranteed to be packed into the
+# Web/HTML5 export (Godot only includes assets that are explicitly referenced
+# at compile time — runtime load(path) on .png files often fails on web
+# because the resource isn't bundled).
 
-# ─── Templates ────────────────────────────────────────────────────────────────
-
-const TPL_TRANS_SCANDALE := preload("res://assets/cards/templates/transgression_scandale.png")
-const TPL_TRANS_INFAMIE  := preload("res://assets/cards/templates/transgression_infamie.png")
-const TPL_LIT_IN_INTEGRO := preload("res://assets/cards/templates/liturgie_in_integro.png")
-const TPL_LIT_IMPEDITA   := preload("res://assets/cards/templates/liturgie_impedita.png")
-
-# ─── Illustrations (1196×1315 each, ratio 0.910) ──────────────────────────────
-
-const ILLU_NEPOTISME             := preload("res://assets/cards/illustrations/nepotisme.png")
-const ILLU_TRAFIC_CHARGES        := preload("res://assets/cards/illustrations/trafic_charges.png")
-const ILLU_FESTIN_OBSCENE        := preload("res://assets/cards/illustrations/festin_obscene.png")
-const ILLU_FAVORI_SECRET         := preload("res://assets/cards/illustrations/favori_secret.png")
-const ILLU_SIMONIE               := preload("res://assets/cards/illustrations/simonie.png")
-const ILLU_PROFANATION           := preload("res://assets/cards/illustrations/profanation.png")
-const ILLU_PARANOIA              := preload("res://assets/cards/illustrations/paranoia.png")
-const ILLU_PERSECUTION           := preload("res://assets/cards/illustrations/persecution.png")
-const ILLU_PACTE_SILENCIEUX      := preload("res://assets/cards/illustrations/pacte_silencieux.png")
-const ILLU_ABDICATION_INTERIEURE := preload("res://assets/cards/illustrations/abdication_interieure.png")
-
-const ILLU_SIGNE_DE_CROIX        := preload("res://assets/cards/illustrations/signe_de_croix.png")
-const ILLU_EXAMEN_DE_CONSCIENCE  := preload("res://assets/cards/illustrations/examen_de_conscience.png")
-const ILLU_CONTRITION            := preload("res://assets/cards/illustrations/contrition.png")
-const ILLU_CONFESSION            := preload("res://assets/cards/illustrations/confession.png")
-const ILLU_COMMUNION             := preload("res://assets/cards/illustrations/communion.png")
-
-const ILLU_EXORCISME_FINAL       := preload("res://assets/cards/special/exorcisme_final.png")
-
-const ILLUSTRATIONS := {
-	"nepotisme":             ILLU_NEPOTISME,
-	"trafic_charges":        ILLU_TRAFIC_CHARGES,
-	"festin_obscene":        ILLU_FESTIN_OBSCENE,
-	"favori_secret":         ILLU_FAVORI_SECRET,
-	"simonie":               ILLU_SIMONIE,
-	"profanation":           ILLU_PROFANATION,
-	"paranoia":              ILLU_PARANOIA,
-	"persecution":           ILLU_PERSECUTION,
-	"pacte_silencieux":      ILLU_PACTE_SILENCIEUX,
-	"abdication_interieure": ILLU_ABDICATION_INTERIEURE,
-	"signe_de_croix":        ILLU_SIGNE_DE_CROIX,
-	"examen_de_conscience":  ILLU_EXAMEN_DE_CONSCIENCE,
-	"contrition":            ILLU_CONTRITION,
-	"confession":            ILLU_CONFESSION,
-	"communion":             ILLU_COMMUNION,
+const TRANSGRESSIONS := {
+	"nepotisme_scandale":             preload("res://assets/cards/transgressions/nepotisme_scandale.png"),
+	"nepotisme_infamie":              preload("res://assets/cards/transgressions/nepotisme_infamie.png"),
+	"trafic_charges_scandale":        preload("res://assets/cards/transgressions/trafic_charges_scandale.png"),
+	"trafic_charges_infamie":         preload("res://assets/cards/transgressions/trafic_charges_infamie.png"),
+	"festin_obscene_scandale":        preload("res://assets/cards/transgressions/festin_obscene_scandale.png"),
+	"festin_obscene_infamie":         preload("res://assets/cards/transgressions/festin_obscene_infamie.png"),
+	"favori_secret_scandale":         preload("res://assets/cards/transgressions/favori_secret_scandale.png"),
+	"favori_secret_infamie":          preload("res://assets/cards/transgressions/favori_secret_infamie.png"),
+	"simonie_scandale":               preload("res://assets/cards/transgressions/simonie_scandale.png"),
+	"simonie_infamie":                preload("res://assets/cards/transgressions/simonie_infamie.png"),
+	"profanation_scandale":           preload("res://assets/cards/transgressions/profanation_scandale.png"),
+	"profanation_infamie":            preload("res://assets/cards/transgressions/profanation_infamie.png"),
+	"paranoia_scandale":              preload("res://assets/cards/transgressions/paranoia_scandale.png"),
+	"paranoia_infamie":               preload("res://assets/cards/transgressions/paranoia_infamie.png"),
+	"persecution_scandale":           preload("res://assets/cards/transgressions/persecution_scandale.png"),
+	"persecution_infamie":            preload("res://assets/cards/transgressions/persecution_infamie.png"),
+	"pacte_silencieux_scandale":      preload("res://assets/cards/transgressions/pacte_silencieux_scandale.png"),
+	"pacte_silencieux_infamie":       preload("res://assets/cards/transgressions/pacte_silencieux_infamie.png"),
+	"abdication_interieure_scandale": preload("res://assets/cards/transgressions/abdication_interieure_scandale.png"),
+	"abdication_interieure_infamie":  preload("res://assets/cards/transgressions/abdication_interieure_infamie.png"),
 }
 
+const LITURGIES := {
+	"signe_de_croix_in_integro":       preload("res://assets/cards/liturgies/signe_de_croix_in_integro.png"),
+	"signe_de_croix_impedita":         preload("res://assets/cards/liturgies/signe_de_croix_impedita.png"),
+	"examen_de_conscience_in_integro": preload("res://assets/cards/liturgies/examen_de_conscience_in_integro.png"),
+	"examen_de_conscience_impedita":   preload("res://assets/cards/liturgies/examen_de_conscience_impedita.png"),
+	"contrition_in_integro":           preload("res://assets/cards/liturgies/contrition_in_integro.png"),
+	"contrition_impedita":             preload("res://assets/cards/liturgies/contrition_impedita.png"),
+	"confession_in_integro":           preload("res://assets/cards/liturgies/confession_in_integro.png"),
+	"confession_impedita":             preload("res://assets/cards/liturgies/confession_impedita.png"),
+	"communion_in_integro":            preload("res://assets/cards/liturgies/communion_in_integro.png"),
+	"communion_impedita":              preload("res://assets/cards/liturgies/communion_impedita.png"),
+}
 
-# ─── Public API ───────────────────────────────────────────────────────────────
-
-func transgression_template(face: int) -> Texture2D:
-	if face == GameEnums.TransgressionFace.INFAMIE:
-		return TPL_TRANS_INFAMIE
-	return TPL_TRANS_SCANDALE
-
-
-func liturgy_template(impedita: bool) -> Texture2D:
-	return TPL_LIT_IMPEDITA if impedita else TPL_LIT_IN_INTEGRO
-
-
-func illustration(id: String) -> Texture2D:
-	return ILLUSTRATIONS.get(id)
-
-
-func exorcism_image() -> Texture2D:
-	return ILLU_EXORCISME_FINAL
+const EXORCISME_FINAL := preload("res://assets/cards/special/exorcisme_final.png")
 
 
-# ─── Legacy compatibility (old composed-card images, kept for fallback) ───────
-
-func transgression(_tid: String, _face: int) -> Texture2D:
-	# Old API used pre-composed PNGs. Card.tscn now composes at runtime,
-	# so this is only kept for callers that haven't migrated. Returns null;
-	# callers should use Card.tscn + setup_transgression() instead.
-	return null
+func transgression(tid: String, face: int) -> Texture2D:
+	var f: String = "scandale" if face == GameEnums.TransgressionFace.SCANDALE else "infamie"
+	var key: String = "%s_%s" % [tid, f]
+	return TRANSGRESSIONS.get(key)
 
 
-func liturgy(_response_id: String, _impedita: bool) -> Texture2D:
-	return null
+func liturgy(response_id: String, impedita: bool) -> Texture2D:
+	var mode: String = "impedita" if impedita else "in_integro"
+	var key: String = "%s_%s" % [response_id, mode]
+	return LITURGIES.get(key)
 
 
 func exorcisme() -> Texture2D:
-	return ILLU_EXORCISME_FINAL
+	return EXORCISME_FINAL
