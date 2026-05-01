@@ -13,6 +13,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+I18n="*res://scripts/data/I18n.gd"
 GameEnums="*res://scripts/core/GameEnums.gd"
 DomainData="*res://scripts/data/DomainData.gd"
 TransgressionData="*res://scripts/data/TransgressionData.gd"

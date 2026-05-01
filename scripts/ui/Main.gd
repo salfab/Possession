@@ -60,6 +60,10 @@ var _player_panel_red: PanelContainer
 var _player_panel_blue: PanelContainer
 var _player_list_red: HFlowContainer
 var _player_list_blue: HFlowContainer
+
+# Bottom action bar (kept as a ref so we can rebuild localised button text
+# when the user toggles the language).
+var _bottom_bar: HBoxContainer
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_image: TextureRect
 var _fullscreen_card_flip_btn: Button
@@ -82,17 +86,18 @@ const POPUP_ACTIONS := [
 	GameEnums.ActionId.SCELLER,
 	GameEnums.ActionId.FISSURER,
 ]
-const POPUP_LABELS := {
-	GameEnums.ActionId.INVESTIR:  "Investir",
-	GameEnums.ActionId.EXPLOITER: "Exploiter",
-	GameEnums.ActionId.SCELLER:   "Sceller",
-	GameEnums.ActionId.FISSURER:  "Fissurer",
+const POPUP_LABEL_KEYS := {
+	GameEnums.ActionId.INVESTIR:  "action.investir",
+	GameEnums.ActionId.EXPLOITER: "action.exploiter",
+	GameEnums.ActionId.SCELLER:   "action.sceller",
+	GameEnums.ActionId.FISSURER:  "action.fissurer",
 }
 
 
 func _ready() -> void:
 	_apply_theme()
 	_build_overlays()
+	I18n.locale_changed.connect(_relocalize)
 	new_game()
 
 
@@ -183,7 +188,7 @@ func _build_overlays() -> void:
 	_status_label.anchor_bottom = 0.08
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.mouse_filter = Control.MOUSE_FILTER_STOP
-	_status_label.tooltip_text = "Cliquer pour voir la Réponse liturgique de la Station"
+	_status_label.tooltip_text = I18n.t("ui.tooltip.station_card")
 	_status_label.gui_input.connect(_on_status_label_input)
 	_status_label.add_theme_color_override("font_color", Color(1, 0.95, 0.7))
 	_status_label.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -221,7 +226,7 @@ func _build_overlays() -> void:
 	# Action popup
 	_action_popup = PopupMenu.new()
 	for aid in POPUP_ACTIONS:
-		_action_popup.add_item(POPUP_LABELS[aid], aid)
+		_action_popup.add_item(I18n.t(POPUP_LABEL_KEYS[aid]), aid)
 	_action_popup.id_pressed.connect(_on_popup_action)
 	add_child(_action_popup)
 
@@ -240,8 +245,8 @@ func _build_overlays() -> void:
 func _build_liturgy_dialog() -> void:
 	_liturgy_dialog = AcceptDialog.new()
 	_liturgy_dialog.exclusive = true
-	_liturgy_dialog.title = "Réponse liturgique"
-	_liturgy_dialog.ok_button_text = "Continuer"
+	_liturgy_dialog.title = I18n.t("ui.dialog.title.liturgy")
+	_liturgy_dialog.ok_button_text = I18n.t("ui.dialog.continue")
 	_liturgy_dialog.dialog_text = ""
 	_liturgy_dialog.min_size = Vector2i(820, 520)
 	_liturgy_dialog.confirmed.connect(_on_liturgy_acknowledged)
@@ -258,7 +263,7 @@ func _build_liturgy_dialog() -> void:
 	_liturgy_image.ignore_texture_size = true
 	_liturgy_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	_liturgy_image.custom_minimum_size = Vector2(300, 420)
-	_liturgy_image.tooltip_text = "Cliquer pour agrandir"
+	_liturgy_image.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
 	_liturgy_image.pressed.connect(_on_liturgy_image_clicked)
 	hbox.add_child(_liturgy_image)
 
@@ -288,23 +293,34 @@ func _build_debug_bar() -> void:
 	bar.add_theme_constant_override("separation", 8)
 	add_child(bar)
 
+	# Bottom bar buttons. Each entry: [label_key_or_glyph, handler, is_i18n_key].
+	# Glyphs (zoom) keep a literal label; everything else routes through I18n
+	# so locale changes refresh the text.
 	var actions := [
-		["−", _on_btn_zoom_out],
-		["⊙", _on_btn_zoom_reset],
-		["+", _on_btn_zoom_in],
-		["Trans.", _on_btn_transgressions],
-		["Nouvelle", _on_btn_new_game],
-		["Station →", _on_btn_force_next_station],
-		["Passer", _on_btn_pass],
-		["Journal", _on_btn_toggle_log],
+		["−",                       _on_btn_zoom_out,           false],
+		["⊙",                       _on_btn_zoom_reset,         false],
+		["+",                        _on_btn_zoom_in,            false],
+		["ui.btn.toggle_lang",       _on_btn_toggle_lang,        true],
+		["ui.btn.transgressions",    _on_btn_transgressions,     true],
+		["ui.btn.new_game",          _on_btn_new_game,           true],
+		["ui.btn.next_station",      _on_btn_force_next_station, true],
+		["ui.btn.pass",              _on_btn_pass,               true],
+		["ui.btn.journal",           _on_btn_toggle_log,         true],
 	]
 	for a in actions:
 		var btn := Button.new()
-		btn.text = a[0]
+		var is_key: bool = a[2]
+		btn.text = I18n.t(a[0]) if is_key else a[0]
 		btn.custom_minimum_size = Vector2(64, 56)
 		btn.add_theme_font_size_override("font_size", 22)
 		btn.pressed.connect(a[1])
+		if is_key:
+			btn.set_meta("i18n_key", a[0])
+		if a[0] == "ui.btn.toggle_lang":
+			btn.tooltip_text = I18n.t("ui.btn.toggle_lang.tooltip")
+			btn.set_meta("i18n_tooltip_key", "ui.btn.toggle_lang.tooltip")
 		bar.add_child(btn)
+	_bottom_bar = bar
 
 
 func _build_log_panel() -> void:
@@ -362,16 +378,16 @@ func _refresh_all() -> void:
 
 func _refresh_status() -> void:
 	if state.game_over:
-		_status_label.text = "PARTIE TERMINÉE — %s" % GameEnums.player_name(state.winner)
+		_status_label.text = I18n.t("ui.game_over", [GameEnums.player_name(state.winner)])
 		return
 	var st_name: String = GameEnums.STATION_NAMES[state.current_station]
 	var pulses: int = GameEnums.STATION_PULSES[state.current_station]
 	var init_p: int = GameEnums.STATION_INITIATIVE[state.current_station]
-	_status_label.text = "Station %s — Pulse %d/%d — Actif: %s — Init: %s" % [
+	_status_label.text = I18n.t("ui.status_label.fmt", [
 		st_name, state.current_pulse, pulses,
 		GameEnums.player_name(state.active_player),
 		GameEnums.player_name(init_p),
-	]
+	])
 
 
 func _refresh_overlays() -> void:
@@ -400,8 +416,8 @@ func _refresh_overlays() -> void:
 # ─── Per-player owned-transgressions side panels ──────────────────────────────
 
 func _build_player_transgression_panels() -> void:
-	var bundle_red: Dictionary = _build_player_panel(GameEnums.PlayerId.RED,  Color(1.0, 0.45, 0.45))
-	var bundle_blue: Dictionary = _build_player_panel(GameEnums.PlayerId.BLUE, Color(0.50, 0.70, 1.0))
+	var bundle_red: Dictionary = _build_player_panel(GameEnums.PlayerId.RED,  GameEnums.player_color_light(GameEnums.PlayerId.RED))
+	var bundle_blue: Dictionary = _build_player_panel(GameEnums.PlayerId.BLUE, GameEnums.player_color_light(GameEnums.PlayerId.BLUE))
 	_player_panel_red = bundle_red["panel"]
 	_player_list_red = bundle_red["list"]
 	_player_panel_blue = bundle_blue["panel"]
@@ -435,7 +451,8 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "%s — Transgressions" % GameEnums.player_name(pid)
+	title.text = I18n.t("ui.player_panel.title", [GameEnums.player_name(pid)])
+	title.set_meta("i18n_player_id", pid)  # used by _relocalize to refresh
 	title.add_theme_color_override("font_color", accent)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
 	title.add_theme_constant_override("outline_size", 4)
@@ -511,7 +528,7 @@ func _refresh_player_transgression_panels() -> void:
 		btn.text = name_str
 		btn.add_theme_font_size_override("font_size", 18)
 		btn.custom_minimum_size = Vector2(0, 40)
-		btn.tooltip_text = "Cliquer pour voir la carte"
+		btn.tooltip_text = I18n.t("ui.tooltip.see_card")
 		# Magenta if the transgression has been amplified to Infamie, warm orange for Scandale.
 		var fcol: Color = Color(1.0, 0.55, 1.0) if face == GameEnums.TransgressionFace.INFAMIE else Color(1.0, 0.78, 0.45)
 		btn.add_theme_color_override("font_color", fcol)
@@ -532,7 +549,7 @@ func _refresh_player_transgression_panels() -> void:
 
 func _make_empty_hint() -> Label:
 	var lbl := Label.new()
-	lbl.text = "(aucune)"
+	lbl.text = I18n.t("ui.player_panel.empty")
 	lbl.add_theme_font_size_override("font_size", 16)
 	lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
 	return lbl
@@ -541,10 +558,12 @@ func _make_empty_hint() -> Label:
 func _on_player_transgression_clicked(tid: String, face: int, name_str: String) -> void:
 	var tex_s: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
 	var tex_i: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
+	var lbl_to_inf: String = I18n.t("ui.flip.see_infamy")
+	var lbl_to_sca: String = I18n.t("ui.flip.see_scandal")
 	if face == GameEnums.TransgressionFace.SCANDALE:
-		_show_fullscreen_card_flippable(tex_s, "Voir Infamie ↻", tex_i, "Voir Scandale ↻", name_str)
+		_show_fullscreen_card_flippable(tex_s, lbl_to_inf, tex_i, lbl_to_sca, name_str)
 	else:
-		_show_fullscreen_card_flippable(tex_i, "Voir Scandale ↻", tex_s, "Voir Infamie ↻", name_str)
+		_show_fullscreen_card_flippable(tex_i, lbl_to_sca, tex_s, lbl_to_inf, name_str)
 
 
 func _refresh_log() -> void:
@@ -577,7 +596,7 @@ func _on_domain_clicked(d_id: int) -> void:
 	if state.game_over:
 		return
 	if state.has_pending_decisions():
-		state.add_log("[INFO] Une décision est en attente — non géré dans cette UI.")
+		state.add_log(I18n.t("log.pending_decision_unhandled"))
 		_refresh_log()
 		return
 	_selected_domain = d_id
@@ -594,7 +613,7 @@ func _on_domain_clicked(d_id: int) -> void:
 			why = GameRules.why_cannot_sceller(state, p, d_id)
 		elif aid == GameEnums.ActionId.FISSURER:
 			why = GameRules.why_cannot_fissurer(state, p, d_id)
-		var label_str: String = "%s %s" % [POPUP_LABELS[aid], GameEnums.DOMAIN_NAMES[d_id]]
+		var label_str: String = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
 		if why != "":
 			label_str += "  —  " + why
 		_action_popup.set_item_text(idx, label_str)
@@ -611,7 +630,7 @@ func _on_popup_action(action_id: int) -> void:
 		return
 	var result := manager.perform_action(action_id, {"domain": _selected_domain})
 	if not result.get("ok", false):
-		state.add_log("[REFUSÉ] " + result.get("message", "?"))
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
 	_selected_domain = -1
 	_refresh_all()
 
@@ -620,7 +639,7 @@ func _on_popup_action(action_id: int) -> void:
 
 func _on_btn_new_game() -> void:
 	new_game()
-	state.add_log("*** NOUVELLE PARTIE COMMENCÉE à %s ***" % Time.get_time_string_from_system())
+	state.add_log(I18n.t("log.new_game", [Time.get_time_string_from_system()]))
 	_refresh_log()
 
 
@@ -638,12 +657,12 @@ func _on_btn_pass() -> void:
 	if state.game_over:
 		return
 	if state.has_pending_decisions():
-		state.add_log("[INFO] Décision en attente — non géré.")
+		state.add_log(I18n.t("log.decision_pending"))
 		_refresh_log()
 		return
 	var result := manager.perform_action(GameEnums.ActionId.PASSER, {})
 	if not result.get("ok", false):
-		state.add_log("[REFUSÉ] " + result.get("message", "?"))
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
 	_refresh_all()
 
 
@@ -696,7 +715,7 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 	_liturgy_rtl.append_text("[font_size=30][b]%s[/b][/font_size]\n" % resp_name)
 	_liturgy_rtl.append_text("[font_size=22][color=%s][b]%s[/b][/color][/font_size]\n\n" % [mode_color, mode_str])
 	_liturgy_rtl.append_text("[i]%s[/i]\n\n" % desc)
-	_liturgy_rtl.append_text("[b]Résolution :[/b]\n")
+	_liturgy_rtl.append_text("[b]%s[/b]\n" % I18n.t("ui.liturgy.resolution_header"))
 	_liturgy_rtl.append_text(details)
 
 	_liturgy_dialog.popup_centered()
@@ -712,7 +731,7 @@ func _on_liturgy_acknowledged() -> void:
 func _build_decision_dialog() -> void:
 	_decision_dialog = AcceptDialog.new()
 	_decision_dialog.exclusive = true
-	_decision_dialog.title = "Décision"
+	_decision_dialog.title = I18n.t("ui.dialog.title.decision")
 	_decision_dialog.dialog_text = ""
 	_decision_dialog.min_size = Vector2i(560, 420)
 	_decision_dialog.confirmed.connect(_on_decision_skip)
@@ -746,11 +765,11 @@ func _populate_decision_dialog(dec: GameState.PendingDecision) -> void:
 		c.queue_free()
 
 	if dec.kind == "free_exploit":
-		_decision_dialog.title = "Exploitation gratuite — %s" % GameEnums.player_name(dec.player)
-		_decision_dialog.ok_button_text = "Passer (ne pas exploiter)"
+		_decision_dialog.title = I18n.t("ui.decision.title.free_exploit", [GameEnums.player_name(dec.player)])
+		_decision_dialog.ok_button_text = I18n.t("ui.dialog.skip_exploit")
 		_decision_dialog.get_ok_button().disabled = false
 		var hint := Label.new()
-		hint.text = "%s : choisis un domaine à exploiter, ou clique « Passer »." % GameEnums.player_name(dec.player)
+		hint.text = I18n.t("ui.decision.exploit_hint", [GameEnums.player_name(dec.player)])
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.add_theme_font_size_override("font_size", 22)
 		_decision_content.add_child(hint)
@@ -758,31 +777,31 @@ func _populate_decision_dialog(dec: GameState.PendingDecision) -> void:
 		for d_id in options:
 			var did: int = d_id
 			var btn := Button.new()
-			btn.text = "Exploiter %s" % GameEnums.DOMAIN_NAMES[d_id]
+			btn.text = I18n.t("ui.decision.btn.exploit", [GameEnums.DOMAIN_NAMES[d_id]])
 			btn.custom_minimum_size = Vector2(0, 56)
 			btn.add_theme_font_size_override("font_size", 22)
 			btn.pressed.connect(func(): _on_decision_pick({"domain": did}))
 			_decision_content.add_child(btn)
 
 	elif dec.kind == "confession":
-		_decision_dialog.title = "Confession — %s" % GameEnums.player_name(dec.player)
-		_decision_dialog.ok_button_text = "(choix obligatoire)"
+		_decision_dialog.title = I18n.t("ui.decision.title.confession", [GameEnums.player_name(dec.player)])
+		_decision_dialog.ok_button_text = I18n.t("ui.dialog.must_choose")
 		_decision_dialog.get_ok_button().disabled = true
 		var imp: bool = dec.data.get("impedita", false)
 		var n: int = dec.picks_remaining
-		var s_plural: String = "s" if n > 1 else ""
+		var s_plural: String = I18n.t("ui.decision.plural_s") if n > 1 else ""
+		var mode_label: String = I18n.t("liturgy.impedita") if imp else I18n.t("liturgy.in_integro")
 		var hint := Label.new()
-		hint.text = "%s doit choisir %d pénitence%s parmi 3 (mode %s)." % [
-			GameEnums.player_name(dec.player), n, s_plural,
-			"Impedita" if imp else "In Integro",
-		]
+		hint.text = I18n.t("ui.decision.penitence_hint", [
+			GameEnums.player_name(dec.player), n, s_plural, mode_label,
+		])
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.add_theme_font_size_override("font_size", 22)
 		_decision_content.add_child(hint)
 		var avail: Array = LiturgyResolver.available_confession_kinds(state, dec)
 		if "lose2" in avail:
 			var btn := Button.new()
-			btn.text = "Perdre 2 Corruptions disponibles"
+			btn.text = I18n.t("ui.decision.btn.lose2")
 			btn.custom_minimum_size = Vector2(0, 56)
 			btn.add_theme_font_size_override("font_size", 22)
 			btn.pressed.connect(func(): _on_decision_pick({"kind": "lose2"}))
@@ -792,7 +811,7 @@ func _populate_decision_dialog(dec: GameState.PendingDecision) -> void:
 				if state.controller_of(d_id) == dec.player and not state.is_in_penitence(d_id):
 					var did: int = d_id
 					var btn := Button.new()
-					btn.text = "Pénitence : %s" % GameEnums.DOMAIN_NAMES[d_id]
+					btn.text = I18n.t("ui.decision.penitence_btn", [GameEnums.DOMAIN_NAMES[d_id]])
 					btn.custom_minimum_size = Vector2(0, 56)
 					btn.add_theme_font_size_override("font_size", 22)
 					btn.pressed.connect(func(): _on_decision_pick({"kind": "penitence", "domain": did}))
@@ -803,7 +822,7 @@ func _populate_decision_dialog(dec: GameState.PendingDecision) -> void:
 				if state.controller_of(d_id) == dec.player and state.is_sealed(d_id) and dd.seal_owner == dec.player:
 					var did: int = d_id
 					var btn := Button.new()
-					btn.text = "Fissurer mon Sceau sur %s" % GameEnums.DOMAIN_NAMES[d_id]
+					btn.text = I18n.t("ui.decision.btn.fissure_own", [GameEnums.DOMAIN_NAMES[d_id]])
 					btn.custom_minimum_size = Vector2(0, 56)
 					btn.add_theme_font_size_override("font_size", 22)
 					btn.pressed.connect(func(): _on_decision_pick({"kind": "fissure", "domain": did}))
@@ -815,7 +834,7 @@ func _on_decision_pick(picks: Dictionary) -> void:
 	_decision_dialog.hide()
 	var r := manager.resolve_decision(picks)
 	if not r.get("ok", false):
-		state.add_log("[REFUSÉ] " + r.get("message", "?"))
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
 	_refresh_all()
 
 
@@ -831,7 +850,7 @@ func _on_decision_skip() -> void:
 		return
 	var r := manager.resolve_decision({"skip": true})
 	if not r.get("ok", false):
-		state.add_log("[REFUSÉ] " + r.get("message", "?"))
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
 	_refresh_all()
 
 
@@ -840,8 +859,8 @@ func _on_decision_skip() -> void:
 func _build_endgame_dialog() -> void:
 	_endgame_dialog = AcceptDialog.new()
 	_endgame_dialog.exclusive = true
-	_endgame_dialog.title = "Exorcisme final"
-	_endgame_dialog.ok_button_text = "Nouvelle partie"
+	_endgame_dialog.title = I18n.t("ui.dialog.title.endgame")
+	_endgame_dialog.ok_button_text = I18n.t("ui.dialog.new_game")
 	_endgame_dialog.dialog_text = ""
 	_endgame_dialog.min_size = Vector2i(880, 540)
 	_endgame_dialog.confirmed.connect(_on_endgame_acknowledged)
@@ -859,7 +878,7 @@ func _build_endgame_dialog() -> void:
 	_endgame_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	_endgame_image.custom_minimum_size = Vector2(320, 448)
 	_endgame_image.texture_normal = CardImages.exorcisme()
-	_endgame_image.tooltip_text = "Cliquer pour agrandir"
+	_endgame_image.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
 	_endgame_image.pressed.connect(_on_endgame_image_clicked)
 	hbox.add_child(_endgame_image)
 
@@ -895,17 +914,23 @@ func _maybe_show_endgame_dialog() -> void:
 
 func _show_endgame_dialog() -> void:
 	var rupture := EndGameResolver.check_rupture(state)
-	var winner_str: String = GameEnums.player_name(state.winner) if state.winner != GameEnums.PlayerId.NONE else "Pape sauvé (aucun démon)"
+	var winner_str: String = GameEnums.player_name(state.winner) if state.winner != GameEnums.PlayerId.NONE else I18n.t("ui.endgame.pope_saved")
+	var fmt_filled := func(b: bool, masc: bool) -> String:
+		var key := ("ui.endgame.filled_m" if masc else "ui.endgame.filled") if b else ("ui.endgame.unfilled_m" if masc else "ui.endgame.unfilled")
+		var color := "#8e8" if b else "#888"
+		return "[color=%s]%s[/color]" % [color, I18n.t(key)]
 	var s := ""
 	s += "[font_size=30][b]%s[/b][/font_size]\n\n" % winner_str
 	s += "[i]%s[/i]\n\n" % state.winner_reason
-	s += "[b]Rupture de l'âme :[/b]\n"
-	s += "  • Profondeur : %s\n" % ("[color=#8e8]✓ remplie[/color]" if rupture.profondeur else "[color=#888]— non remplie[/color]")
-	s += "  • Étendue : %s\n" % ("[color=#8e8]✓ remplie[/color]" if rupture.etendue else "[color=#888]— non remplie[/color]")
-	s += "  • Ancrage : %s\n" % ("[color=#8e8]✓ rempli[/color]" if rupture.ancrage else "[color=#888]— non rempli[/color]")
-	s += "  • [b]Complète : %s[/b]\n\n" % ("[color=#8e8]OUI — l'exorcisme échoue[/color]" if rupture.complete else "[color=#e88]NON — l'exorcisme réussit[/color]")
-	s += "[b]Ascendant final :[/b] %+d\n\n" % state.ascendant
-	s += "[b]Résolution (dernières lignes du journal) :[/b]\n"
+	s += "[b]%s[/b]\n" % I18n.t("ui.endgame.soul_rupture")
+	s += "  • %s : %s\n" % [I18n.t("ui.endgame.profondeur"), fmt_filled.call(rupture.profondeur, false)]
+	s += "  • %s : %s\n" % [I18n.t("ui.endgame.etendue"), fmt_filled.call(rupture.etendue, false)]
+	s += "  • %s : %s\n" % [I18n.t("ui.endgame.ancrage"), fmt_filled.call(rupture.ancrage, true)]
+	var complete_color := "#8e8" if rupture.complete else "#e88"
+	var complete_msg := I18n.t("ui.endgame.complete_yes") if rupture.complete else I18n.t("ui.endgame.complete_no")
+	s += "  • [b]%s : [color=%s]%s[/color][/b]\n\n" % [I18n.t("ui.endgame.complete_label"), complete_color, complete_msg]
+	s += "[b]%s :[/b] %+d\n\n" % [I18n.t("ui.endgame.final_ascendant"), state.ascendant]
+	s += "[b]%s[/b]\n" % I18n.t("ui.endgame.last_log_lines")
 	var lines: Array = state.log
 	var last_n: int = min(12, lines.size())
 	for i in range(lines.size() - last_n, lines.size()):
@@ -924,8 +949,8 @@ func _on_endgame_acknowledged() -> void:
 func _build_transgressions_dialog() -> void:
 	_trans_dialog = AcceptDialog.new()
 	_trans_dialog.exclusive = true
-	_trans_dialog.title = "Transgressions"
-	_trans_dialog.ok_button_text = "Fermer"
+	_trans_dialog.title = I18n.t("ui.dialog.title.transgressions")
+	_trans_dialog.ok_button_text = I18n.t("ui.dialog.close")
 	_trans_dialog.dialog_text = ""
 	_trans_dialog.min_size = Vector2i(720, 520)
 	add_child(_trans_dialog)
@@ -954,7 +979,7 @@ func _populate_transgressions_dialog() -> void:
 	for c in _trans_content.get_children():
 		c.queue_free()
 	var p: int = state.active_player
-	_trans_dialog.title = "Transgressions — Joueur actif : %s" % GameEnums.player_name(p)
+	_trans_dialog.title = I18n.t("ui.transgressions_title.active", [GameEnums.player_name(p)])
 	for tid in TransgressionData.ALL_IDS:
 		var def: Dictionary = TransgressionData.get_def(tid)
 		var card := _make_transgression_card(p, String(tid), def)
@@ -988,7 +1013,7 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	img.ignore_texture_size = true
 	img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	img.custom_minimum_size = Vector2(180, 252)
-	img.tooltip_text = "Cliquer pour agrandir"
+	img.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
 	img.mouse_filter = Control.MOUSE_FILTER_PASS  # let scroll-drag pass through
 	img.set_meta("face", face)
 	img.set_meta("tid", tid)
@@ -1006,14 +1031,14 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 
 	var state_lbl := Label.new()
 	if owner == GameEnums.PlayerId.NONE:
-		state_lbl.text = "Libre (face Scandale)"
+		state_lbl.text = I18n.t("ui.transgression.state.free")
 		state_lbl.add_theme_color_override("font_color", Color(0.7, 1, 0.7))
 	else:
 		if face == GameEnums.TransgressionFace.INFAMIE:
-			state_lbl.text = "Infamie · " + GameEnums.player_name(owner)
+			state_lbl.text = I18n.t("ui.transgression.state.owned", [I18n.t("face.infamie"), GameEnums.player_name(owner)])
 			state_lbl.add_theme_color_override("font_color", Color(1, 0.6, 1))
 		else:
-			state_lbl.text = "Scandale · " + GameEnums.player_name(owner)
+			state_lbl.text = I18n.t("ui.transgression.state.owned", [I18n.t("face.scandale"), GameEnums.player_name(owner)])
 			state_lbl.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
 	state_lbl.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(state_lbl)
@@ -1038,9 +1063,9 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		var btn := Button.new()
 		var origin_int: int = origin_d
 		if origins.size() > 1:
-			btn.text = "Provoquer (%s)" % GameEnums.DOMAIN_NAMES[origin_d]
+			btn.text = I18n.t("ui.transgression.btn.provoke_in", [GameEnums.DOMAIN_NAMES[origin_d]])
 		else:
-			btn.text = "Provoquer"
+			btn.text = I18n.t("ui.transgression.btn.provoke")
 		btn.disabled = (why_prov != "")
 		btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		btn.add_theme_font_size_override("font_size", 18)
@@ -1050,7 +1075,7 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 
 	var why_amp: String = GameRules.why_cannot_amplifier(state, player, tid)
 	var amp_btn := Button.new()
-	amp_btn.text = "Amplifier"
+	amp_btn.text = I18n.t("ui.transgression.btn.amplify")
 	amp_btn.disabled = (why_amp != "")
 	amp_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	amp_btn.add_theme_font_size_override("font_size", 18)
@@ -1062,11 +1087,11 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		var hint := Label.new()
 		var bits := ""
 		if why_prov != "":
-			bits += "Provoquer : %s" % why_prov
+			bits += "%s : %s" % [I18n.t("ui.transgression.btn.provoke"), why_prov]
 		if why_amp != "":
 			if bits != "":
 				bits += "\n"
-			bits += "Amplifier : %s" % why_amp
+			bits += "%s : %s" % [I18n.t("ui.transgression.btn.amplify"), why_amp]
 		hint.text = bits
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.add_theme_font_size_override("font_size", 15)
@@ -1112,8 +1137,8 @@ func _make_dialog_touch_friendly(dlg: AcceptDialog) -> void:
 func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_dialog = AcceptDialog.new()
 	_fullscreen_card_dialog.exclusive = true
-	_fullscreen_card_dialog.title = "Carte"
-	_fullscreen_card_dialog.ok_button_text = "Fermer"
+	_fullscreen_card_dialog.title = I18n.t("ui.dialog.title.card")
+	_fullscreen_card_dialog.ok_button_text = I18n.t("ui.dialog.close")
 	_fullscreen_card_dialog.dialog_text = ""
 	_fullscreen_card_dialog.min_size = Vector2i(360, 440)
 	add_child(_fullscreen_card_dialog)
@@ -1196,7 +1221,7 @@ func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
 # ─── Transgression catalog: per-card flip + image-click handlers ──────────────
 
 func _flip_button_label(face: int) -> String:
-	return "Voir Infamie ↻" if face == GameEnums.TransgressionFace.SCANDALE else "Voir Scandale ↻"
+	return I18n.t("ui.flip.see_infamy") if face == GameEnums.TransgressionFace.SCANDALE else I18n.t("ui.flip.see_scandal")
 
 
 func _on_transgression_flip_pressed(img: TextureButton, btn: Button, tid: String) -> void:
@@ -1212,9 +1237,9 @@ func _on_transgression_image_clicked(img: TextureButton, tid: String, name_str: 
 	var tex_scandale: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
 	var tex_infamie: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
 	if cur == GameEnums.TransgressionFace.SCANDALE:
-		_show_fullscreen_card_flippable(tex_scandale, "Voir Infamie ↻", tex_infamie, "Voir Scandale ↻", name_str)
+		_show_fullscreen_card_flippable(tex_scandale, I18n.t("ui.flip.see_infamy"), tex_infamie, I18n.t("ui.flip.see_scandal"), name_str)
 	else:
-		_show_fullscreen_card_flippable(tex_infamie, "Voir Scandale ↻", tex_scandale, "Voir Infamie ↻", name_str)
+		_show_fullscreen_card_flippable(tex_infamie, I18n.t("ui.flip.see_scandal"), tex_scandale, I18n.t("ui.flip.see_infamy"), name_str)
 
 
 # ─── Status label: clickable → fullscreen liturgical card for current station ─
@@ -1246,8 +1271,8 @@ func _show_current_station_card() -> void:
 	var tex_in_integro: Texture2D = CardImages.liturgy(resp_id, false)
 	var tex_impedita: Texture2D = CardImages.liturgy(resp_id, true)
 	_show_fullscreen_card_flippable(
-		tex_in_integro, "Voir Impedita ↻",
-		tex_impedita,   "Voir In Integro ↻",
+		tex_in_integro, I18n.t("ui.flip.see_impedita"),
+		tex_impedita,   I18n.t("ui.flip.see_in_integro"),
 		title_str
 	)
 
@@ -1264,9 +1289,9 @@ func _on_liturgy_image_clicked() -> void:
 	var tex_in_integro: Texture2D = CardImages.liturgy(resp_id, false)
 	var tex_impedita: Texture2D = CardImages.liturgy(resp_id, true)
 	if imp:
-		_show_fullscreen_card_flippable(tex_impedita, "Voir In Integro ↻", tex_in_integro, "Voir Impedita ↻", name_str)
+		_show_fullscreen_card_flippable(tex_impedita, I18n.t("ui.flip.see_in_integro"), tex_in_integro, I18n.t("ui.flip.see_impedita"), name_str)
 	else:
-		_show_fullscreen_card_flippable(tex_in_integro, "Voir Impedita ↻", tex_impedita, "Voir In Integro ↻", name_str)
+		_show_fullscreen_card_flippable(tex_in_integro, I18n.t("ui.flip.see_impedita"), tex_impedita, I18n.t("ui.flip.see_in_integro"), name_str)
 
 
 func _on_endgame_image_clicked() -> void:
@@ -1278,7 +1303,7 @@ func _on_provoquer_clicked(tid: String, origin: int) -> void:
 	_trans_dialog.hide()
 	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": tid, "origin": origin})
 	if not r.get("ok", false):
-		state.add_log("[REFUSÉ] " + r.get("message", "?"))
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
 	_refresh_all()
 
 
@@ -1286,7 +1311,7 @@ func _on_amplifier_clicked(tid: String) -> void:
 	_trans_dialog.hide()
 	var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
 	if not r.get("ok", false):
-		state.add_log("[REFUSÉ] " + r.get("message", "?"))
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
 	_refresh_all()
 
 
@@ -1352,6 +1377,72 @@ func _on_drag_scroll_input(event: InputEvent, sc: ScrollContainer) -> void:
 
 
 # ─── ZOOM / PAN ───────────────────────────────────────────────────────────────
+
+func _on_btn_toggle_lang() -> void:
+	I18n.toggle_locale()
+
+
+# Re-apply localised text to widgets that were created once at startup.
+# Dynamic widgets (created on dialog popup or panel refresh) re-localise
+# automatically when they're recreated.
+func _relocalize() -> void:
+	# Bottom bar buttons
+	if _bottom_bar != null:
+		for child in _bottom_bar.get_children():
+			if child is Button:
+				var btn: Button = child
+				var key: String = btn.get_meta("i18n_key", "")
+				if key != "":
+					btn.text = I18n.t(key)
+				var tk: String = btn.get_meta("i18n_tooltip_key", "")
+				if tk != "":
+					btn.tooltip_text = I18n.t(tk)
+	# Action popup
+	if _action_popup != null:
+		for idx in POPUP_ACTIONS.size():
+			var aid: int = POPUP_ACTIONS[idx]
+			_action_popup.set_item_text(idx, I18n.t(POPUP_LABEL_KEYS[aid]))
+	# Static dialog titles + ok button text
+	if _liturgy_dialog != null:
+		_liturgy_dialog.title = I18n.t("ui.dialog.title.liturgy")
+		_liturgy_dialog.ok_button_text = I18n.t("ui.dialog.continue")
+	if _decision_dialog != null:
+		_decision_dialog.title = I18n.t("ui.dialog.title.decision")
+	if _endgame_dialog != null:
+		_endgame_dialog.title = I18n.t("ui.dialog.title.endgame")
+		_endgame_dialog.ok_button_text = I18n.t("ui.dialog.new_game")
+	if _trans_dialog != null:
+		_trans_dialog.title = I18n.t("ui.dialog.title.transgressions")
+		_trans_dialog.ok_button_text = I18n.t("ui.dialog.close")
+	if _fullscreen_card_dialog != null:
+		_fullscreen_card_dialog.title = I18n.t("ui.dialog.title.card")
+		_fullscreen_card_dialog.ok_button_text = I18n.t("ui.dialog.close")
+	# Status label tooltip
+	if _status_label != null:
+		_status_label.tooltip_text = I18n.t("ui.tooltip.station_card")
+	# Player panel titles (rebuild text from the stored player id)
+	if _player_panel_red != null and is_instance_valid(_player_panel_red):
+		_relocalize_player_panel_title(_player_panel_red, GameEnums.PlayerId.RED)
+	if _player_panel_blue != null and is_instance_valid(_player_panel_blue):
+		_relocalize_player_panel_title(_player_panel_blue, GameEnums.PlayerId.BLUE)
+	# Cascading refresh for content that depends on locale
+	if state != null:
+		_refresh_all()
+
+
+func _relocalize_player_panel_title(panel: PanelContainer, pid: int) -> void:
+	for child in panel.get_children():
+		_recursively_update_player_title(child, pid)
+
+
+func _recursively_update_player_title(node: Node, pid: int) -> void:
+	if node is Label and node.has_meta("i18n_player_id"):
+		var lbl: Label = node
+		lbl.text = I18n.t("ui.player_panel.title", [GameEnums.player_name(pid)])
+		return
+	for c in node.get_children():
+		_recursively_update_player_title(c, pid)
+
 
 func _on_btn_zoom_in() -> void:
 	_apply_zoom(_zoom * ZOOM_STEP, stage.size * 0.5)

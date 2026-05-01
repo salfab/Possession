@@ -16,8 +16,8 @@ func name_of(d: int) -> String:
 func production_label(d: int) -> String:
 	match d:
 		GameEnums.DomainId.AMBITION: return "2 Corruptions"
-		GameEnums.DomainId.DESIR: return "2 (3 si transgressé)"
-		GameEnums.DomainId.FOI: return "1 (2 si transgressé)"
-		GameEnums.DomainId.PEUR: return "1 (2 si Domaine fissuré ce tour)"
+		GameEnums.DomainId.DESIR: return I18n.t("domain.yield.transgressed_2_3")
+		GameEnums.DomainId.FOI: return I18n.t("domain.yield.transgressed_1_2")
+		GameEnums.DomainId.PEUR: return I18n.t("domain.yield.cracked_1_2")
 		GameEnums.DomainId.VOLONTE: return "0"
 		_: return "—"
