@@ -41,7 +41,9 @@ var _log_panel: PanelContainer
 var _log_scroll: ScrollContainer
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
-var _liturgy_image: TextureButton
+var _liturgy_card: Card
+var _liturgy_card_station: int = -1
+var _liturgy_card_impedita: bool = false
 var _decision_dialog: AcceptDialog
 var _decision_content: VBoxContainer
 var _endgame_dialog: AcceptDialog
@@ -52,7 +54,8 @@ var _trans_dialog: AcceptDialog
 var _trans_content: VBoxContainer
 var _trans_scroll: ScrollContainer
 var _fullscreen_card_dialog: AcceptDialog
-var _fullscreen_card_image: TextureRect
+var _fullscreen_aspect: AspectRatioContainer
+var _fullscreen_content_holder: Control
 
 # Zoom / pan state
 var _zoom: float = 1.0
@@ -234,13 +237,22 @@ func _build_liturgy_dialog() -> void:
 	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_liturgy_dialog.add_child(hbox)
 
-	_liturgy_image = TextureButton.new()
-	_liturgy_image.ignore_texture_size = true
-	_liturgy_image.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-	_liturgy_image.custom_minimum_size = Vector2(300, 420)
-	_liturgy_image.tooltip_text = "Cliquer pour agrandir"
-	_liturgy_image.pressed.connect(_on_liturgy_image_clicked)
-	hbox.add_child(_liturgy_image)
+	# Composed card on the left (template + illustration + Labels).
+	var card_aspect := AspectRatioContainer.new()
+	card_aspect.ratio = 1060.0 / 1484.0
+	card_aspect.custom_minimum_size = Vector2(300, 420)
+	hbox.add_child(card_aspect)
+	var card_scene: PackedScene = preload("res://scenes/Card.tscn")
+	_liturgy_card = card_scene.instantiate()
+	card_aspect.add_child(_liturgy_card)
+	# Tap overlay → fullscreen
+	var click_overlay := Button.new()
+	click_overlay.flat = true
+	click_overlay.anchor_right = 1.0
+	click_overlay.anchor_bottom = 1.0
+	click_overlay.tooltip_text = "Cliquer pour agrandir"
+	click_overlay.pressed.connect(_on_liturgy_card_clicked)
+	card_aspect.add_child(click_overlay)
 
 	_liturgy_rtl = RichTextLabel.new()
 	_liturgy_rtl.bbcode_enabled = true
@@ -511,11 +523,10 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 		details = "(aucun effet)"
 
 	_liturgy_dialog.title = "Fin de la Station %s" % st_name
-	# Card image (preloaded via CardImages autoload)
-	var resp_id: String = String(LiturgicalResponseData.get_response(st).get("id", ""))
-	var img_tex: Texture2D = CardImages.liturgy(resp_id, imp) if resp_id != "" else null
-	_liturgy_image.texture_normal = img_tex
-	_liturgy_image.visible = (img_tex != null)
+	# Composed card on the left
+	_liturgy_card.setup_liturgy(st, imp)
+	_liturgy_card_station = st
+	_liturgy_card_impedita = imp
 	# Text panel
 	_liturgy_rtl.clear()
 	_liturgy_rtl.append_text("[font_size=30][b]%s[/b][/font_size]\n" % resp_name)
@@ -805,20 +816,31 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		if inf_inst != null:
 			face = GameEnums.TransgressionFace.INFAMIE
 
-	# Card image (left) — clickable to view full-screen
-	var img_tex: Texture2D = CardImages.transgression(tid, face)
-	if img_tex != null:
-		var img := TextureButton.new()
-		img.texture_normal = img_tex
-		img.ignore_texture_size = true
-		img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-		img.custom_minimum_size = Vector2(180, 252)
-		img.tooltip_text = "Cliquer pour agrandir"
-		img.mouse_filter = Control.MOUSE_FILTER_PASS  # let scroll-drag pass through
-		var captured_tex: Texture2D = img_tex
-		var captured_name: String = String(def.get("name", ""))
-		img.pressed.connect(func(): _show_fullscreen_card(captured_tex, captured_name))
-		hbox.add_child(img)
+	# Card (left) — composed at runtime from template + illustration + Labels.
+	# Wrapped in an AspectRatioContainer to keep the 1060/1484 portrait ratio.
+	var card_aspect := AspectRatioContainer.new()
+	card_aspect.ratio = 1060.0 / 1484.0
+	card_aspect.custom_minimum_size = Vector2(180, 252)
+	card_aspect.size_flags_vertical = Control.SIZE_FILL
+	card_aspect.mouse_filter = Control.MOUSE_FILTER_PASS
+	hbox.add_child(card_aspect)
+
+	var card_scene: PackedScene = preload("res://scenes/Card.tscn")
+	var card: Card = card_scene.instantiate()
+	card.setup_transgression(tid, face)
+	card_aspect.add_child(card)
+
+	# Transparent overlay button to capture tap → fullscreen view.
+	var click_overlay := Button.new()
+	click_overlay.flat = true
+	click_overlay.anchor_right = 1.0
+	click_overlay.anchor_bottom = 1.0
+	click_overlay.mouse_filter = Control.MOUSE_FILTER_PASS
+	click_overlay.tooltip_text = "Cliquer pour agrandir"
+	var captured_tid: String = tid
+	var captured_face: int = face
+	click_overlay.pressed.connect(func(): _show_fullscreen_transgression(captured_tid, captured_face))
+	card_aspect.add_child(click_overlay)
 
 	# Right column: state badge + buttons + reason
 	var vbox := VBoxContainer.new()
@@ -919,31 +941,79 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_dialog.dialog_text = ""
 	_fullscreen_card_dialog.min_size = Vector2i(360, 440)
 	add_child(_fullscreen_card_dialog)
-	_fullscreen_card_image = TextureRect.new()
-	_fullscreen_card_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_fullscreen_card_image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_fullscreen_card_image.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_fullscreen_card_image.custom_minimum_size = Vector2(340, 420)
-	_fullscreen_card_dialog.add_child(_fullscreen_card_image)
+
+	# Switchable content : either a composed Card.tscn or a raw TextureRect
+	# (for the exorcism image which has no template behind it).
+	var aspect := AspectRatioContainer.new()
+	aspect.ratio = 1060.0 / 1484.0
+	aspect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	aspect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	aspect.custom_minimum_size = Vector2(340, 420)
+	_fullscreen_card_dialog.add_child(aspect)
+	_fullscreen_aspect = aspect
+
+	# Empty container that we fill on each popup
+	_fullscreen_content_holder = Control.new()
+	_fullscreen_content_holder.anchor_right = 1.0
+	_fullscreen_content_holder.anchor_bottom = 1.0
+	_fullscreen_content_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	aspect.add_child(_fullscreen_content_holder)
 
 
-func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte") -> void:
+func _clear_fullscreen_content() -> void:
+	for c in _fullscreen_content_holder.get_children():
+		c.queue_free()
+
+
+func _show_fullscreen_transgression(tid: String, face: int) -> void:
+	_clear_fullscreen_content()
+	var card_scene: PackedScene = preload("res://scenes/Card.tscn")
+	var card: Card = card_scene.instantiate()
+	card.anchor_right = 1.0
+	card.anchor_bottom = 1.0
+	_fullscreen_content_holder.add_child(card)
+	card.setup_transgression(tid, face)
+	var def: Dictionary = TransgressionData.get_def(tid)
+	_fullscreen_card_dialog.title = String(def.get("name", "Carte"))
+	_fullscreen_card_dialog.popup_centered_ratio(0.95)
+
+
+func _show_fullscreen_liturgy(station_id: int, impedita: bool) -> void:
+	_clear_fullscreen_content()
+	var card_scene: PackedScene = preload("res://scenes/Card.tscn")
+	var card: Card = card_scene.instantiate()
+	card.anchor_right = 1.0
+	card.anchor_bottom = 1.0
+	_fullscreen_content_holder.add_child(card)
+	card.setup_liturgy(station_id, impedita)
+	var resp: Dictionary = LiturgicalResponseData.get_response(station_id)
+	_fullscreen_card_dialog.title = String(resp.get("name", "Carte"))
+	_fullscreen_card_dialog.popup_centered_ratio(0.95)
+
+
+func _show_fullscreen_texture(tex: Texture2D, title_str: String = "Carte") -> void:
 	if tex == null:
 		return
-	_fullscreen_card_image.texture = tex
+	_clear_fullscreen_content()
+	var rect := TextureRect.new()
+	rect.anchor_right = 1.0
+	rect.anchor_bottom = 1.0
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.texture = tex
+	_fullscreen_content_holder.add_child(rect)
 	_fullscreen_card_dialog.title = title_str
 	_fullscreen_card_dialog.popup_centered_ratio(0.95)
 
 
-func _on_liturgy_image_clicked() -> void:
-	if _liturgy_image.texture_normal != null:
-		_show_fullscreen_card(_liturgy_image.texture_normal, _liturgy_dialog.title)
+func _on_liturgy_card_clicked() -> void:
+	if _liturgy_card_station >= 0:
+		_show_fullscreen_liturgy(_liturgy_card_station, _liturgy_card_impedita)
 
 
 func _on_endgame_image_clicked() -> void:
 	if _endgame_image.texture_normal != null:
-		_show_fullscreen_card(_endgame_image.texture_normal, "Exorcisme final")
+		_show_fullscreen_texture(_endgame_image.texture_normal, "Exorcisme final")
 
 
 func _on_provoquer_clicked(tid: String, origin: int) -> void:
