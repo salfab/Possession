@@ -101,6 +101,11 @@ const POPUP_LABEL_KEYS := {
 	GameEnums.ActionId.FISSURER:  "action.fissurer",
 }
 
+# Domain-popup item ids ≥ this offset are "Provoke <Transgression> in <Domain>"
+# entries appended dynamically when at least one Transgression is legal here.
+# Kept well above ActionId enum values (which start at 0) to avoid collisions.
+const PROVOKE_ITEM_ID_BASE := 100
+
 
 func _ready() -> void:
 	_apply_theme()
@@ -821,6 +826,28 @@ func _on_domain_clicked(d_id: int) -> void:
 			label_str += "  —  " + why
 		_action_popup.set_item_text(idx, label_str)
 		_action_popup.set_item_disabled(idx, why != "")
+
+	# Append "Provoquer X en <domain>" entries for every Transgression the
+	# active player could provoke with this domain as origin. Item ids start
+	# at PROVOKE_ITEM_ID_BASE so they never collide with ActionId values.
+	# Strip any provoquer items left over from a previous click first.
+	while _action_popup.get_item_count() > POPUP_ACTIONS.size():
+		_action_popup.remove_item(POPUP_ACTIONS.size())
+	var provokable_tids: Array = []
+	for tid in TransgressionData.ALL_IDS:
+		if GameRules.why_cannot_provoquer(state, p, tid) != "":
+			continue
+		var origins: Array = GameRules.transgression_origin_options(p, tid)
+		if d_id in origins:
+			provokable_tids.append(tid)
+	for i in provokable_tids.size():
+		var tid: String = provokable_tids[i]
+		var name_str: String = TransgressionData.name_of(tid)
+		var label: String = I18n.t("ui.popup.provoke_in", [name_str, GameEnums.DOMAIN_NAMES[d_id]])
+		_action_popup.add_item(label, PROVOKE_ITEM_ID_BASE + i)
+	_action_popup.set_meta("provokable_tids", provokable_tids)
+	_action_popup.set_meta("provoke_origin", d_id)
+
 	# Position the popup near the touch
 	var mp: Vector2 = get_viewport().get_mouse_position()
 	_action_popup.position = Vector2i(int(mp.x), int(mp.y))
@@ -831,7 +858,17 @@ func _on_domain_clicked(d_id: int) -> void:
 func _on_popup_action(action_id: int) -> void:
 	if _selected_domain < 0:
 		return
-	var result := manager.perform_action(action_id, {"domain": _selected_domain})
+	var result: Dictionary
+	if action_id >= PROVOKE_ITEM_ID_BASE:
+		var idx: int = action_id - PROVOKE_ITEM_ID_BASE
+		var tids: Array = _action_popup.get_meta("provokable_tids", [])
+		var origin: int = int(_action_popup.get_meta("provoke_origin", -1))
+		if idx < 0 or idx >= tids.size() or origin < 0:
+			_selected_domain = -1
+			return
+		result = manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": String(tids[idx]), "origin": origin})
+	else:
+		result = manager.perform_action(action_id, {"domain": _selected_domain})
 	if not result.get("ok", false):
 		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
 	_selected_domain = -1
@@ -1162,7 +1199,8 @@ func _build_transgressions_dialog() -> void:
 	_trans_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_trans_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_trans_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_trans_scroll.custom_minimum_size = Vector2(680, 460)
+	# Phone-safe minimum: SIZE_EXPAND_FILL grows it on bigger screens.
+	_trans_scroll.custom_minimum_size = Vector2(280, 320)
 	_trans_dialog.add_child(_trans_scroll)
 	_enable_drag_scroll(_trans_scroll)
 	_trans_content = VBoxContainer.new()
@@ -1376,7 +1414,7 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_fullscreen_card_image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fullscreen_card_image.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_fullscreen_card_image.custom_minimum_size = Vector2(340, 420)
+	_fullscreen_card_image.custom_minimum_size = Vector2(200, 280)
 	vbox.add_child(_fullscreen_card_image)
 
 	_fullscreen_card_flip_btn = Button.new()
