@@ -769,7 +769,10 @@ func _on_btn_transgressions() -> void:
 	if state == null:
 		return
 	_populate_transgressions_dialog()
-	_trans_dialog.popup_centered()
+	# Plein écran : on aligne sur la taille du viewport
+	var vp_size: Vector2 = get_viewport_rect().size
+	_trans_dialog.size = vp_size
+	_trans_dialog.popup(Rect2i(Vector2i.ZERO, Vector2i(vp_size)))
 
 
 func _populate_transgressions_dialog() -> void:
@@ -805,20 +808,19 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		if inf_inst != null:
 			face = GameEnums.TransgressionFace.INFAMIE
 
-	# Card image (left) — clickable to view full-screen
-	var img_tex: Texture2D = CardImages.transgression(tid, face)
-	if img_tex != null:
-		var img := TextureButton.new()
-		img.texture_normal = img_tex
-		img.ignore_texture_size = true
-		img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-		img.custom_minimum_size = Vector2(180, 252)
-		img.tooltip_text = "Cliquer pour agrandir"
-		img.mouse_filter = Control.MOUSE_FILTER_PASS  # let scroll-drag pass through
-		var captured_tex: Texture2D = img_tex
-		var captured_name: String = String(def.get("name", ""))
-		img.pressed.connect(func(): _show_fullscreen_card(captured_tex, captured_name))
-		hbox.add_child(img)
+	# Card image (left) — clickable to view full-screen, flippable via right-column button.
+	var img := TextureButton.new()
+	img.ignore_texture_size = true
+	img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	img.custom_minimum_size = Vector2(180, 252)
+	img.tooltip_text = "Cliquer pour agrandir"
+	img.mouse_filter = Control.MOUSE_FILTER_PASS  # let scroll-drag pass through
+	img.set_meta("face", face)
+	img.set_meta("tid", tid)
+	img.texture_normal = CardImages.transgression(tid, face)
+	var captured_name: String = String(def.get("name", ""))
+	img.pressed.connect(func(): _show_fullscreen_card(img.texture_normal, captured_name))
+	hbox.add_child(img)
 
 	# Right column: state badge + buttons + reason
 	var vbox := VBoxContainer.new()
@@ -839,6 +841,20 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 			state_lbl.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
 	state_lbl.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(state_lbl)
+
+	# Flip button — toggle the displayed face between Scandale and Infamie
+	var flip_btn := Button.new()
+	flip_btn.add_theme_font_size_override("font_size", 16)
+	flip_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	flip_btn.text = "Voir Infamie ↻" if face == GameEnums.TransgressionFace.SCANDALE else "Voir Scandale ↻"
+	flip_btn.pressed.connect(func():
+		var cur: int = img.get_meta("face")
+		var nxt: int = GameEnums.TransgressionFace.INFAMIE if cur == GameEnums.TransgressionFace.SCANDALE else GameEnums.TransgressionFace.SCANDALE
+		img.set_meta("face", nxt)
+		img.texture_normal = CardImages.transgression(tid, nxt)
+		flip_btn.text = "Voir Infamie ↻" if nxt == GameEnums.TransgressionFace.SCANDALE else "Voir Scandale ↻"
+	)
+	vbox.add_child(flip_btn)
 
 	# Action buttons
 	var btn_row := HFlowContainer.new()
