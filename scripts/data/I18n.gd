@@ -113,6 +113,7 @@ const STRINGS := {
 	"ui.transgression.btn.provoke":     {"fr": "Provoquer",              "en": "Provoke"},
 	"ui.transgression.btn.provoke_in":  {"fr": "Provoquer (%s)",          "en": "Provoke (%s)"},
 	"ui.transgression.btn.amplify":     {"fr": "Amplifier",              "en": "Amplify"},
+	"ui.popup.provoke_in":              {"fr": "Provoquer %s en %s",      "en": "Provoke %s in %s"},
 	"ui.status_label.fmt":              {"fr": "Station %s — Pulse %d/%d — Actif: %s — Init: %s",
 	                                     "en": "Station %s — Pulse %d/%d — Active: %s — Init: %s"},
 	"ui.game_over":                     {"fr": "PARTIE TERMINÉE — %s",   "en": "GAME OVER — %s"},
