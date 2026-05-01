@@ -112,44 +112,26 @@ jobs:
           mv "${EXPORT_DIR}/index.html.new" "${EXPORT_DIR}/index.html"
           grep -q 'possession-loading-style' "${EXPORT_DIR}/index.html"
 
-      - name: Install combined service worker (COOP/COEP + offline cache) and PWA manifest
-        # Force bash as the shell — the default shell inside the
-        # barichello/godot-ci container is dash, which doesn't support the
-        # `< <(...)` process substitution we use to feed `find` output into
-        # the precache loop without spawning a subshell.
+      - name: Install COOP/COEP service worker and PWA manifest
+        # Force bash — the barichello container otherwise runs `run:` steps
+        # under dash, which doesn't support the bash-isms we used here.
         shell: bash
-        # The Godot 4.2 web build needs SharedArrayBuffer, which requires
-        # Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy response
-        # headers. GitHub Pages / itch.io can't set them, so we inject them
-        # client-side via a service worker (standard coi-serviceworker
-        # pattern). The same SW also pre-caches every export file so the game
-        # is fully playable offline once it has been loaded — including a
-        # reload with no network. Cache name is SHA-versioned, so a fresh
-        # deploy invalidates old caches automatically.
-        # The web app manifest lets browsers offer "Add to home screen" /
-        # "Install app"; once installed the game launches in standalone mode.
+        # The Godot 4 web build needs SharedArrayBuffer, which requires
+        # Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy on
+        # every response. GitHub Pages can't set them, so the SW patches
+        # them in client-side (standard coi-serviceworker pattern).
+        # The web app manifest gives the page enough metadata for the
+        # browser's "Install / Add to home screen" prompt and for the
+        # standalone-display mode once installed.
+        # NOTE : an earlier revision also pre-cached the export for offline
+        # play, but that broke the COI path on at least one device — the
+        # SW served cached responses without the headers and the page
+        # ended up without SharedArrayBuffer. Caching has been removed
+        # from this step until a safer scheme is in place.
         run: |
           set -e
-          # Copy the manifest in first so it's part of the precache list.
           cp web_assets/manifest.json "${EXPORT_DIR}/manifest.json"
-          # Build a JSON array of every file in the export folder (paths
-          # relative to the export root, with leading "./"). Skip sw.js
-          # itself so the SW doesn't try to cache its own old version, and
-          # skip _headers (Netlify-only directives).
-          PRECACHE='['
-          SEP=''
-          while IFS= read -r f; do
-            PRECACHE="${PRECACHE}${SEP}\"${f}\""
-            SEP=','
-          done < <(cd "${EXPORT_DIR}" && find . -type f \
-              -not -name 'sw.js' -not -name '_headers' | LC_ALL=C sort)
-          if [ -n "$SEP" ]; then PRECACHE="${PRECACHE},"; fi
-          PRECACHE="${PRECACHE}\"./\"]"
-          SHA="$(echo "$GITHUB_SHA" | cut -c1-7)"
-          # Use # as sed delimiter (paths contain /).
-          sed -e "s#__SHA__#${SHA}#g" \
-              -e "s#__PRECACHE_LIST__#${PRECACHE}#g" \
-              web_assets/sw.js > "${EXPORT_DIR}/sw.js"
+          cp web_assets/sw.js "${EXPORT_DIR}/sw.js"
           # Register the SW + link the manifest at the start of <head>.
           sed -i -E 's|<head([^>]*)>|<head\1>\n<link rel="manifest" href="manifest.json">\n<meta name="theme-color" content="#4a0e5e">\n<script src="sw.js"></script>|' "${EXPORT_DIR}/index.html"
           grep -q 'sw.js' "${EXPORT_DIR}/index.html"
