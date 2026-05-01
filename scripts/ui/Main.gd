@@ -1718,24 +1718,15 @@ func _on_fullscreen_card_flip_pressed() -> void:
 
 
 func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
-	# On phones the dialog's static min_size (e.g. 720x520) was overriding the
-	# viewport-sized popup, pushing the OK button off the bottom edge. Clear
-	# it so the window snaps to the actual viewport.
+	# Make sure no static min_size held over from the build pushes the
+	# window past the viewport.
 	dlg.min_size = Vector2i.ZERO
-	var vp_size: Vector2 = get_viewport_rect().size
-	# Leave a safety margin top + bottom for overlays the Godot canvas can't
-	# see: the version banner pinned at the top (up to ~120 px when expanded
-	# with logs) and the mobile browser's URL bar / system navigation buttons
-	# along the bottom. Without these the dialog window slides under those
-	# overlays and the OK button ends up off-screen even though the engine
-	# thinks it's at "viewport.y".
-	var top_margin: float = 0.0
-	var bottom_margin: float = 0.0
-	var sz_y: float = max(vp_size.y - top_margin - bottom_margin, 240.0)
-	var sz: Vector2 = Vector2(vp_size.x, sz_y)
-	var pos: Vector2 = Vector2(0.0, top_margin)
-	dlg.size = Vector2i(sz)
-	dlg.popup(Rect2i(Vector2i(pos), Vector2i(sz)))
+	# Use popup_centered_ratio(1.0) — for embedded dialogs this is the
+	# documented way to size the window to a fraction of the parent
+	# viewport. Setting size + popup(Rect2i) by hand seemed to be ignored
+	# (margin tweaks didn't move anything on screen), which suggests Godot
+	# applies its own layout pass when embedded.
+	dlg.popup_centered_ratio(1.0)
 
 
 # ─── Transgression catalog: per-card flip + image-click handlers ──────────────
