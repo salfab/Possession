@@ -93,6 +93,25 @@ jobs:
             echo '  Cross-Origin-Embedder-Policy: require-corp'
           } > ${EXPORT_DIR}/_headers
 
+      - name: Inject demonic-violet loading bar style
+        # Replaces Godot's default gray <progress> with a dark purple bar +
+        # magenta gradient fill + glow, for readability on phone screens
+        # in direct sunlight. Goes in <head> so styles apply before the
+        # loader becomes visible (no FOUC).
+        run: |
+          set -e
+          # Insert the style block right before </head>
+          awk -v style_file="web_assets/loading-style.html" '
+            !inserted && /<\/head>/ {
+              while ((getline line < style_file) > 0) print line
+              close(style_file)
+              inserted = 1
+            }
+            { print }
+          ' "${EXPORT_DIR}/index.html" > "${EXPORT_DIR}/index.html.new"
+          mv "${EXPORT_DIR}/index.html.new" "${EXPORT_DIR}/index.html"
+          grep -q 'possession-loading-style' "${EXPORT_DIR}/index.html"
+
       - name: Inject COI service worker for hosts without custom headers (GitHub Pages, itch.io)
         # Godot 4.2 Web exports require SharedArrayBuffer, which requires COOP/COEP
         # response headers. GitHub Pages and itch.io can't set them, so we use the
