@@ -8,8 +8,9 @@ extends Control
 #
 # Layout : a single horizontal row with the three optional badges in
 # this order, each ~16 px square :
-#   • Controller : filled diamond in the player's colour, centred
-#                  letter "R" or "V" overlaid in white
+#   • Controller : heraldic shield (pentagon) in the player's colour
+#                  with a centred white letter "R" or "V" — distinct
+#                  from the Infamie diamonds used on transgression chips
 #   • Sealed     : padlock — filled square with an inverted-U shackle
 #   • Penitence  : a + sign (cross) drawn from two thick rectangles
 
@@ -61,24 +62,27 @@ func _draw() -> void:
 
 
 func _draw_controller(top_left: Vector2) -> void:
-	var c := top_left + Vector2(BADGE_SIZE * 0.5, BADGE_SIZE * 0.5)
-	var r := BADGE_SIZE * 0.46
-	# Diamond (rotated square) in player colour.
+	# Heraldic shield (pentagon : flat top, pointed bottom). Visually distinct
+	# from the diamond shape used by Infamie transgression markers, and the
+	# "control / defence of a domain" semantics fit the indicator's purpose.
+	var bs := BADGE_SIZE
 	var pts := PackedVector2Array([
-		c + Vector2(0, -r),
-		c + Vector2(r, 0),
-		c + Vector2(0, r),
-		c + Vector2(-r, 0),
+		top_left + Vector2(bs * 0.12, bs * 0.15),
+		top_left + Vector2(bs * 0.88, bs * 0.15),
+		top_left + Vector2(bs * 0.92, bs * 0.55),
+		top_left + Vector2(bs * 0.50, bs * 0.92),
+		top_left + Vector2(bs * 0.08, bs * 0.55),
 	])
 	draw_colored_polygon(pts, controller_color)
-	var loop := PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[0]])
+	var loop := PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[4], pts[0]])
 	draw_polyline(loop, Color(0, 0, 0, 0.85), 1.5, true)
-	# Center letter (R / V) in white with black shadow for legibility.
+	# Center letter (R / V) in white with black outline for legibility.
 	if controller_letter != "":
+		var c := top_left + Vector2(bs * 0.5, bs * 0.5)
 		var font := ThemeDB.fallback_font
-		var font_size := int(BADGE_SIZE * 0.55)
+		var font_size := int(bs * 0.55)
 		var letter_size := font.get_string_size(controller_letter, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
-		var pos := c - Vector2(letter_size.x * 0.5, -font_size * 0.35)
+		var pos := c - Vector2(letter_size.x * 0.5, -font_size * 0.30)
 		draw_string_outline(font, pos, controller_letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 2, Color(0, 0, 0, 0.9))
 		draw_string(font, pos, controller_letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(1, 1, 1))
 
