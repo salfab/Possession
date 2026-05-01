@@ -1723,8 +1723,19 @@ func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
 	# it so the window snaps to the actual viewport.
 	dlg.min_size = Vector2i.ZERO
 	var vp_size: Vector2 = get_viewport_rect().size
-	dlg.size = vp_size
-	dlg.popup(Rect2i(Vector2i.ZERO, Vector2i(vp_size)))
+	# Leave a safety margin top + bottom for overlays the Godot canvas can't
+	# see: the version banner pinned at the top (up to ~120 px when expanded
+	# with logs) and the mobile browser's URL bar / system navigation buttons
+	# along the bottom. Without these the dialog window slides under those
+	# overlays and the OK button ends up off-screen even though the engine
+	# thinks it's at "viewport.y".
+	var top_margin: float = 110.0
+	var bottom_margin: float = 110.0
+	var sz_y: float = max(vp_size.y - top_margin - bottom_margin, 240.0)
+	var sz: Vector2 = Vector2(vp_size.x, sz_y)
+	var pos: Vector2 = Vector2(0.0, top_margin)
+	dlg.size = Vector2i(sz)
+	dlg.popup(Rect2i(Vector2i(pos), Vector2i(sz)))
 
 
 # ─── Transgression catalog: per-card flip + image-click handlers ──────────────
