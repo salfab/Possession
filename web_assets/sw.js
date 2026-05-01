@@ -87,6 +87,14 @@ if (typeof window === 'undefined') {
             ? new Request(r, { credentials: 'omit' })
             : r;
 
+        // Honour explicit cache bypass requests so debugging works the
+        // way users expect :
+        //  • Ctrl/Cmd+Shift+R hard-reload sends r.cache === 'reload'
+        //  • DevTools "Disable cache" sends 'no-store'
+        // In both cases we skip our cache and go straight to the network,
+        // updating the cache opportunistically with the fresh response.
+        const bypassCache = (r.cache === 'reload' || r.cache === 'no-store' || r.cache === 'no-cache');
+
         event.respondWith((async () => {
             // Cache-first for same-origin GET requests so the game keeps
             // working with no network once it's been loaded.
@@ -94,7 +102,7 @@ if (typeof window === 'undefined') {
                 try { return new URL(r.url).origin === self.location.origin; }
                 catch (_) { return false; }
             })();
-            if (r.method === 'GET' && isSameOrigin) {
+            if (!bypassCache && r.method === 'GET' && isSameOrigin) {
                 const cached = await caches.match(r);
                 if (cached) return withCoiHeaders(cached, coepCredentialless);
             }
