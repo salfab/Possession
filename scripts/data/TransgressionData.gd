@@ -152,4 +152,4 @@ func name_of(tid: String) -> String:
 func card_image_path(tid: String, face: int) -> String:
 	# face: GameEnums.TransgressionFace.SCANDALE / INFAMIE
 	var f := "scandale" if face == GameEnums.TransgressionFace.SCANDALE else "infamie"
-	return "res://assets/cards/transgressions/%s_%s.png" % [tid, f]
+	return "res://assets/cards/transgressions/%s_%s.jpg" % [tid, f]

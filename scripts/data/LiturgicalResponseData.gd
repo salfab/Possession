@@ -50,4 +50,4 @@ func card_image_path(station: int, impedita: bool) -> String:
 		return ""
 	var id: String = String(resp.get("id", ""))
 	var mode: String = "impedita" if impedita else "in_integro"
-	return "res://assets/cards/liturgies/%s_%s.png" % [id, mode]
+	return "res://assets/cards/liturgies/%s_%s.jpg" % [id, mode]
