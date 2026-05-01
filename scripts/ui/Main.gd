@@ -400,60 +400,62 @@ func _refresh_overlays() -> void:
 # ─── Per-player owned-transgressions side panels ──────────────────────────────
 
 func _build_player_transgression_panels() -> void:
-	_player_panel_red = _build_player_panel(GameEnums.PlayerId.RED,  Color(1.0, 0.45, 0.45))
-	_player_panel_blue = _build_player_panel(GameEnums.PlayerId.BLUE, Color(0.50, 0.70, 1.0))
+	var bundle_red: Dictionary = _build_player_panel(GameEnums.PlayerId.RED,  Color(1.0, 0.45, 0.45))
+	var bundle_blue: Dictionary = _build_player_panel(GameEnums.PlayerId.BLUE, Color(0.50, 0.70, 1.0))
+	_player_panel_red = bundle_red["panel"]
+	_player_list_red = bundle_red["list"]
+	_player_panel_blue = bundle_blue["panel"]
+	_player_list_blue = bundle_blue["list"]
 	add_child(_player_panel_red)
 	add_child(_player_panel_blue)
-	_player_list_red = _player_panel_red.get_node("VBox/Scroll/List")
-	_player_list_blue = _player_panel_blue.get_node("VBox/Scroll/List")
 	# React to viewport rotation / window resize
 	get_viewport().size_changed.connect(_layout_player_transgression_panels)
 	_layout_player_transgression_panels()
+	print("[panels] Built Red+Blue transgression panels")
 
 
-func _build_player_panel(pid: int, accent: Color) -> PanelContainer:
+func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	var panel := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.04, 0.10, 0.85)
+	sb.bg_color = Color(0.04, 0.02, 0.08, 0.95)
 	sb.border_color = accent
-	sb.set_border_width_all(2)
+	sb.set_border_width_all(3)
 	sb.set_corner_radius_all(8)
 	sb.set_content_margin_all(6)
+	# Subtle glow in player accent so the panel pops on the dark board.
+	sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.35)
+	sb.shadow_size = 6
 	panel.add_theme_stylebox_override("panel", sb)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var vbox := VBoxContainer.new()
-	vbox.name = "VBox"
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 4)
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.name = "Title"
-	title.text = GameEnums.player_name(pid)
+	title.text = "%s — Transgressions" % GameEnums.player_name(pid)
 	title.add_theme_color_override("font_color", accent)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
 	title.add_theme_constant_override("outline_size", 4)
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 16)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
 	var scroll := ScrollContainer.new()
-	scroll.name = "Scroll"
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(scroll)
 
 	var list := HFlowContainer.new()
-	list.name = "List"
 	list.add_theme_constant_override("h_separation", 4)
 	list.add_theme_constant_override("v_separation", 4)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
 
-	return panel
+	return {"panel": panel, "list": list}
 
 
 func _layout_player_transgression_panels() -> void:
@@ -487,6 +489,7 @@ func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
 
 func _refresh_player_transgression_panels() -> void:
 	if _player_list_red == null or _player_list_blue == null:
+		print("[panels] refresh skipped (lists null)")
 		return
 	for c in _player_list_red.get_children():
 		c.queue_free()
@@ -494,6 +497,8 @@ func _refresh_player_transgression_panels() -> void:
 		c.queue_free()
 	if state == null:
 		return
+	var n_red := 0
+	var n_blue := 0
 	for tid in TransgressionData.ALL_IDS:
 		var owner: int = state.transgression_owner(tid)
 		if owner == GameEnums.PlayerId.NONE:
@@ -512,13 +517,16 @@ func _refresh_player_transgression_panels() -> void:
 		btn.pressed.connect(_on_player_transgression_clicked.bind(String(tid), face, name_str))
 		if owner == GameEnums.PlayerId.RED:
 			_player_list_red.add_child(btn)
+			n_red += 1
 		else:
 			_player_list_blue.add_child(btn)
+			n_blue += 1
 	# Show "(aucune)" hint when empty so players know the panel is theirs.
 	if _player_list_red.get_child_count() == 0:
 		_player_list_red.add_child(_make_empty_hint())
 	if _player_list_blue.get_child_count() == 0:
 		_player_list_blue.add_child(_make_empty_hint())
+	print("[panels] refresh: Red=%d Blue=%d" % [n_red, n_blue])
 
 
 func _make_empty_hint() -> Label:
