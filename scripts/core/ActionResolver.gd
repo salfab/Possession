@@ -28,10 +28,15 @@ static func exploiter(state: GameState, player: int, d_id: int, free: bool = fal
 		return fail("Exploitation gratuite : vous ne contrôlez pas ce Domaine.")
 	var prod := GameRules.production_of(state, d_id, player)
 	state.add_corruption_pool(player, prod)
-	if player == GameEnums.PlayerId.RED:
-		state.domain(d_id).exploited_by_red_this_station = true
-	else:
-		state.domain(d_id).exploited_by_blue_this_station = true
+	# Only the regular paid Exploiter consumes the "once per station per domain"
+	# privilege. The free exploit handed out at the start of stations I-V is
+	# a separate bonus and must not block a later paid Exploiter on the same
+	# domain in the same station.
+	if not free:
+		if player == GameEnums.PlayerId.RED:
+			state.domain(d_id).exploited_by_red_this_station = true
+		else:
+			state.domain(d_id).exploited_by_blue_this_station = true
 	var prefix := "Exploitation gratuite" if free else "Exploitation"
 	state.add_log("%s — %s exploite %s : +%d Corruption." % [prefix, GameEnums.player_name(player), GameEnums.DOMAIN_NAMES[d_id], prod])
 	return ok("+%d Corruption." % prod)
