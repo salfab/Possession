@@ -53,6 +53,13 @@ var _trans_dialog: AcceptDialog
 var _trans_content: VBoxContainer
 var _trans_scroll: ScrollContainer
 
+# "Placed transgressions" summary dialog — opened by tapping any marker on
+# a domain. Two columns, one per demon, listing every Transgression they
+# have on the board. Each entry is clickable → fullscreen flippable card.
+var _placed_dialog: AcceptDialog
+var _placed_list_red: VBoxContainer
+var _placed_list_blue: VBoxContainer
+
 # Per-player owned-transgressions side panels (top/bottom in portrait,
 # left/right in landscape). Each panel lists the names of the
 # transgressions the player owns; tapping a name opens the fullscreen
@@ -259,6 +266,8 @@ func _build_overlays() -> void:
 	_build_transgressions_dialog()
 	# Full-screen card viewer
 	_build_fullscreen_card_dialog()
+	# Two-column "placed transgressions" summary opened by domain markers
+	_build_placed_transgressions_dialog()
 
 
 func _build_liturgy_dialog() -> void:
@@ -467,7 +476,136 @@ func _make_transgression_marker(ti: GameState.TransgressionInstance, infamy: boo
 	return marker
 
 
-func _on_domain_marker_clicked(tid: String, name_str: String, is_infamy: bool) -> void:
+func _on_domain_marker_clicked(_tid: String, _name_str: String, _is_infamy: bool) -> void:
+	# Tapping any marker (Scandale or Infamie, regardless of which one) opens
+	# the same summary dialog: a two-column listing of every placed
+	# Transgression, one column per demon. From there the player can click an
+	# entry to see the actual card fullscreen.
+	_show_placed_transgressions_dialog()
+
+
+# ─── Placed transgressions dialog (two columns, one per demon) ────────────────
+
+func _build_placed_transgressions_dialog() -> void:
+	_placed_dialog = AcceptDialog.new()
+	_placed_dialog.exclusive = true
+	_placed_dialog.title = I18n.t("ui.dialog.title.placed")
+	_placed_dialog.ok_button_text = I18n.t("ui.dialog.close")
+	_placed_dialog.dialog_text = ""
+	_placed_dialog.min_size = Vector2i(640, 480)
+	add_child(_placed_dialog)
+	_make_dialog_touch_friendly(_placed_dialog)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 12)
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_placed_dialog.add_child(hbox)
+
+	var bundle_red: Dictionary = _build_placed_column(GameEnums.PlayerId.RED)
+	var bundle_blue: Dictionary = _build_placed_column(GameEnums.PlayerId.BLUE)
+	_placed_list_red = bundle_red["list"]
+	_placed_list_blue = bundle_blue["list"]
+	hbox.add_child(bundle_red["panel"])
+	hbox.add_child(bundle_blue["panel"])
+
+
+# Builds one column. Returns {panel, list} so the caller wires the panel into
+# the parent container and stashes the list ref for later refresh.
+func _build_placed_column(pid: int) -> Dictionary:
+	var accent: Color = GameEnums.player_color_light(pid)
+
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.04, 0.02, 0.08, 0.95)
+	sb.border_color = accent
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(8)
+	panel.add_theme_stylebox_override("panel", sb)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 8)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = GameEnums.player_name(pid)
+	title.set_meta("i18n_player_id", pid)
+	title.add_theme_color_override("font_color", accent)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 4)
+	title.add_theme_font_size_override("font_size", 28)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(scroll)
+
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 6)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+
+	return {"panel": panel, "list": list}
+
+
+func _show_placed_transgressions_dialog() -> void:
+	_populate_placed_transgressions_dialog()
+	_popup_dialog_fullscreen(_placed_dialog)
+
+
+func _populate_placed_transgressions_dialog() -> void:
+	if _placed_list_red == null or _placed_list_blue == null:
+		return
+	for c in _placed_list_red.get_children():
+		c.queue_free()
+	for c in _placed_list_blue.get_children():
+		c.queue_free()
+	if state == null:
+		return
+	# Walk every domain, collect each placed instance with its face.
+	for d_id in DomainData.DOMAINS:
+		var d := state.domain(d_id)
+		for ti in d.scandals:
+			_add_placed_entry(ti, false, d_id)
+		for ti in d.infamies:
+			_add_placed_entry(ti, true, d_id)
+	# Empty hint
+	if _placed_list_red.get_child_count() == 0:
+		_placed_list_red.add_child(_make_empty_hint())
+	if _placed_list_blue.get_child_count() == 0:
+		_placed_list_blue.add_child(_make_empty_hint())
+
+
+func _add_placed_entry(ti: GameState.TransgressionInstance, infamy: bool, domain_id: int) -> void:
+	var col_list: VBoxContainer = _placed_list_red if ti.owner == GameEnums.PlayerId.RED else _placed_list_blue
+	var name_str: String = TransgressionData.name_of(ti.def_id)
+	var face_str: String = I18n.t("face.infamie") if infamy else I18n.t("face.scandale")
+	var dom_str: String = GameEnums.DOMAIN_NAMES.get(domain_id, "?")
+
+	var btn := Button.new()
+	btn.text = "%s\n%s · %s" % [name_str, face_str, dom_str]
+	btn.add_theme_font_size_override("font_size", 20)
+	btn.custom_minimum_size = Vector2(0, 64)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Tint the label with the face colour for quick scan.
+	var fcol: Color = Color(1.0, 0.55, 1.0) if infamy else Color(1.0, 0.78, 0.45)
+	btn.add_theme_color_override("font_color", fcol)
+	btn.tooltip_text = I18n.t("ui.tooltip.see_card")
+	var captured_tid: String = ti.def_id
+	var captured_name: String = name_str
+	var captured_is_infamy: bool = infamy
+	btn.pressed.connect(func(): _open_placed_card(captured_tid, captured_name, captured_is_infamy))
+	col_list.add_child(btn)
+
+
+func _open_placed_card(tid: String, name_str: String, is_infamy: bool) -> void:
 	var tex_s: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
 	var tex_i: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
 	var lbl_to_inf: String = I18n.t("ui.flip.see_infamy")
@@ -1500,6 +1638,12 @@ func _relocalize() -> void:
 	if _fullscreen_card_dialog != null:
 		_fullscreen_card_dialog.title = I18n.t("ui.dialog.title.card")
 		_fullscreen_card_dialog.ok_button_text = I18n.t("ui.dialog.close")
+	if _placed_dialog != null:
+		_placed_dialog.title = I18n.t("ui.dialog.title.placed")
+		_placed_dialog.ok_button_text = I18n.t("ui.dialog.close")
+		# Column titles (just the player name, no "— Transgressions" suffix)
+		_relocalize_placed_column_title(_placed_list_red, GameEnums.PlayerId.RED)
+		_relocalize_placed_column_title(_placed_list_blue, GameEnums.PlayerId.BLUE)
 	# Status label tooltip
 	if _status_label != null:
 		_status_label.tooltip_text = I18n.t("ui.tooltip.station_card")
@@ -1516,6 +1660,20 @@ func _relocalize() -> void:
 func _relocalize_player_panel_title(panel: PanelContainer, pid: int) -> void:
 	for child in panel.get_children():
 		_recursively_update_player_title(child, pid)
+
+
+func _relocalize_placed_column_title(list: VBoxContainer, pid: int) -> void:
+	if list == null:
+		return
+	# list is the inner VBox; walk up to its sibling Label (the title) which
+	# also lives in the column's outer VBox.
+	var col_vbox: Node = list.get_parent().get_parent() if list.get_parent() != null else null
+	if col_vbox == null:
+		return
+	for child in col_vbox.get_children():
+		if child is Label and child.has_meta("i18n_player_id"):
+			(child as Label).text = GameEnums.player_name(pid)
+			return
 
 
 func _recursively_update_player_title(node: Node, pid: int) -> void:

@@ -95,6 +95,7 @@ const STRINGS := {
 	"ui.dialog.title.endgame":      {"fr": "Exorcisme final",           "en": "Final Exorcism"},
 	"ui.dialog.title.transgressions":{"fr": "Transgressions",           "en": "Transgressions"},
 	"ui.dialog.title.card":         {"fr": "Carte",                     "en": "Card"},
+	"ui.dialog.title.placed":       {"fr": "Transgressions posées",      "en": "Placed Transgressions"},
 
 	# UI — labels / hints
 	"ui.tooltip.click_to_zoom":     {"fr": "Cliquer pour agrandir",   "en": "Click to enlarge"},
