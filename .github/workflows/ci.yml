@@ -155,8 +155,10 @@ jobs:
     name: Deploy to itch.io
     runs-on: ubuntu-22.04
     needs: build-web
+    # Opt-in via repo variable ENABLE_ITCH=true (mirrors ENABLE_NETLIFY).
     if: |
       github.event_name != 'pull_request'
+      && vars.ENABLE_ITCH == 'true'
       && github.repository_owner == 'salfab'
       && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     steps:
