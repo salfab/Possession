@@ -83,9 +83,11 @@ var _player_reserve_blue: Label
 # Bottom action bar (kept as a ref so we can rebuild localised button text
 # when the user toggles the language).
 var _bottom_bar: HBoxContainer
-# Puiser dans l'Ombre — last-resort safety net. Enabled only when the
-# active player's available Corruption is 0.
+# Puiser dans l'Ombre — the only "skip" button left in the bar. Disabled
+# while the active player still has Corruption to spend; lights up with
+# a pulsing border when their pool runs dry.
 var _btn_puiser: Button
+var _puiser_pulse_tween: Tween
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_node: Card               # composed view (transgression / liturgy)
 var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
@@ -366,7 +368,6 @@ func _build_debug_bar() -> void:
 		["ui.btn.transgressions",    _on_btn_transgressions,     true],
 		["ui.btn.new_game",          _on_btn_new_game,           true],
 		["ui.btn.next_station",      _on_btn_force_next_station, true],
-		["ui.btn.pass",              _on_btn_pass,               true],
 		["ui.btn.puiser",            _on_btn_puiser,             true],
 		["ui.btn.journal",           _on_btn_toggle_log,         true],
 		["ui.btn.hotspots",          _on_btn_toggle_hotspots,    true],
@@ -384,6 +385,8 @@ func _build_debug_bar() -> void:
 			btn.tooltip_text = I18n.t("ui.btn.toggle_lang.tooltip")
 			btn.set_meta("i18n_tooltip_key", "ui.btn.toggle_lang.tooltip")
 		elif a[0] == "ui.btn.puiser":
+			# Last-resort safety-net button. Disabled by default; lights up
+			# with a pulsing border when the active player's pool is empty.
 			btn.tooltip_text = I18n.t("ui.btn.puiser.tooltip")
 			btn.set_meta("i18n_tooltip_key", "ui.btn.puiser.tooltip")
 			_btn_puiser = btn
@@ -448,12 +451,57 @@ func _refresh_all() -> void:
 func _refresh_puiser_button() -> void:
 	if _btn_puiser == null or state == null:
 		return
-	# Enable only when the active player's pool is empty AND the game is
-	# in a state where they can act.
 	var legal: bool = (not state.game_over) \
 		and (not state.has_pending_decisions()) \
 		and GameRules.can_puiser(state, state.active_player)
 	_btn_puiser.disabled = not legal
+	if legal:
+		_start_puiser_pulse()
+	else:
+		_stop_puiser_pulse()
+
+
+# Pulsing crimson/gold border around the Puiser button to grab attention
+# when it's the only legal action left for the active player. Implemented
+# as a looping Tween that interpolates a StyleBoxFlat — kept on the
+# pressed/hover/normal states so the glow doesn't drop on hover or click.
+func _start_puiser_pulse() -> void:
+	if _puiser_pulse_tween != null and _puiser_pulse_tween.is_valid():
+		return
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.18, 0.06, 0.10)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(6)
+	sb.set_content_margin_all(6)
+	sb.shadow_size = 8
+	sb.border_color = Color(0.95, 0.55, 0.20)
+	sb.shadow_color = Color(0.95, 0.55, 0.20, 0.6)
+	for state_name in ["normal", "hover", "pressed", "focus"]:
+		_btn_puiser.add_theme_stylebox_override(state_name, sb)
+	_btn_puiser.add_theme_color_override("font_color", Color(1, 0.95, 0.7))
+	# Animate the border + glow colour back and forth (golden ↔ crimson).
+	var tw := create_tween()
+	tw.set_loops()
+	tw.tween_method(_apply_puiser_pulse_phase.bind(sb), 0.0, 1.0, 0.7)
+	tw.tween_method(_apply_puiser_pulse_phase.bind(sb), 1.0, 0.0, 0.7)
+	_puiser_pulse_tween = tw
+
+
+func _apply_puiser_pulse_phase(sb: StyleBoxFlat, t: float) -> void:
+	var gold := Color(0.95, 0.65, 0.20)
+	var crim := Color(0.85, 0.18, 0.30)
+	var c := gold.lerp(crim, t)
+	sb.border_color = c
+	sb.shadow_color = Color(c.r, c.g, c.b, 0.55 + 0.30 * t)
+
+
+func _stop_puiser_pulse() -> void:
+	if _puiser_pulse_tween != null and _puiser_pulse_tween.is_valid():
+		_puiser_pulse_tween.kill()
+	_puiser_pulse_tween = null
+	for state_name in ["normal", "hover", "pressed", "focus"]:
+		_btn_puiser.remove_theme_stylebox_override(state_name)
+	_btn_puiser.remove_theme_color_override("font_color")
 
 
 func _refresh_status() -> void:
@@ -991,22 +1039,10 @@ func _on_btn_force_next_station() -> void:
 	_refresh_all()
 
 
-func _on_btn_pass() -> void:
-	if state.game_over:
-		return
-	if state.has_pending_decisions():
-		state.add_log(I18n.t("log.decision_pending"))
-		_refresh_log()
-		return
-	var result := manager.perform_action(GameEnums.ActionId.PASSER, {})
-	if not result.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
-	_refresh_all()
-
-
 # Puiser dans l'Ombre — only legal when the active player's available
-# Corruption is 0. Granted as a safety net so an empty pool doesn't soft-lock
-# the player into Pass-ing for the rest of the Station.
+# Corruption pool is at 0. The button is disabled the rest of the time so
+# the player can't trivially skip a turn — they have to either act or
+# exhaust their Réserve first.
 func _on_btn_puiser() -> void:
 	if state == null or state.game_over:
 		return
