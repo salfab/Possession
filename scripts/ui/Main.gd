@@ -996,9 +996,17 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	sb.set_content_margin_all(10)
 	panel.add_theme_stylebox_override("panel", sb)
 
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 12)
-	panel.add_child(hbox)
+	# Outer layout: top row (card image + status / flip), then a wide
+	# action row at the bottom of the item.
+	var item_vbox := VBoxContainer.new()
+	item_vbox.add_theme_constant_override("separation", 10)
+	item_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_child(item_vbox)
+
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 14)
+	top_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	item_vbox.add_child(top_row)
 
 	# Determine current face (Scandale by default; Infamie if any owner amplified it).
 	var owner: int = state.transgression_owner(tid)
@@ -1008,26 +1016,28 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		if inf_inst != null:
 			face = GameEnums.TransgressionFace.INFAMIE
 
-	# Card image (left) — clickable to view full-screen, flippable via right-column button.
+	# Card image — bigger thumbnail, clickable to open fullscreen / flippable.
 	var img := TextureButton.new()
 	img.ignore_texture_size = true
 	img.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-	img.custom_minimum_size = Vector2(180, 252)
+	img.custom_minimum_size = Vector2(240, 336)
 	img.tooltip_text = I18n.t("ui.tooltip.click_to_zoom")
-	img.mouse_filter = Control.MOUSE_FILTER_PASS  # let scroll-drag pass through
+	img.mouse_filter = Control.MOUSE_FILTER_PASS
 	img.set_meta("face", face)
 	img.set_meta("tid", tid)
 	img.texture_normal = CardImages.transgression(tid, face)
 	var captured_name: String = String(def.get("name", ""))
 	var captured_tid: String = tid
 	img.pressed.connect(_on_transgression_image_clicked.bind(img, captured_tid, captured_name))
-	hbox.add_child(img)
+	top_row.add_child(img)
 
-	# Right column: state badge + buttons + reason
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox.add_child(vbox)
+	# Right column next to the image: status badge + flip button + (if any)
+	# the "why disabled" hint.
+	var info_vbox := VBoxContainer.new()
+	info_vbox.add_theme_constant_override("separation", 10)
+	info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	top_row.add_child(info_vbox)
 
 	var state_lbl := Label.new()
 	if owner == GameEnums.PlayerId.NONE:
@@ -1040,48 +1050,21 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		else:
 			state_lbl.text = I18n.t("ui.transgression.state.owned", [I18n.t("face.scandale"), GameEnums.player_name(owner)])
 			state_lbl.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
-	state_lbl.add_theme_font_size_override("font_size", 22)
-	vbox.add_child(state_lbl)
+	state_lbl.add_theme_font_size_override("font_size", 30)
+	state_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_vbox.add_child(state_lbl)
 
-	# Flip button — toggle the displayed face between Scandale and Infamie
+	# Flip Scandale ↔ Infamie thumbnail
 	var flip_btn := Button.new()
-	flip_btn.add_theme_font_size_override("font_size", 16)
+	flip_btn.add_theme_font_size_override("font_size", 22)
+	flip_btn.custom_minimum_size = Vector2(0, 56)
 	flip_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	flip_btn.text = _flip_button_label(face)
 	flip_btn.pressed.connect(_on_transgression_flip_pressed.bind(img, flip_btn, tid))
-	vbox.add_child(flip_btn)
-
-	# Action buttons
-	var btn_row := HFlowContainer.new()
-	btn_row.add_theme_constant_override("h_separation", 6)
-	btn_row.add_theme_constant_override("v_separation", 6)
-	vbox.add_child(btn_row)
+	info_vbox.add_child(flip_btn)
 
 	var why_prov: String = GameRules.why_cannot_provoquer(state, player, tid)
-	var origins: Array = GameRules.transgression_origin_options(player, tid)
-	for origin_d in origins:
-		var btn := Button.new()
-		var origin_int: int = origin_d
-		if origins.size() > 1:
-			btn.text = I18n.t("ui.transgression.btn.provoke_in", [GameEnums.DOMAIN_NAMES[origin_d]])
-		else:
-			btn.text = I18n.t("ui.transgression.btn.provoke")
-		btn.disabled = (why_prov != "")
-		btn.mouse_filter = Control.MOUSE_FILTER_PASS
-		btn.add_theme_font_size_override("font_size", 18)
-		btn.tooltip_text = why_prov
-		btn.pressed.connect(func(): _on_provoquer_clicked(tid, origin_int))
-		btn_row.add_child(btn)
-
 	var why_amp: String = GameRules.why_cannot_amplifier(state, player, tid)
-	var amp_btn := Button.new()
-	amp_btn.text = I18n.t("ui.transgression.btn.amplify")
-	amp_btn.disabled = (why_amp != "")
-	amp_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	amp_btn.add_theme_font_size_override("font_size", 18)
-	amp_btn.tooltip_text = why_amp
-	amp_btn.pressed.connect(func(): _on_amplifier_clicked(tid))
-	btn_row.add_child(amp_btn)
 
 	if why_prov != "" or why_amp != "":
 		var hint := Label.new()
@@ -1094,14 +1077,49 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 			bits += "%s : %s" % [I18n.t("ui.transgression.btn.amplify"), why_amp]
 		hint.text = bits
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hint.add_theme_font_size_override("font_size", 15)
-		hint.add_theme_color_override("font_color", Color(0.85, 0.5, 0.5))
-		vbox.add_child(hint)
+		hint.add_theme_font_size_override("font_size", 22)
+		hint.add_theme_color_override("font_color", Color(0.85, 0.55, 0.55))
+		info_vbox.add_child(hint)
 
-	# Push content to top of the right column
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(spacer)
+	# Push the info column's contents to the top so the image height defines
+	# the row, not random expansion of buttons inside the info column.
+	var info_spacer := Control.new()
+	info_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info_vbox.add_child(info_spacer)
+
+	# Action row at the BOTTOM of the item — full width, big targets.
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 10)
+	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	item_vbox.add_child(action_row)
+
+	var origins: Array = GameRules.transgression_origin_options(player, tid)
+	for origin_d in origins:
+		var btn := Button.new()
+		var origin_int: int = origin_d
+		if origins.size() > 1:
+			btn.text = I18n.t("ui.transgression.btn.provoke_in", [GameEnums.DOMAIN_NAMES[origin_d]])
+		else:
+			btn.text = I18n.t("ui.transgression.btn.provoke")
+		btn.disabled = (why_prov != "")
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
+		btn.add_theme_font_size_override("font_size", 26)
+		btn.custom_minimum_size = Vector2(0, 72)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.tooltip_text = why_prov
+		btn.pressed.connect(func(): _on_provoquer_clicked(tid, origin_int))
+		action_row.add_child(btn)
+
+	var amp_btn := Button.new()
+	amp_btn.text = I18n.t("ui.transgression.btn.amplify")
+	amp_btn.disabled = (why_amp != "")
+	amp_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	amp_btn.add_theme_font_size_override("font_size", 26)
+	amp_btn.custom_minimum_size = Vector2(0, 72)
+	amp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	amp_btn.tooltip_text = why_amp
+	amp_btn.pressed.connect(func(): _on_amplifier_clicked(tid))
+	action_row.add_child(amp_btn)
 
 	# Let drag events bubble up to the parent ScrollContainer (Labels and
 	# basic Controls default to MOUSE_FILTER_STOP, which would swallow the
