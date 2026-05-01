@@ -813,15 +813,25 @@ func _on_domain_clicked(d_id: int) -> void:
 	for idx in POPUP_ACTIONS.size():
 		var aid: int = POPUP_ACTIONS[idx]
 		var why: String = ""
+		var label_str: String
 		if aid == GameEnums.ActionId.INVESTIR:
 			why = GameRules.why_cannot_investir(state, p, d_id)
+			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
 		elif aid == GameEnums.ActionId.EXPLOITER:
 			why = GameRules.why_cannot_exploiter(state, p, d_id)
+			# Show the actual gain so the player doesn't have to guess.
+			var gain: int = GameRules.production_of(state, d_id, p)
+			label_str = I18n.t("ui.popup.exploit_gain", [
+				GameEnums.DOMAIN_NAMES[d_id], gain, ("s" if gain != 1 else ""),
+			])
 		elif aid == GameEnums.ActionId.SCELLER:
 			why = GameRules.why_cannot_sceller(state, p, d_id)
+			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
 		elif aid == GameEnums.ActionId.FISSURER:
 			why = GameRules.why_cannot_fissurer(state, p, d_id)
-		var label_str: String = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
+			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
+		else:
+			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
 		if why != "":
 			label_str += "  —  " + why
 		_action_popup.set_item_text(idx, label_str)
