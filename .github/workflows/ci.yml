@@ -112,20 +112,43 @@ jobs:
           mv "${EXPORT_DIR}/index.html.new" "${EXPORT_DIR}/index.html"
           grep -q 'possession-loading-style' "${EXPORT_DIR}/index.html"
 
-      - name: Inject COI service worker for hosts without custom headers (GitHub Pages, itch.io)
-        # Godot 4.2 Web exports require SharedArrayBuffer, which requires COOP/COEP
-        # response headers. GitHub Pages and itch.io can't set them, so we use the
-        # standard `coi-serviceworker` workaround: a service worker that re-injects
-        # the headers client-side. Source: https://github.com/gzuidhof/coi-serviceworker
-        # The file is vendored at web_assets/coi-serviceworker.js — no curl/wget
-        # required (barichello/godot-ci doesn't ship them).
+      - name: Install combined service worker (COOP/COEP + offline cache) and PWA manifest
+        # The Godot 4.2 web build needs SharedArrayBuffer, which requires
+        # Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy response
+        # headers. GitHub Pages / itch.io can't set them, so we inject them
+        # client-side via a service worker (standard coi-serviceworker
+        # pattern). The same SW also pre-caches every export file so the game
+        # is fully playable offline once it has been loaded — including a
+        # reload with no network. Cache name is SHA-versioned, so a fresh
+        # deploy invalidates old caches automatically.
+        # The web app manifest lets browsers offer "Add to home screen" /
+        # "Install app"; once installed the game launches in standalone mode.
         run: |
           set -e
-          cp web_assets/coi-serviceworker.js ${EXPORT_DIR}/coi-serviceworker.js
-          # Register the service worker as the very first script in <head>.
-          # Tolerate <head> with or without attributes.
-          sed -i -E 's|<head([^>]*)>|<head\1>\n<script src="coi-serviceworker.js"></script>|' ${EXPORT_DIR}/index.html
-          grep -q 'coi-serviceworker.js' ${EXPORT_DIR}/index.html
+          # Copy the manifest in first so it's part of the precache list.
+          cp web_assets/manifest.json "${EXPORT_DIR}/manifest.json"
+          # Build a JSON array of every file in the export folder (paths
+          # relative to the export root, with leading "./"). Skip sw.js
+          # itself so the SW doesn't try to cache its own old version, and
+          # skip _headers (Netlify-only directives).
+          PRECACHE='['
+          SEP=''
+          while IFS= read -r f; do
+            PRECACHE="${PRECACHE}${SEP}\"${f}\""
+            SEP=','
+          done < <(cd "${EXPORT_DIR}" && find . -type f \
+              -not -name 'sw.js' -not -name '_headers' | LC_ALL=C sort)
+          if [ -n "$SEP" ]; then PRECACHE="${PRECACHE},"; fi
+          PRECACHE="${PRECACHE}\"./\"]"
+          SHA="$(echo "$GITHUB_SHA" | cut -c1-7)"
+          # Use # as sed delimiter (paths contain /).
+          sed -e "s#__SHA__#${SHA}#g" \
+              -e "s#__PRECACHE_LIST__#${PRECACHE}#g" \
+              web_assets/sw.js > "${EXPORT_DIR}/sw.js"
+          # Register the SW + link the manifest at the start of <head>.
+          sed -i -E 's|<head([^>]*)>|<head\1>\n<link rel="manifest" href="manifest.json">\n<meta name="theme-color" content="#4a0e5e">\n<script src="sw.js"></script>|' "${EXPORT_DIR}/index.html"
+          grep -q 'sw.js' "${EXPORT_DIR}/index.html"
+          grep -q 'manifest.json' "${EXPORT_DIR}/index.html"
 
       - name: Inject version banner + service worker reset button
         # Banner HTML/JS injecté dans <body> AVANT que Godot ne se charge.
