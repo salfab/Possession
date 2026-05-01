@@ -234,6 +234,7 @@ func _build_liturgy_dialog() -> void:
 	_liturgy_dialog.min_size = Vector2i(820, 520)
 	_liturgy_dialog.confirmed.connect(_on_liturgy_acknowledged)
 	add_child(_liturgy_dialog)
+	_make_dialog_touch_friendly(_liturgy_dialog)
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 16)
@@ -553,6 +554,7 @@ func _build_decision_dialog() -> void:
 	_decision_dialog.min_size = Vector2i(560, 420)
 	_decision_dialog.confirmed.connect(_on_decision_skip)
 	add_child(_decision_dialog)
+	_make_dialog_touch_friendly(_decision_dialog)
 	_decision_content = VBoxContainer.new()
 	_decision_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_decision_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -681,6 +683,7 @@ func _build_endgame_dialog() -> void:
 	_endgame_dialog.min_size = Vector2i(880, 540)
 	_endgame_dialog.confirmed.connect(_on_endgame_acknowledged)
 	add_child(_endgame_dialog)
+	_make_dialog_touch_friendly(_endgame_dialog)
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 16)
@@ -763,6 +766,7 @@ func _build_transgressions_dialog() -> void:
 	_trans_dialog.dialog_text = ""
 	_trans_dialog.min_size = Vector2i(720, 520)
 	add_child(_trans_dialog)
+	_make_dialog_touch_friendly(_trans_dialog)
 	_trans_scroll = ScrollContainer.new()
 	_trans_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_trans_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -931,6 +935,18 @@ func _set_pass_through(node: Node) -> void:
 		_set_pass_through(child)
 
 
+# Make AcceptDialog buttons + title-bar comfortable for fat fingers on a phone.
+# Apply after add_child(dlg) so the OK button exists.
+func _make_dialog_touch_friendly(dlg: AcceptDialog) -> void:
+	var ok_btn: Button = dlg.get_ok_button()
+	if ok_btn != null:
+		ok_btn.add_theme_font_size_override("font_size", 24)
+		ok_btn.custom_minimum_size = Vector2(160, 64)
+	# Taller title bar → larger touch zone around the close X.
+	dlg.add_theme_constant_override("title_height", 48)
+	dlg.add_theme_font_size_override("title_font_size", 22)
+
+
 # ─── FULLSCREEN CARD VIEWER ───────────────────────────────────────────────────
 
 func _build_fullscreen_card_dialog() -> void:
@@ -941,6 +957,7 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_dialog.dialog_text = ""
 	_fullscreen_card_dialog.min_size = Vector2i(360, 440)
 	add_child(_fullscreen_card_dialog)
+	_make_dialog_touch_friendly(_fullscreen_card_dialog)
 
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
