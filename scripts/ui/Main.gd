@@ -14,13 +14,13 @@ const SAVE_PATH := "user://save_game.json"
 # If the alignment is still off, toggle the "Hot" debug button in the
 # bottom bar to see the hit areas overlaid in cyan.
 const DOMAIN_POS := {
-	GameEnums.DomainId.AMBITION: Vector2(0.540, 0.265),
-	GameEnums.DomainId.FOI:      Vector2(0.345, 0.485),
-	GameEnums.DomainId.VOLONTE:  Vector2(0.540, 0.540),
-	GameEnums.DomainId.DESIR:    Vector2(0.730, 0.485),
-	GameEnums.DomainId.PEUR:     Vector2(0.540, 0.705),
+	GameEnums.DomainId.AMBITION: Vector2(0.540, 0.240),
+	GameEnums.DomainId.FOI:      Vector2(0.345, 0.460),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.540, 0.515),
+	GameEnums.DomainId.DESIR:    Vector2(0.730, 0.460),
+	GameEnums.DomainId.PEUR:     Vector2(0.540, 0.680),
 }
-const DOMAIN_HALF := Vector2(0.065, 0.105)
+const DOMAIN_HALF := Vector2(0.065, 0.100)
 
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
