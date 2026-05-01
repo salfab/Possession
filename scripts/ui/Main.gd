@@ -51,6 +51,15 @@ var _endgame_shown: bool = false
 var _trans_dialog: AcceptDialog
 var _trans_content: VBoxContainer
 var _trans_scroll: ScrollContainer
+
+# Per-player owned-transgressions side panels (top/bottom in portrait,
+# left/right in landscape). Each panel lists the names of the
+# transgressions the player owns; tapping a name opens the fullscreen
+# flippable card view.
+var _player_panel_red: PanelContainer
+var _player_panel_blue: PanelContainer
+var _player_list_red: HFlowContainer
+var _player_list_blue: HFlowContainer
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_image: TextureRect
 var _fullscreen_card_flip_btn: Button
@@ -203,6 +212,9 @@ func _build_overlays() -> void:
 	# Bottom debug bar (top-level Control overlay, not in stage)
 	_build_debug_bar()
 
+	# Per-player transgression side panels (around the board)
+	_build_player_transgression_panels()
+
 	# Log panel (right side, hidden by default; toggled with a button)
 	_build_log_panel()
 
@@ -342,6 +354,7 @@ func _refresh_all() -> void:
 	_refresh_status()
 	_refresh_overlays()
 	_refresh_log()
+	_refresh_player_transgression_panels()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
 	_maybe_show_endgame_dialog()
@@ -382,6 +395,147 @@ func _refresh_overlays() -> void:
 		state.available_corruption[GameEnums.PlayerId.RED],
 		state.available_corruption[GameEnums.PlayerId.BLUE],
 	]
+
+
+# ─── Per-player owned-transgressions side panels ──────────────────────────────
+
+func _build_player_transgression_panels() -> void:
+	_player_panel_red = _build_player_panel(GameEnums.PlayerId.RED,  Color(1.0, 0.45, 0.45))
+	_player_panel_blue = _build_player_panel(GameEnums.PlayerId.BLUE, Color(0.50, 0.70, 1.0))
+	add_child(_player_panel_red)
+	add_child(_player_panel_blue)
+	_player_list_red = _player_panel_red.get_node("VBox/Scroll/List")
+	_player_list_blue = _player_panel_blue.get_node("VBox/Scroll/List")
+	# React to viewport rotation / window resize
+	get_viewport().size_changed.connect(_layout_player_transgression_panels)
+	_layout_player_transgression_panels()
+
+
+func _build_player_panel(pid: int, accent: Color) -> PanelContainer:
+	var panel := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.04, 0.10, 0.85)
+	sb.border_color = accent
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(6)
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var vbox := VBoxContainer.new()
+	vbox.name = "VBox"
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 4)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.name = "Title"
+	title.text = GameEnums.player_name(pid)
+	title.add_theme_color_override("font_color", accent)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 4)
+	title.add_theme_font_size_override("font_size", 18)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(scroll)
+
+	var list := HFlowContainer.new()
+	list.name = "List"
+	list.add_theme_constant_override("h_separation", 4)
+	list.add_theme_constant_override("v_separation", 4)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+
+	return panel
+
+
+func _layout_player_transgression_panels() -> void:
+	if _player_panel_red == null or _player_panel_blue == null:
+		return
+	var vp: Vector2 = get_viewport_rect().size
+	var portrait: bool = vp.y > vp.x
+	if portrait:
+		# Top strip (Red) and bottom strip (Blue), full width.
+		# Sandwich between the status label (~0..0.08) and the ascendant
+		# label (~0.78..0.86) / debug bar at the bottom.
+		_set_anchors(_player_panel_red,  0.0, 0.08, 1.0, 0.20, 4, 4, 0, -2)
+		_set_anchors(_player_panel_blue, 0.0, 0.65, 1.0, 0.77, 4, -2, 0, 0)
+	else:
+		# Left column (Red) and right column (Blue).
+		_set_anchors(_player_panel_red,  0.0, 0.10, 0.16, 0.90, 4, 4, -4, -4)
+		_set_anchors(_player_panel_blue, 0.84, 0.10, 1.0, 0.90, 4, 4, -4, -4)
+
+
+func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
+		ol: float, ot: float, orr: float, ob: float) -> void:
+	c.anchor_left = al
+	c.anchor_top = at
+	c.anchor_right = ar
+	c.anchor_bottom = ab
+	c.offset_left = ol
+	c.offset_top = ot
+	c.offset_right = orr
+	c.offset_bottom = ob
+
+
+func _refresh_player_transgression_panels() -> void:
+	if _player_list_red == null or _player_list_blue == null:
+		return
+	for c in _player_list_red.get_children():
+		c.queue_free()
+	for c in _player_list_blue.get_children():
+		c.queue_free()
+	if state == null:
+		return
+	for tid in TransgressionData.ALL_IDS:
+		var owner: int = state.transgression_owner(tid)
+		if owner == GameEnums.PlayerId.NONE:
+			continue
+		var def: Dictionary = TransgressionData.get_def(tid)
+		var inst_inf: GameState.TransgressionInstance = state.find_transgression_instance(owner, tid, GameEnums.TransgressionFace.INFAMIE)
+		var face: int = GameEnums.TransgressionFace.INFAMIE if inst_inf != null else GameEnums.TransgressionFace.SCANDALE
+		var btn := Button.new()
+		var name_str: String = String(def.get("name", tid))
+		btn.text = name_str
+		btn.add_theme_font_size_override("font_size", 14)
+		btn.tooltip_text = "Cliquer pour voir la carte"
+		# Magenta if the transgression has been amplified to Infamie, warm orange for Scandale.
+		var fcol: Color = Color(1.0, 0.55, 1.0) if face == GameEnums.TransgressionFace.INFAMIE else Color(1.0, 0.78, 0.45)
+		btn.add_theme_color_override("font_color", fcol)
+		btn.pressed.connect(_on_player_transgression_clicked.bind(String(tid), face, name_str))
+		if owner == GameEnums.PlayerId.RED:
+			_player_list_red.add_child(btn)
+		else:
+			_player_list_blue.add_child(btn)
+	# Show "(aucune)" hint when empty so players know the panel is theirs.
+	if _player_list_red.get_child_count() == 0:
+		_player_list_red.add_child(_make_empty_hint())
+	if _player_list_blue.get_child_count() == 0:
+		_player_list_blue.add_child(_make_empty_hint())
+
+
+func _make_empty_hint() -> Label:
+	var lbl := Label.new()
+	lbl.text = "(aucune)"
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
+	return lbl
+
+
+func _on_player_transgression_clicked(tid: String, face: int, name_str: String) -> void:
+	var tex_s: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
+	var tex_i: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
+	if face == GameEnums.TransgressionFace.SCANDALE:
+		_show_fullscreen_card_flippable(tex_s, "Voir Infamie ↻", tex_i, "Voir Scandale ↻", name_str)
+	else:
+		_show_fullscreen_card_flippable(tex_i, "Voir Scandale ↻", tex_s, "Voir Infamie ↻", name_str)
 
 
 func _refresh_log() -> void:
