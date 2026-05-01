@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://possession_main"]
 
 [ext_resource type="Script" path="res://scripts/ui/Main.gd" id="1_main"]
-[ext_resource type="Texture2D" path="res://assets/board.png" id="2_board"]
+[ext_resource type="Texture2D" path="res://assets/board.jpg" id="2_board"]
 
 [node name="Main" type="Control"]
 anchor_right = 1.0
