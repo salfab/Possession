@@ -1595,6 +1595,11 @@ func _set_pass_through(node: Node) -> void:
 # Make AcceptDialog buttons + title-bar comfortable for fat fingers on a phone.
 # Apply after add_child(dlg) so the OK button exists.
 func _make_dialog_touch_friendly(dlg: AcceptDialog) -> void:
+	# wrap_controls = true (the default) makes the Window auto-shrink to its
+	# content's minimum size, which silently overrides the size we hand to
+	# popup_centered_ratio / popup(rect) later. Force it off so the popup
+	# helpers get to set the actual on-screen size.
+	dlg.wrap_controls = false
 	var ok_btn: Button = dlg.get_ok_button()
 	if ok_btn != null:
 		ok_btn.add_theme_font_size_override("font_size", 24)
