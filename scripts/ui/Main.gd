@@ -1592,21 +1592,25 @@ func _set_pass_through(node: Node) -> void:
 		_set_pass_through(child)
 
 
-# Make AcceptDialog buttons + title-bar comfortable for fat fingers on a phone.
+# Make AcceptDialog buttons comfortable for fat fingers on a phone, and force
+# the window into a behaviour that respects the size we hand to popup(...).
 # Apply after add_child(dlg) so the OK button exists.
 func _make_dialog_touch_friendly(dlg: AcceptDialog) -> void:
 	# wrap_controls = true (the default) makes the Window auto-shrink to its
 	# content's minimum size, which silently overrides the size we hand to
-	# popup_centered_ratio / popup(rect) later. Force it off so the popup
-	# helpers get to set the actual on-screen size.
+	# popup_centered_ratio / popup(rect). Force it off so popup-helper sizes
+	# actually stick.
 	dlg.wrap_controls = false
+	# Drop the window decoration (title bar + corner X). On phones the title
+	# bar visually reads as "extra margin at the top of the modal", and the
+	# OK button at the bottom does the same close job as the X. Saves ~48 px
+	# of vertical space too, which is what was getting clipped on small
+	# screens.
+	dlg.borderless = true
 	var ok_btn: Button = dlg.get_ok_button()
 	if ok_btn != null:
 		ok_btn.add_theme_font_size_override("font_size", 24)
 		ok_btn.custom_minimum_size = Vector2(160, 64)
-	# Taller title bar → larger touch zone around the close X.
-	dlg.add_theme_constant_override("title_height", 48)
-	dlg.add_theme_font_size_override("title_font_size", 22)
 
 
 # ─── FULLSCREEN CARD VIEWER ───────────────────────────────────────────────────
