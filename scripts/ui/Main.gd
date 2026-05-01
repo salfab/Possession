@@ -53,6 +53,11 @@ var _trans_content: VBoxContainer
 var _trans_scroll: ScrollContainer
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_image: TextureRect
+var _fullscreen_card_flip_btn: Button
+var _fullscreen_card_tex_a: Texture2D
+var _fullscreen_card_tex_b: Texture2D
+var _fullscreen_card_label_to_a: String
+var _fullscreen_card_label_to_b: String
 
 # Zoom / pan state
 var _zoom: float = 1.0
@@ -168,7 +173,9 @@ func _build_overlays() -> void:
 	_status_label.anchor_top = 0.0
 	_status_label.anchor_bottom = 0.08
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	_status_label.tooltip_text = "Cliquer pour voir la Réponse liturgique de la Station"
+	_status_label.gui_input.connect(_on_status_label_input)
 	_status_label.add_theme_color_override("font_color", Color(1, 0.95, 0.7))
 	_status_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_status_label.add_theme_constant_override("outline_size", 5)
@@ -516,6 +523,10 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 	var img_tex: Texture2D = CardImages.liturgy(resp_id, imp) if resp_id != "" else null
 	_liturgy_image.texture_normal = img_tex
 	_liturgy_image.visible = (img_tex != null)
+	# Stash for the fullscreen flip viewer when the image is clicked.
+	_liturgy_image.set_meta("resp_id", resp_id)
+	_liturgy_image.set_meta("impedita", imp)
+	_liturgy_image.set_meta("name", resp_name)
 	# Text panel
 	_liturgy_rtl.clear()
 	_liturgy_rtl.append_text("[font_size=30][b]%s[/b][/font_size]\n" % resp_name)
@@ -819,7 +830,8 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	img.set_meta("tid", tid)
 	img.texture_normal = CardImages.transgression(tid, face)
 	var captured_name: String = String(def.get("name", ""))
-	img.pressed.connect(func(): _show_fullscreen_card(img.texture_normal, captured_name))
+	var captured_tid: String = tid
+	img.pressed.connect(_on_transgression_image_clicked.bind(img, captured_tid, captured_name))
 	hbox.add_child(img)
 
 	# Right column: state badge + buttons + reason
@@ -846,14 +858,8 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	var flip_btn := Button.new()
 	flip_btn.add_theme_font_size_override("font_size", 16)
 	flip_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	flip_btn.text = "Voir Infamie ↻" if face == GameEnums.TransgressionFace.SCANDALE else "Voir Scandale ↻"
-	flip_btn.pressed.connect(func():
-		var cur: int = img.get_meta("face")
-		var nxt: int = GameEnums.TransgressionFace.INFAMIE if cur == GameEnums.TransgressionFace.SCANDALE else GameEnums.TransgressionFace.SCANDALE
-		img.set_meta("face", nxt)
-		img.texture_normal = CardImages.transgression(tid, nxt)
-		flip_btn.text = "Voir Infamie ↻" if nxt == GameEnums.TransgressionFace.SCANDALE else "Voir Scandale ↻"
-	)
+	flip_btn.text = _flip_button_label(face)
+	flip_btn.pressed.connect(_on_transgression_flip_pressed.bind(img, flip_btn, tid))
 	vbox.add_child(flip_btn)
 
 	# Action buttons
@@ -935,26 +941,151 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_dialog.dialog_text = ""
 	_fullscreen_card_dialog.min_size = Vector2i(360, 440)
 	add_child(_fullscreen_card_dialog)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 8)
+	_fullscreen_card_dialog.add_child(vbox)
+
 	_fullscreen_card_image = TextureRect.new()
 	_fullscreen_card_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_fullscreen_card_image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fullscreen_card_image.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_fullscreen_card_image.custom_minimum_size = Vector2(340, 420)
-	_fullscreen_card_dialog.add_child(_fullscreen_card_image)
+	vbox.add_child(_fullscreen_card_image)
+
+	_fullscreen_card_flip_btn = Button.new()
+	_fullscreen_card_flip_btn.add_theme_font_size_override("font_size", 18)
+	_fullscreen_card_flip_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_fullscreen_card_flip_btn.visible = false
+	_fullscreen_card_flip_btn.pressed.connect(_on_fullscreen_card_flip_pressed)
+	vbox.add_child(_fullscreen_card_flip_btn)
 
 
 func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte") -> void:
 	if tex == null:
 		return
 	_fullscreen_card_image.texture = tex
+	_fullscreen_card_flip_btn.visible = false
 	_fullscreen_card_dialog.title = title_str
-	_fullscreen_card_dialog.popup_centered_ratio(0.95)
+	_popup_dialog_fullscreen(_fullscreen_card_dialog)
+
+
+# Show a flippable pair. tex_a is shown first; the button label is what the
+# user clicks to switch (so when tex_a is up, label = "Voir <B> ↻").
+func _show_fullscreen_card_flippable(tex_a: Texture2D, label_to_b: String,
+		tex_b: Texture2D, label_to_a: String, title_str: String) -> void:
+	if tex_a == null and tex_b == null:
+		return
+	# Fallback if one face is missing
+	if tex_a == null:
+		_show_fullscreen_card(tex_b, title_str)
+		return
+	if tex_b == null:
+		_show_fullscreen_card(tex_a, title_str)
+		return
+	_fullscreen_card_tex_a = tex_a
+	_fullscreen_card_tex_b = tex_b
+	_fullscreen_card_label_to_a = label_to_a
+	_fullscreen_card_label_to_b = label_to_b
+	_fullscreen_card_image.texture = tex_a
+	_fullscreen_card_flip_btn.text = label_to_b
+	_fullscreen_card_flip_btn.visible = true
+	_fullscreen_card_dialog.title = title_str
+	_popup_dialog_fullscreen(_fullscreen_card_dialog)
+
+
+func _on_fullscreen_card_flip_pressed() -> void:
+	if _fullscreen_card_image.texture == _fullscreen_card_tex_a:
+		_fullscreen_card_image.texture = _fullscreen_card_tex_b
+		_fullscreen_card_flip_btn.text = _fullscreen_card_label_to_a
+	else:
+		_fullscreen_card_image.texture = _fullscreen_card_tex_a
+		_fullscreen_card_flip_btn.text = _fullscreen_card_label_to_b
+
+
+func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
+	var vp_size: Vector2 = get_viewport_rect().size
+	dlg.size = vp_size
+	dlg.popup(Rect2i(Vector2i.ZERO, Vector2i(vp_size)))
+
+
+# ─── Transgression catalog: per-card flip + image-click handlers ──────────────
+
+func _flip_button_label(face: int) -> String:
+	return "Voir Infamie ↻" if face == GameEnums.TransgressionFace.SCANDALE else "Voir Scandale ↻"
+
+
+func _on_transgression_flip_pressed(img: TextureButton, btn: Button, tid: String) -> void:
+	var cur: int = img.get_meta("face", GameEnums.TransgressionFace.SCANDALE)
+	var nxt: int = GameEnums.TransgressionFace.INFAMIE if cur == GameEnums.TransgressionFace.SCANDALE else GameEnums.TransgressionFace.SCANDALE
+	img.set_meta("face", nxt)
+	img.texture_normal = CardImages.transgression(tid, nxt)
+	btn.text = _flip_button_label(nxt)
+
+
+func _on_transgression_image_clicked(img: TextureButton, tid: String, name_str: String) -> void:
+	var cur: int = img.get_meta("face", GameEnums.TransgressionFace.SCANDALE)
+	var tex_scandale: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.SCANDALE)
+	var tex_infamie: Texture2D = CardImages.transgression(tid, GameEnums.TransgressionFace.INFAMIE)
+	if cur == GameEnums.TransgressionFace.SCANDALE:
+		_show_fullscreen_card_flippable(tex_scandale, "Voir Infamie ↻", tex_infamie, "Voir Scandale ↻", name_str)
+	else:
+		_show_fullscreen_card_flippable(tex_infamie, "Voir Scandale ↻", tex_scandale, "Voir Infamie ↻", name_str)
+
+
+# ─── Status label: clickable → fullscreen liturgical card for current station ─
+
+func _on_status_label_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			_show_current_station_card()
+	elif event is InputEventScreenTouch:
+		var st: InputEventScreenTouch = event
+		if st.pressed:
+			_show_current_station_card()
+
+
+func _show_current_station_card() -> void:
+	if state == null or state.game_over:
+		return
+	var st: int = state.current_station
+	var resp: Dictionary = LiturgicalResponseData.get_response(st)
+	if resp.is_empty():
+		return
+	var resp_id: String = String(resp.get("id", ""))
+	if resp_id == "":
+		return
+	var resp_name: String = String(resp.get("name", ""))
+	var st_name: String = GameEnums.STATION_NAMES.get(st, "")
+	var title_str: String = "%s — %s" % [st_name, resp_name] if st_name != "" else resp_name
+	var tex_in_integro: Texture2D = CardImages.liturgy(resp_id, false)
+	var tex_impedita: Texture2D = CardImages.liturgy(resp_id, true)
+	_show_fullscreen_card_flippable(
+		tex_in_integro, "Voir Impedita ↻",
+		tex_impedita,   "Voir In Integro ↻",
+		title_str
+	)
 
 
 func _on_liturgy_image_clicked() -> void:
-	if _liturgy_image.texture_normal != null:
+	if _liturgy_image.texture_normal == null:
+		return
+	var resp_id: String = String(_liturgy_image.get_meta("resp_id", ""))
+	if resp_id == "":
 		_show_fullscreen_card(_liturgy_image.texture_normal, _liturgy_dialog.title)
+		return
+	var imp: bool = bool(_liturgy_image.get_meta("impedita", false))
+	var name_str: String = String(_liturgy_image.get_meta("name", ""))
+	var tex_in_integro: Texture2D = CardImages.liturgy(resp_id, false)
+	var tex_impedita: Texture2D = CardImages.liturgy(resp_id, true)
+	if imp:
+		_show_fullscreen_card_flippable(tex_impedita, "Voir In Integro ↻", tex_in_integro, "Voir Impedita ↻", name_str)
+	else:
+		_show_fullscreen_card_flippable(tex_in_integro, "Voir Impedita ↻", tex_impedita, "Voir In Integro ↻", name_str)
 
 
 func _on_endgame_image_clicked() -> void:
