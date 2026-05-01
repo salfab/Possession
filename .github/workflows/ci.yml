@@ -7,6 +7,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Serialize per branch / PR / tag, and cancel in-progress runs when a newer
+# commit is pushed. Without this, two pushes a few minutes apart produced
+# two parallel workflows; if the older one finished its build last, it
+# could overwrite the newer one's deploy on GitHub Pages.
+# Tags get their own group (no cancellation across releases).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 # All jobs share the same Godot version. Bump here to upgrade.
 env:
   GODOT_VERSION: "4.2.2"
