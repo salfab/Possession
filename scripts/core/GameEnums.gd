@@ -17,6 +17,7 @@ enum ActionId {
 	FISSURER,
 	ENTRAVER,
 	PASSER,
+	PUISER,
 }
 
 enum TransgressionFace { NONE, SCANDALE, INFAMIE }
@@ -71,6 +72,7 @@ const ACTION_NAME_KEYS := {
 	ActionId.FISSURER:  "action.fissurer",
 	ActionId.ENTRAVER:  "action.entraver",
 	ActionId.PASSER:    "action.passer",
+	ActionId.PUISER:    "action.puiser",
 }
 
 # Backwards-compat dynamic dicts (built lazily — always reflect current locale).

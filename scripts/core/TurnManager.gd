@@ -51,6 +51,8 @@ func perform_action(action: int, kwargs: Dictionary = {}) -> Dictionary:
 			result = ActionResolver.entraver(state, p, kwargs.get("station", -1))
 		GameEnums.ActionId.PASSER:
 			result = ActionResolver.passer(state, p)
+		GameEnums.ActionId.PUISER:
+			result = ActionResolver.puiser(state, p)
 		_:
 			result = ActionResolver.fail("Action inconnue.")
 	if result.get("ok", false):

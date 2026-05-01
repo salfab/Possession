@@ -150,6 +150,17 @@ static func passer(state: GameState, player: int) -> Dictionary:
 	state.add_log("%s passe." % GameEnums.player_name(player))
 	return ok("Passé.")
 
+# --- Puiser dans l'Ombre ---------------------------------------------------
+# Last-resort safety net so a 0-Corruption player isn't stuck Pass-ing for
+# the rest of the Station. Only legal when their pool is at 0; grants 1
+# available Corruption.
+static func puiser(state: GameState, player: int) -> Dictionary:
+	if not GameRules.can_puiser(state, player):
+		return fail(I18n.t("err.puiser_only_when_empty"))
+	state.add_corruption_pool(player, 1)
+	state.add_log(I18n.t("log.puiser", [GameEnums.player_name(player)]))
+	return ok("+1 Corruption.")
+
 # --- Helpers : Briser la Domination ----------------------------------------
 
 # Reduce dominant player's corruption in d_id until net domination is broken (< 2 lead).
