@@ -39,7 +39,7 @@ var pending_kwargs: Dictionary = {}
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
 var _debug_hotspots: bool = false   # cyan outline overlay for calibration
-var _domain_labels: Dictionary = {} # domain_id -> Label (badges only — controller / sealed / penitence)
+var _domain_badges: Dictionary = {} # domain_id -> DomainBadges (drawn controller/sealed/penitence indicators)
 var _domain_dots: Dictionary = {}   # domain_id -> CorruptionDots
 var _domain_marker_rows: Dictionary = {} # domain_id -> HFlowContainer (owned-Transgression chips)
 var _status_label: Label
@@ -190,51 +190,54 @@ func _build_overlays() -> void:
 		_zoom_layer.add_child(btn)
 		_hotspots[d_id] = btn
 
-		var info_row := HBoxContainer.new()
-		info_row.anchor_left = pos.x - DOMAIN_HALF.x
-		info_row.anchor_right = pos.x + DOMAIN_HALF.x
-		info_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.04
-		info_row.anchor_bottom = pos.y + DOMAIN_HALF.y
-		info_row.offset_left = 0
-		info_row.offset_right = 0
-		info_row.offset_top = 0
-		info_row.offset_bottom = 0
-		info_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		info_row.add_theme_constant_override("separation", 6)
-		info_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_zoom_layer.add_child(info_row)
+		# Two-row layout for the bottom strip of each Domain hotspot :
+		#   Row A (top, ~6 % of board height) : transgression markers
+		#       (Scandale circles, Infamie diamonds) and corruption squares.
+		#   Row B (bottom, ~4 %)              : DomainBadges — controller /
+		#       sealed / penitence drawn as primitives so they don't depend
+		#       on font glyph coverage.
+		# Both anchored as children of _zoom_layer so they zoom with the board.
 
+		var chip_row := HFlowContainer.new()
+		chip_row.anchor_left = pos.x - DOMAIN_HALF.x
+		chip_row.anchor_right = pos.x + DOMAIN_HALF.x
+		chip_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.10
+		chip_row.anchor_bottom = pos.y + DOMAIN_HALF.y - 0.04
+		chip_row.offset_left = 0
+		chip_row.offset_right = 0
+		chip_row.offset_top = 0
+		chip_row.offset_bottom = 0
+		chip_row.alignment = HFlowContainer.ALIGNMENT_CENTER
+		chip_row.add_theme_constant_override("h_separation", 4)
+		chip_row.add_theme_constant_override("v_separation", 2)
+		chip_row.mouse_filter = Control.MOUSE_FILTER_PASS
+		_zoom_layer.add_child(chip_row)
+		_domain_marker_rows[d_id] = chip_row
+
+		# CorruptionDots is persistent — kept across refreshes — so it is
+		# created here and re-attached at the end of the chip row whenever
+		# _refresh_domain_markers rebuilds the marker chips.
 		var dots := CorruptionDots.new()
-		info_row.add_child(dots)
+		chip_row.add_child(dots)
 		_domain_dots[d_id] = dots
 
-		var lbl := Label.new()
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lbl.add_theme_color_override("font_color", Color(1, 1, 1))
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 5)
-		lbl.add_theme_font_size_override("font_size", 22)
-		info_row.add_child(lbl)
-		_domain_labels[d_id] = lbl
+		var badges_row := HBoxContainer.new()
+		badges_row.anchor_left = pos.x - DOMAIN_HALF.x
+		badges_row.anchor_right = pos.x + DOMAIN_HALF.x
+		badges_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.04
+		badges_row.anchor_bottom = pos.y + DOMAIN_HALF.y
+		badges_row.offset_left = 0
+		badges_row.offset_right = 0
+		badges_row.offset_top = 0
+		badges_row.offset_bottom = 0
+		badges_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		badges_row.add_theme_constant_override("separation", 6)
+		badges_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_zoom_layer.add_child(badges_row)
 
-		# Row of TransgressionMarker chips, anchored just above the domain label
-		# so it sits inside the hotspot. Populated/cleared by _refresh_overlays.
-		var marker_row := HFlowContainer.new()
-		marker_row.anchor_left = pos.x - DOMAIN_HALF.x
-		marker_row.anchor_right = pos.x + DOMAIN_HALF.x
-		marker_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.10
-		marker_row.anchor_bottom = pos.y + DOMAIN_HALF.y - 0.04
-		marker_row.offset_left = 0
-		marker_row.offset_right = 0
-		marker_row.offset_top = 0
-		marker_row.offset_bottom = 0
-		marker_row.alignment = HFlowContainer.ALIGNMENT_CENTER
-		marker_row.add_theme_constant_override("h_separation", 4)
-		marker_row.add_theme_constant_override("v_separation", 2)
-		marker_row.mouse_filter = Control.MOUSE_FILTER_PASS  # let drag-scroll pass through, individual markers still capture
-		_zoom_layer.add_child(marker_row)
-		_domain_marker_rows[d_id] = marker_row
+		var badges := DomainBadges.new()
+		badges_row.add_child(badges)
+		_domain_badges[d_id] = badges
 
 	# Top status bar (HUD — fixed, not zoomed)
 	_status_label = Label.new()
@@ -449,26 +452,21 @@ func _refresh_status() -> void:
 
 func _refresh_overlays() -> void:
 	for d_id in DOMAIN_POS.keys():
-		if not _domain_labels.has(d_id):
+		if not _domain_badges.has(d_id):
 			continue
 		var d := state.domain(d_id)
-		var lbl: Label = _domain_labels[d_id]
-		# Coloured corruption squares — one per Corruption per player.
-		_domain_dots[d_id].set_counts(d.red_corruption, d.blue_corruption)
-		# Badges only on the label; counts are visualised by the dots.
-		# Glyphs picked from common Latin/symbol blocks — emoji-region chars
-		# (⚔ ✝) sometimes render as tofu boxes on web fonts.
-		var line := ""
-		var ctrl: int = state.controller_of(d_id)
-		if ctrl != GameEnums.PlayerId.NONE:
-			line += "◆%s" % GameEnums.player_name(ctrl).substr(0, 1)
-		if state.is_sealed(d_id):
-			line += "  ★"  # sealed
-		if state.is_in_penitence(d_id):
-			line += "  †"  # penitence (Latin dagger, U+2020)
-		lbl.text = line
-		# Transgression markers placed on this domain (Scandales then Infamies).
+		# Row A — chips (markers + corruption squares). _refresh_domain_markers
+		# rebuilds the markers and updates the dots count.
 		_refresh_domain_markers(d_id)
+		# Row B — drawn badges (controller diamond / sealed padlock / penitence cross).
+		var ctrl: int = state.controller_of(d_id)
+		var ctrl_color: Color = Color(0, 0, 0, 0)
+		var ctrl_letter: String = ""
+		if ctrl != GameEnums.PlayerId.NONE:
+			ctrl_color = GameEnums.player_color_light(ctrl)
+			ctrl_letter = GameEnums.player_name(ctrl).substr(0, 1)
+		(_domain_badges[d_id] as DomainBadges).set_state(
+			ctrl_color, ctrl_letter, state.is_sealed(d_id), state.is_in_penitence(d_id))
 	# Ascendant only (per-player Corruption pool now shown inside each
 	# coloured player panel).
 	_ascendant_label.text = "Asc %+d" % state.ascendant
@@ -478,19 +476,28 @@ func _refresh_overlays() -> void:
 
 func _refresh_domain_markers(d_id: int) -> void:
 	var row: HFlowContainer = _domain_marker_rows.get(d_id)
-	if row == null:
+	var dots: CorruptionDots = _domain_dots.get(d_id)
+	if row == null or dots == null:
 		return
+	# Detach the persistent CorruptionDots so it isn't queue_freed alongside
+	# the transgression markers.
+	if dots.get_parent() == row:
+		row.remove_child(dots)
 	for c in row.get_children():
 		c.queue_free()
 	if state == null:
+		row.add_child(dots)
 		return
 	var d := state.domain(d_id)
-	# Scandales first (filled circles), then Infamies (diamonds) — easier to
-	# parse at a glance than mixed ordering.
+	# Order : Scandale circles, then Infamie diamonds, then the corruption
+	# squares at the very end — matches the user's preference for one row of
+	# circles + diamonds + colour-tinted squares.
 	for ti in d.scandals:
 		row.add_child(_make_transgression_marker(ti, false))
 	for ti in d.infamies:
 		row.add_child(_make_transgression_marker(ti, true))
+	dots.set_counts(d.red_corruption, d.blue_corruption)
+	row.add_child(dots)
 
 
 func _make_transgression_marker(ti: GameState.TransgressionInstance, infamy: bool) -> Control:

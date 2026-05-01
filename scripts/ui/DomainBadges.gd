@@ -1,0 +1,116 @@
+class_name DomainBadges
+extends Control
+# Tiny custom-drawn badges that replace the "◆R  ★  †" emoji-text the
+# Domain label used to render. The Godot web build's bundled font misses
+# glyphs from the Geometric Shapes / Misc Symbols blocks on some
+# devices, so the indicators came out as tofu boxes. Drawing them as
+# primitives sidesteps font support entirely.
+#
+# Layout : a single horizontal row with the three optional badges in
+# this order, each ~16 px square :
+#   • Controller : filled diamond in the player's colour, centred
+#                  letter "R" or "V" overlaid in white
+#   • Sealed     : padlock — filled square with an inverted-U shackle
+#   • Penitence  : a + sign (cross) drawn from two thick rectangles
+
+const BADGE_SIZE := 18.0
+const BADGE_GAP  := 6.0
+
+var controller_color: Color = Color(0, 0, 0, 0)  # alpha=0 means "no controller"
+var controller_letter: String = ""
+var is_sealed: bool = false
+var is_in_penitence: bool = false
+
+
+func _init() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	custom_minimum_size = Vector2(0, BADGE_SIZE)
+
+
+func set_state(ctrl_color: Color, ctrl_letter: String, sealed: bool, penitence: bool) -> void:
+	if ctrl_color == controller_color and ctrl_letter == controller_letter \
+			and sealed == is_sealed and penitence == is_in_penitence:
+		return
+	controller_color = ctrl_color
+	controller_letter = ctrl_letter
+	is_sealed = sealed
+	is_in_penitence = penitence
+	# Recompute width so the parent container sizes correctly.
+	var n := 0
+	if controller_color.a > 0.0: n += 1
+	if is_sealed: n += 1
+	if is_in_penitence: n += 1
+	var w: float = 0.0
+	if n > 0:
+		w = n * BADGE_SIZE + (n - 1) * BADGE_GAP
+	custom_minimum_size = Vector2(w, BADGE_SIZE)
+	queue_redraw()
+
+
+func _draw() -> void:
+	var x: float = 0.0
+	var y: float = 0.0
+	if controller_color.a > 0.0:
+		_draw_controller(Vector2(x, y))
+		x += BADGE_SIZE + BADGE_GAP
+	if is_sealed:
+		_draw_padlock(Vector2(x, y))
+		x += BADGE_SIZE + BADGE_GAP
+	if is_in_penitence:
+		_draw_cross(Vector2(x, y))
+
+
+func _draw_controller(top_left: Vector2) -> void:
+	var c := top_left + Vector2(BADGE_SIZE * 0.5, BADGE_SIZE * 0.5)
+	var r := BADGE_SIZE * 0.46
+	# Diamond (rotated square) in player colour.
+	var pts := PackedVector2Array([
+		c + Vector2(0, -r),
+		c + Vector2(r, 0),
+		c + Vector2(0, r),
+		c + Vector2(-r, 0),
+	])
+	draw_colored_polygon(pts, controller_color)
+	var loop := PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[0]])
+	draw_polyline(loop, Color(0, 0, 0, 0.85), 1.5, true)
+	# Center letter (R / V) in white with black shadow for legibility.
+	if controller_letter != "":
+		var font := ThemeDB.fallback_font
+		var font_size := int(BADGE_SIZE * 0.55)
+		var letter_size := font.get_string_size(controller_letter, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+		var pos := c - Vector2(letter_size.x * 0.5, -font_size * 0.35)
+		draw_string_outline(font, pos, controller_letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 2, Color(0, 0, 0, 0.9))
+		draw_string(font, pos, controller_letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(1, 1, 1))
+
+
+func _draw_padlock(top_left: Vector2) -> void:
+	# Body: rounded rectangle in muted gold; shackle: inverted U arc at top.
+	var gold := Color(0.86, 0.72, 0.30)
+	var dark := Color(0, 0, 0, 0.85)
+	var body_top: float = top_left.y + BADGE_SIZE * 0.42
+	var body_h: float = BADGE_SIZE * 0.55
+	var body_x: float = top_left.x + BADGE_SIZE * 0.18
+	var body_w: float = BADGE_SIZE * 0.64
+	var body := Rect2(body_x, body_top, body_w, body_h)
+	draw_rect(body, gold, true)
+	draw_rect(body, dark, false, 1.5)
+	# Shackle (the curved metal loop on top) — drawn as an arc.
+	var shackle_center := Vector2(top_left.x + BADGE_SIZE * 0.5, body_top)
+	var shackle_radius: float = BADGE_SIZE * 0.26
+	draw_arc(shackle_center, shackle_radius, PI, TAU, 16, dark, 2.0, true)
+
+
+func _draw_cross(top_left: Vector2) -> void:
+	# Two filled rectangles forming a "+" sign — symbolises Penitence.
+	var col := Color(0.92, 0.86, 0.65)
+	var dark := Color(0, 0, 0, 0.85)
+	var thickness: float = BADGE_SIZE * 0.22
+	var c := top_left + Vector2(BADGE_SIZE * 0.5, BADGE_SIZE * 0.5)
+	var horiz := Rect2(top_left.x + BADGE_SIZE * 0.12, c.y - thickness * 0.5,
+		BADGE_SIZE * 0.76, thickness)
+	var vert := Rect2(c.x - thickness * 0.5, top_left.y + BADGE_SIZE * 0.12,
+		thickness, BADGE_SIZE * 0.76)
+	draw_rect(horiz, col, true)
+	draw_rect(vert, col, true)
+	draw_rect(horiz, dark, false, 1.0)
+	draw_rect(vert, dark, false, 1.0)
