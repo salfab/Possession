@@ -22,6 +22,19 @@ const DOMAIN_POS := {
 }
 const DOMAIN_HALF := Vector2(0.080, 0.085)
 
+# Liturgy banners — one per Station I-V, on the right edge of the board,
+# vertically aligned with the STATIONS column on the left. Each banner
+# is a placeholder Panel + Label for now (image variants coming later).
+# Click → fullscreen liturgy view with an Entraver button.
+const LITURGY_BANNER_POS := {
+	GameEnums.StationId.MURMURES:   Vector2(0.93, 0.18),
+	GameEnums.StationId.TENTATION:  Vector2(0.93, 0.30),
+	GameEnums.StationId.CHUTE:      Vector2(0.93, 0.42),
+	GameEnums.StationId.CONFESSION: Vector2(0.93, 0.54),
+	GameEnums.StationId.OFFICE:     Vector2(0.93, 0.66),
+}
+const LITURGY_BANNER_HALF := Vector2(0.055, 0.05)
+
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
 const ZOOM_STEP := 1.25
@@ -41,6 +54,8 @@ var _hotspots: Dictionary = {}      # domain_id -> Button
 var _debug_hotspots: bool = false   # cyan outline overlay for calibration
 var _domain_badges: Dictionary = {} # domain_id -> DomainBadges (drawn controller/sealed/penitence indicators)
 var _domain_dots: Dictionary = {}   # domain_id -> CorruptionDots
+var _liturgy_banners: Dictionary = {}       # station_id -> PanelContainer (placeholder)
+var _liturgy_banner_labels: Dictionary = {} # station_id -> Label (inside panel)
 var _domain_marker_rows: Dictionary = {} # domain_id -> HFlowContainer (owned-Transgression chips)
 var _status_label: Label
 var _ascendant_label: Label
@@ -98,6 +113,7 @@ var _fullscreen_card_node: Card               # composed view (transgression / l
 var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
 var _fullscreen_card_aspect: AspectRatioContainer
 var _fullscreen_card_flip_btn: Button
+var _fullscreen_card_entraver_btn: Button
 # Binding for the currently shown composed card.
 # {"kind": "transgression", "tid": String, "face": int}
 # {"kind": "liturgy", "station": int, "impedita": bool}
@@ -251,6 +267,10 @@ func _build_overlays() -> void:
 		var badges := DomainBadges.new()
 		badges_row.add_child(badges)
 		_domain_badges[d_id] = badges
+
+	# Liturgy banners on the right edge — one per Station I-V, click → opens
+	# the fullscreen liturgical card with an Entraver button.
+	_build_liturgy_banners()
 
 	# Top status bar (HUD — fixed, not zoomed)
 	_status_label = Label.new()
@@ -587,6 +607,7 @@ func _refresh_overlays() -> void:
 	# Ascendant only (per-player Corruption pool now shown inside each
 	# coloured player panel).
 	_ascendant_label.text = "Asc %+d" % state.ascendant
+	_refresh_liturgy_banners()
 
 
 # ─── Domain transgression markers ─────────────────────────────────────────────
@@ -637,6 +658,89 @@ func _on_domain_marker_clicked(_tid: String, _name_str: String, _is_infamy: bool
 	# Transgression, one column per demon. From there the player can click an
 	# entry to see the actual card fullscreen.
 	_show_placed_transgressions_dialog()
+
+
+# ─── Liturgy banners (right edge of the board) ────────────────────────────────
+
+func _build_liturgy_banners() -> void:
+	for st in LITURGY_BANNER_POS:
+		var pos: Vector2 = LITURGY_BANNER_POS[st]
+		var panel := PanelContainer.new()
+		panel.anchor_left = pos.x - LITURGY_BANNER_HALF.x
+		panel.anchor_right = pos.x + LITURGY_BANNER_HALF.x
+		panel.anchor_top = pos.y - LITURGY_BANNER_HALF.y
+		panel.anchor_bottom = pos.y + LITURGY_BANNER_HALF.y
+		panel.offset_left = 0
+		panel.offset_top = 0
+		panel.offset_right = 0
+		panel.offset_bottom = 0
+		panel.mouse_filter = Control.MOUSE_FILTER_STOP
+		panel.gui_input.connect(_on_liturgy_banner_input.bind(st))
+
+		var lbl := Label.new()
+		lbl.add_theme_font_size_override("font_size", 14)
+		lbl.add_theme_color_override("font_color", Color(1, 0.92, 0.7))
+		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+		lbl.add_theme_constant_override("outline_size", 4)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		panel.add_child(lbl)
+
+		_zoom_layer.add_child(panel)
+		_liturgy_banners[st] = panel
+		_liturgy_banner_labels[st] = lbl
+
+
+# Refreshes each banner's stylebox + text based on whether the response has
+# been entraved (impedita) or not (in_integro). Called from _refresh_overlays.
+func _refresh_liturgy_banners() -> void:
+	for st in _liturgy_banners.keys():
+		var panel: PanelContainer = _liturgy_banners[st]
+		var lbl: Label = _liturgy_banner_labels[st]
+		var entraved: bool = state != null and GameRules.is_response_entraved(state, st)
+		var resp: Dictionary = LiturgicalResponseData.get_response(st)
+		var resp_name: String = String(resp.get("name", "?"))
+		var key: String = "ui.liturgy.banner.impedita" if entraved else "ui.liturgy.banner.in_integro"
+		lbl.text = I18n.t(key, [resp_name])
+		var sb := StyleBoxFlat.new()
+		sb.set_corner_radius_all(6)
+		sb.set_content_margin_all(4)
+		sb.set_border_width_all(2)
+		if entraved:
+			sb.bg_color = Color(0.20, 0.05, 0.08, 0.92)  # dark crimson
+			sb.border_color = Color(0.85, 0.25, 0.30)
+			sb.shadow_color = Color(0.85, 0.25, 0.30, 0.4)
+		else:
+			sb.bg_color = Color(0.06, 0.05, 0.04, 0.92)  # dark parchment
+			sb.border_color = Color(0.85, 0.65, 0.25)   # gold
+			sb.shadow_color = Color(0.85, 0.65, 0.25, 0.3)
+		sb.shadow_size = 4
+		panel.add_theme_stylebox_override("panel", sb)
+
+
+# Tap or release on a banner — opens the fullscreen liturgical card view for
+# that Station, with the Entraver button if the action is currently legal.
+func _on_liturgy_banner_input(event: InputEvent, station: int) -> void:
+	var pressed_release: bool = false
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.button_index == MOUSE_BUTTON_LEFT and not mb.pressed:
+			pressed_release = true
+	elif event is InputEventScreenTouch:
+		var st_event: InputEventScreenTouch = event
+		if not st_event.pressed:
+			pressed_release = true
+	if not pressed_release:
+		return
+	if state == null:
+		return
+	var resp: Dictionary = LiturgicalResponseData.get_response(station)
+	if resp.is_empty():
+		return
+	var resp_name: String = String(resp.get("name", "?"))
+	var imp: bool = GameRules.is_response_entraved(state, station)
+	_show_fullscreen_liturgy(station, imp, resp_name)
 
 
 # ─── Placed transgressions dialog (two columns, one per demon) ────────────────
@@ -1700,12 +1804,24 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_image.visible = false
 	vbox.add_child(_fullscreen_card_image)
 
+	# Action row : flip + entraver. Both are shown / hidden per binding by
+	# _update_fullscreen_buttons.
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	actions.add_theme_constant_override("separation", 12)
+	vbox.add_child(actions)
+
 	_fullscreen_card_flip_btn = Button.new()
 	_fullscreen_card_flip_btn.add_theme_font_size_override("font_size", 18)
-	_fullscreen_card_flip_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_fullscreen_card_flip_btn.visible = false
 	_fullscreen_card_flip_btn.pressed.connect(_on_fullscreen_card_flip_pressed)
-	vbox.add_child(_fullscreen_card_flip_btn)
+	actions.add_child(_fullscreen_card_flip_btn)
+
+	_fullscreen_card_entraver_btn = Button.new()
+	_fullscreen_card_entraver_btn.add_theme_font_size_override("font_size", 18)
+	_fullscreen_card_entraver_btn.visible = false
+	_fullscreen_card_entraver_btn.pressed.connect(_on_fullscreen_card_entraver_pressed)
+	actions.add_child(_fullscreen_card_entraver_btn)
 
 
 # Static-image fallback (used by Exorcism only).
@@ -1746,18 +1862,69 @@ func _show_fullscreen_liturgy(station: int, impedita: bool, title_str: String) -
 func _update_fullscreen_flip_button() -> void:
 	if _fullscreen_card_binding.is_empty():
 		_fullscreen_card_flip_btn.visible = false
+		_fullscreen_card_entraver_btn.visible = false
 		return
 	var kind: String = _fullscreen_card_binding.get("kind", "")
 	if kind == "transgression":
 		var face: int = int(_fullscreen_card_binding.get("face", GameEnums.TransgressionFace.SCANDALE))
 		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_infamy") if face == GameEnums.TransgressionFace.SCANDALE else I18n.t("ui.flip.see_scandal")
 		_fullscreen_card_flip_btn.visible = true
+		_fullscreen_card_entraver_btn.visible = false
 	elif kind == "liturgy":
 		var imp: bool = bool(_fullscreen_card_binding.get("impedita", false))
 		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_in_integro") if imp else I18n.t("ui.flip.see_impedita")
 		_fullscreen_card_flip_btn.visible = true
+		_update_fullscreen_entraver_button()
 	else:
 		_fullscreen_card_flip_btn.visible = false
+		_fullscreen_card_entraver_btn.visible = false
+
+
+# Show the Entraver button when the binding is a liturgy AND the active
+# player can legally hinder that Station's response. Disabled (with a
+# tooltip explaining why) when illegal but otherwise relevant. Hidden
+# entirely if it would never be useful (e.g. game over, or this isn't
+# a liturgy view).
+func _update_fullscreen_entraver_button() -> void:
+	if state == null or state.game_over:
+		_fullscreen_card_entraver_btn.visible = false
+		return
+	var st: int = int(_fullscreen_card_binding.get("station", -1))
+	if st < 0:
+		_fullscreen_card_entraver_btn.visible = false
+		return
+	var p: int = state.active_player
+	var why: String = GameRules.why_cannot_entraver(state, p, st)
+	var legal: bool = (why == "")
+	# If already entraved, no point showing — the action would always be
+	# illegal here. Hide rather than show a perpetually-grey button.
+	if GameRules.is_response_entraved(state, st):
+		_fullscreen_card_entraver_btn.visible = false
+		return
+	_fullscreen_card_entraver_btn.visible = true
+	var cost: int = GameRules.entrave_cost(state, p, st)
+	var cs: String = "s" if cost > 1 else ""
+	_fullscreen_card_entraver_btn.text = I18n.t("ui.btn.entraver_cost", [cost, cs])
+	_fullscreen_card_entraver_btn.disabled = not legal
+	_fullscreen_card_entraver_btn.tooltip_text = why
+
+
+func _on_fullscreen_card_entraver_pressed() -> void:
+	if state == null or _fullscreen_card_binding.is_empty():
+		return
+	var st: int = int(_fullscreen_card_binding.get("station", -1))
+	if st < 0:
+		return
+	var result := manager.perform_action(GameEnums.ActionId.ENTRAVER, {"station": st})
+	if not result.get("ok", false):
+		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
+	else:
+		# Reflect the new state on the binding, the banner, and the
+		# button row of the open dialog.
+		_fullscreen_card_binding["impedita"] = true
+		_fullscreen_card_node.flip_to_liturgy(st, true)
+		_update_fullscreen_flip_button()
+	_refresh_all()
 
 
 # Tap or swipe anywhere on the fullscreen card area flips it. We treat any
