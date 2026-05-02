@@ -83,6 +83,42 @@ func setup_liturgy(station_id: int, impedita: bool) -> void:
 		_apply_binding()
 
 
+# Flip-with-animation variants — scale.x runs to 0 (the card folds edge-on),
+# the binding swaps mid-tween, then scale.x runs back to 1. Mimics a 3D
+# rotation around the vertical axis without leaving Control land.
+const _FLIP_HALF_DURATION := 0.18
+
+var _is_flipping: bool = false
+
+
+func flip_to_transgression(tid: String, face: int) -> void:
+	if not is_node_ready():
+		setup_transgression(tid, face)
+		return
+	if _is_flipping:
+		return
+	_run_flip_tween(func(): setup_transgression(tid, face))
+
+
+func flip_to_liturgy(station_id: int, impedita: bool) -> void:
+	if not is_node_ready():
+		setup_liturgy(station_id, impedita)
+		return
+	if _is_flipping:
+		return
+	_run_flip_tween(func(): setup_liturgy(station_id, impedita))
+
+
+func _run_flip_tween(swap_callback: Callable) -> void:
+	_is_flipping = true
+	pivot_offset = size * 0.5
+	var tw := create_tween()
+	tw.tween_property(self, "scale:x", 0.0, _FLIP_HALF_DURATION).set_trans(Tween.TRANS_QUAD)
+	tw.tween_callback(swap_callback)
+	tw.tween_property(self, "scale:x", 1.0, _FLIP_HALF_DURATION).set_trans(Tween.TRANS_QUAD)
+	tw.tween_callback(func(): _is_flipping = false)
+
+
 # Applies the stored binding (kind + ids) to the on-screen nodes. Called by
 # _ready(), the setup_* methods (when already in the tree), and by
 # _refresh_text() via the locale_changed signal.
