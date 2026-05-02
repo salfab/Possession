@@ -23,16 +23,16 @@ const DOMAIN_POS := {
 const DOMAIN_HALF := Vector2(0.080, 0.085)
 
 # Liturgy banners — one per Station I-V, on the right edge of the board.
-# Width spans from Désir's right border (≈0.81) to the board edge (≈0.99) so
-# the banners get the room they need ; the height keeps the source image's
-# 2.667:1 aspect ratio (banner_w × 1.333 / banner_h ≈ 2.667). Click → opens
-# the fullscreen liturgy view with an Entraver button.
+# Width spans from Désir's right border (0.710 + 0.080 = 0.790) to the board
+# edge, keeping the source image's 2.667:1 aspect ratio
+# (banner_w × 1.333 / banner_h ≈ 2.667). Click → opens the fullscreen
+# liturgy view with an Entraver button.
 const LITURGY_BANNER_POS := {
-	GameEnums.StationId.MURMURES:   Vector2(0.900, 0.180),
-	GameEnums.StationId.TENTATION:  Vector2(0.900, 0.300),
-	GameEnums.StationId.CHUTE:      Vector2(0.900, 0.420),
-	GameEnums.StationId.CONFESSION: Vector2(0.900, 0.540),
-	GameEnums.StationId.OFFICE:     Vector2(0.900, 0.660),
+	GameEnums.StationId.MURMURES:   Vector2(0.880, 0.180),
+	GameEnums.StationId.TENTATION:  Vector2(0.880, 0.300),
+	GameEnums.StationId.CHUTE:      Vector2(0.880, 0.420),
+	GameEnums.StationId.CONFESSION: Vector2(0.880, 0.540),
+	GameEnums.StationId.OFFICE:     Vector2(0.880, 0.660),
 }
 const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
 
