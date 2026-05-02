@@ -1504,17 +1504,15 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	info_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	top_row.add_child(info_vbox)
 
+	# Header for the row : just the transgression's localised name. The
+	# face / owner state used to be spelled out here ("Libre (face Scandale)"
+	# / "Infamie · Rouge") but the card thumbnail and action buttons already
+	# convey that — duplicating it as the row title was redundant.
 	var state_lbl := Label.new()
-	if owner == GameEnums.PlayerId.NONE:
-		state_lbl.text = I18n.t("ui.transgression.state.free")
-		state_lbl.add_theme_color_override("font_color", Color(0.7, 1, 0.7))
-	else:
-		if face == GameEnums.TransgressionFace.INFAMIE:
-			state_lbl.text = I18n.t("ui.transgression.state.owned", [I18n.t("face.infamie"), GameEnums.player_name(owner)])
-			state_lbl.add_theme_color_override("font_color", Color(1, 0.6, 1))
-		else:
-			state_lbl.text = I18n.t("ui.transgression.state.owned", [I18n.t("face.scandale"), GameEnums.player_name(owner)])
-			state_lbl.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
+	state_lbl.text = String(def.get("name", "?"))
+	state_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.65))
+	state_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	state_lbl.add_theme_constant_override("outline_size", 4)
 	state_lbl.add_theme_font_size_override("font_size", 30)
 	state_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_vbox.add_child(state_lbl)
