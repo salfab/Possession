@@ -665,7 +665,9 @@ func _on_domain_marker_clicked(_tid: String, _name_str: String, _is_infamy: bool
 func _build_liturgy_banners() -> void:
 	for st in LITURGY_BANNER_POS:
 		var pos: Vector2 = LITURGY_BANNER_POS[st]
-		var panel := PanelContainer.new()
+		# Outer Control hosts the image (TextureRect filling the panel) + the
+		# explanatory text Label overlaid on the cartouche area to the right.
+		var panel := Control.new()
 		panel.anchor_left = pos.x - LITURGY_BANNER_HALF.x
 		panel.anchor_right = pos.x + LITURGY_BANNER_HALF.x
 		panel.anchor_top = pos.y - LITURGY_BANNER_HALF.y
@@ -676,15 +678,46 @@ func _build_liturgy_banners() -> void:
 		panel.offset_bottom = 0
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		panel.gui_input.connect(_on_liturgy_banner_input.bind(st))
+		panel.clip_contents = true
 
+		# Background : either the painted banner image (when shipped) or a
+		# stylebox placeholder. _refresh_liturgy_banners decides each frame
+		# which is shown based on which textures resolve.
+		var tex_rect := TextureRect.new()
+		tex_rect.name = "Texture"
+		tex_rect.anchor_right = 1.0
+		tex_rect.anchor_bottom = 1.0
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.stretch_mode = TextureRect.STRETCH_SCALE
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(tex_rect)
+
+		var fallback := PanelContainer.new()
+		fallback.name = "Fallback"
+		fallback.anchor_right = 1.0
+		fallback.anchor_bottom = 1.0
+		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(fallback)
+
+		# Label sits on top of both, anchored to the right cartouche : 90 %
+		# of the banner's height (5 % top + 5 % bottom margin), 70 % of its
+		# width on the right (small inset offsets for readability).
 		var lbl := Label.new()
-		lbl.add_theme_font_size_override("font_size", 14)
-		lbl.add_theme_color_override("font_color", Color(1, 0.92, 0.7))
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 4)
+		lbl.anchor_left = 0.30
+		lbl.anchor_right = 1.0
+		lbl.anchor_top = 0.05
+		lbl.anchor_bottom = 0.95
+		lbl.offset_left = 6
+		lbl.offset_right = -10
+		lbl.offset_top = 0
+		lbl.offset_bottom = 0
+		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_color_override("font_color", Color(0.18, 0.10, 0.05))
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.clip_contents = true
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(lbl)
 
 		_zoom_layer.add_child(panel)
@@ -692,31 +725,58 @@ func _build_liturgy_banners() -> void:
 		_liturgy_banner_labels[st] = lbl
 
 
-# Refreshes each banner's stylebox + text based on whether the response has
-# been entraved (impedita) or not (in_integro). Called from _refresh_overlays.
+# Refreshes each banner's image / fallback styling and the cartouche text
+# based on whether the response has been entraved (impedita) or not
+# (in_integro). Called from _refresh_overlays.
 func _refresh_liturgy_banners() -> void:
 	for st in _liturgy_banners.keys():
-		var panel: PanelContainer = _liturgy_banners[st]
+		var panel: Control = _liturgy_banners[st]
 		var lbl: Label = _liturgy_banner_labels[st]
+		var tex_rect: TextureRect = panel.get_node("Texture") as TextureRect
+		var fallback: PanelContainer = panel.get_node("Fallback") as PanelContainer
 		var entraved: bool = state != null and GameRules.is_response_entraved(state, st)
 		var resp: Dictionary = LiturgicalResponseData.get_response(st)
-		var resp_name: String = String(resp.get("name", "?"))
-		var key: String = "ui.liturgy.banner.impedita" if entraved else "ui.liturgy.banner.in_integro"
-		lbl.text = I18n.t(key, [resp_name])
-		var sb := StyleBoxFlat.new()
-		sb.set_corner_radius_all(6)
-		sb.set_content_margin_all(4)
-		sb.set_border_width_all(2)
-		if entraved:
-			sb.bg_color = Color(0.20, 0.05, 0.08, 0.92)  # dark crimson
-			sb.border_color = Color(0.85, 0.25, 0.30)
-			sb.shadow_color = Color(0.85, 0.25, 0.30, 0.4)
+		var resp_id: String = String(resp.get("id", ""))
+
+		# Pick the banner image for the current state, fall back to the in-
+		# integro variant if the impedita one isn't shipped yet.
+		var mode: String = "impedita" if entraved else "in_integro"
+		var path: String = "res://assets/cards/liturgy_banners/%s_%s.webp" % [resp_id, mode]
+		var alt_path: String = "res://assets/cards/liturgy_banners/%s_in_integro.webp" % resp_id
+		var tex: Texture2D = null
+		if ResourceLoader.exists(path):
+			tex = load(path) as Texture2D
+		elif ResourceLoader.exists(alt_path):
+			tex = load(alt_path) as Texture2D
+
+		if tex != null:
+			tex_rect.texture = tex
+			tex_rect.visible = true
+			fallback.visible = false
 		else:
-			sb.bg_color = Color(0.06, 0.05, 0.04, 0.92)  # dark parchment
-			sb.border_color = Color(0.85, 0.65, 0.25)   # gold
-			sb.shadow_color = Color(0.85, 0.65, 0.25, 0.3)
-		sb.shadow_size = 4
-		panel.add_theme_stylebox_override("panel", sb)
+			tex_rect.texture = null
+			tex_rect.visible = false
+			fallback.visible = true
+			# Placeholder stylebox tinted by entrave state.
+			var sb := StyleBoxFlat.new()
+			sb.set_corner_radius_all(6)
+			sb.set_content_margin_all(4)
+			sb.set_border_width_all(2)
+			if entraved:
+				sb.bg_color = Color(0.20, 0.05, 0.08, 0.92)
+				sb.border_color = Color(0.85, 0.25, 0.30)
+			else:
+				sb.bg_color = Color(0.06, 0.05, 0.04, 0.92)
+				sb.border_color = Color(0.85, 0.65, 0.25)
+			fallback.add_theme_stylebox_override("panel", sb)
+
+		# Cartouche text — the localised liturgy summary for the current mode.
+		var text_key: String = "liturgy.%s.%s" % [resp_id, mode]
+		lbl.text = I18n.t(text_key)
+		# Dim the parchment text a notch when impedita, to suggest "this is
+		# the corrupted face".
+		lbl.add_theme_color_override("font_color",
+			Color(0.45, 0.10, 0.06) if entraved else Color(0.18, 0.10, 0.05))
 
 
 # Tap or release on a banner — opens the fullscreen liturgical card view for
