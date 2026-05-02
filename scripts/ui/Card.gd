@@ -83,10 +83,22 @@ func setup_liturgy(station_id: int, impedita: bool) -> void:
 		_apply_binding()
 
 
-# Flip-with-animation variants — scale.x runs to 0 (the card folds edge-on),
-# the binding swaps mid-tween, then scale.x runs back to 1. Mimics a 3D
-# rotation around the vertical axis without leaving Control land.
-const _FLIP_HALF_DURATION := 0.18
+# Flip-with-animation variants — simulates a 3D rotation around the card's
+# vertical axis on a 2D Control by combining several tweens running in
+# parallel :
+#   • scale.x : 1 → 0 → 1 (the card folds edge-on, then unfolds).
+#   • scale.y : 1 → 0.82 → 1 (perspective foreshortening — the edges
+#     that are turning away from the viewer appear shorter, as if
+#     receding into the screen).
+#   • rotation: 0 → 4° → 0 (slight tilt for a sense of motion / tumble).
+#   • modulate: white → dim → white (the back of a real card sits in
+#     comparative shadow when seen edge-on).
+# The binding swap happens at mid-tween (when scale.x ≈ 0), so the new
+# face un-flips toward the viewer.
+const _FLIP_HALF_DURATION := 0.22
+const _FLIP_TILT_DEG := 4.0
+const _FLIP_DEPTH_SCALE := 0.82
+const _FLIP_DIM := Color(0.78, 0.74, 0.78)
 
 var _is_flipping: bool = false
 
@@ -112,10 +124,21 @@ func flip_to_liturgy(station_id: int, impedita: bool) -> void:
 func _run_flip_tween(swap_callback: Callable) -> void:
 	_is_flipping = true
 	pivot_offset = size * 0.5
+	var dur := _FLIP_HALF_DURATION
+	var tilt_rad := deg_to_rad(_FLIP_TILT_DEG)
 	var tw := create_tween()
-	tw.tween_property(self, "scale:x", 0.0, _FLIP_HALF_DURATION).set_trans(Tween.TRANS_QUAD)
+	# Phase 1 — fold to edge-on, with perspective shrink + slight tilt + dim.
+	tw.tween_property(self, "scale:x", 0.0, dur).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(self, "scale:y", _FLIP_DEPTH_SCALE, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(self, "rotation", tilt_rad, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(self, "modulate", _FLIP_DIM, dur).set_trans(Tween.TRANS_SINE)
+	# Swap the binding at the edge-on midpoint.
 	tw.tween_callback(swap_callback)
-	tw.tween_property(self, "scale:x", 1.0, _FLIP_HALF_DURATION).set_trans(Tween.TRANS_QUAD)
+	# Phase 2 — unfold the new face, restoring proportions and brightness.
+	tw.tween_property(self, "scale:x", 1.0, dur).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(self, "scale:y", 1.0, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(self, "rotation", 0.0, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(self, "modulate", Color.WHITE, dur).set_trans(Tween.TRANS_SINE)
 	tw.tween_callback(func(): _is_flipping = false)
 
 
