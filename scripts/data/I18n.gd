@@ -125,6 +125,24 @@ const STRINGS := {
 	                                     "en": "Hinder  (-%d Corruption%s)"},
 	"ui.liturgy.banner.in_integro":    {"fr": "%s\nIn Integro",          "en": "%s\nIn Integro"},
 	"ui.liturgy.banner.impedita":      {"fr": "%s\nImpedita",            "en": "%s\nImpedita"},
+
+	# ─── Banner cartouche text — ultra-minimal one-liners (or two), tuned to
+	# fit the parchment area without wrapping more than 2 lines. Distinct
+	# from the full liturgy.<id>.<mode> texts shown on the actual card.
+	# Glyphs picked from the safest blocks (Basic Latin, General Punctuation,
+	# Arrows) so they render on the iOS WebKit fallback fonts. ─────────────
+	"banner.signe_de_croix.in_integro":      {"fr": "Brise Domination",       "en": "Break Domination"},
+	"banner.signe_de_croix.impedita":        {"fr": "−1 Corr. au + dominant", "en": "−1 Corr. on top dominant"},
+	"banner.examen_de_conscience.in_integro":{"fr": "Brise Dom. + bloque Sceau",
+	                                          "en": "Break Dom. + bar Seal"},
+	"banner.examen_de_conscience.impedita":  {"fr": "Bloque Sceau",           "en": "Bar Seal"},
+	"banner.contrition.in_integro":          {"fr": "Fissure + Pénitence",    "en": "Crack + Penitence"},
+	"banner.contrition.impedita":            {"fr": "Pénitence",              "en": "Penitence"},
+	"banner.confession.in_integro":          {"fr": "2 pénitences / 3",       "en": "2 penitences / 3"},
+	"banner.confession.impedita":            {"fr": "1 pénitence / 3",        "en": "1 penitence / 3"},
+	"banner.communion.in_integro":           {"fr": "Fissure + bloque rescell.",
+	                                          "en": "Crack + bar reseal"},
+	"banner.communion.impedita":             {"fr": "Fissure ou Brise",       "en": "Crack or Break"},
 	"ui.popup.provoke_in":              {"fr": "Provoquer %s en %s",      "en": "Provoke %s in %s"},
 	"ui.popup.amplify_in":              {"fr": "Amplifier %s en %s",      "en": "Amplify %s in %s"},
 	"ui.popup.exploit_gain":            {"fr": "Exploiter %s  (+%d Corruption%s)",
