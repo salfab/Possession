@@ -340,6 +340,10 @@ const STRINGS := {
 	"ui.btn.zoom_out":                 {"fr": "−", "en": "−"},
 	"ui.btn.zoom_in":                  {"fr": "+", "en": "+"},
 	"ui.btn.zoom_reset":               {"fr": "⊙", "en": "⊙"},
+	"ui.btn.zoom_out_label":           {"fr": "Dézoomer",     "en": "Zoom out"},
+	"ui.btn.zoom_in_label":            {"fr": "Zoomer",       "en": "Zoom in"},
+	"ui.btn.zoom_reset_label":         {"fr": "Recadrer",     "en": "Reset zoom"},
+	"ui.fab.tooltip":                  {"fr": "Menu",         "en": "Menu"},
 
 	# DomainData yields (printed in domain tooltips/debug)
 	"domain.yield.transgressed_2_3":   {"fr": "2 (3 si transgressé)",             "en": "2 (3 if Transgressed)"},

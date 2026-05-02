@@ -43,6 +43,7 @@ const ZOOM_STEP := 1.25
 const SCROLL_DRAG_THRESHOLD := 8.0
 
 @onready var stage: Control = $BoardAspect/Stage
+@onready var board_aspect: AspectRatioContainer = $BoardAspect
 
 var state: GameState
 var manager: TurnManager
@@ -96,14 +97,10 @@ var _player_list_blue: HFlowContainer
 var _player_reserve_red: Label
 var _player_reserve_blue: Label
 
-# Bottom action bar (kept as a ref so we can rebuild localised button text
-# when the user toggles the language).
-var _bottom_bar: HBoxContainer
-# Puiser dans l'Ombre — the only "skip" button left in the bar. Disabled
-# while the active player still has Corruption to spend; lights up with
-# a pulsing border when their pool runs dry.
-var _btn_puiser: Button
-var _puiser_pulse_tween: Tween
+# Floating Action Button + the popup menu it opens. Replaces the previous
+# row of buttons across the bottom of the screen.
+var _fab: Button
+var _fab_menu: PopupMenu
 
 # Latches the most recently-shown Station id so _refresh_status can fire the
 # intro animation only when the value actually changes (not on every refresh).
@@ -373,54 +370,100 @@ func _build_liturgy_dialog() -> void:
 
 
 func _build_debug_bar() -> void:
-	var bar := HBoxContainer.new()
-	bar.anchor_left = 0.0
-	bar.anchor_right = 1.0
-	bar.anchor_top = 0.86
-	bar.anchor_bottom = 1.0
-	bar.offset_left = 10
-	bar.offset_right = -10
-	bar.offset_top = 4
-	bar.offset_bottom = -8
-	bar.alignment = BoxContainer.ALIGNMENT_END
-	bar.add_theme_constant_override("separation", 8)
-	add_child(bar)
+	# Single Floating Action Button bottom-right. Tap → PopupMenu with all
+	# the actions that used to live in the bottom action bar (zoom, locale,
+	# Trans., New game, next station, Puiser, Journal, Hotspots).
+	# Replaces the previous full-width row of buttons because on iPad the
+	# row pushed the playable area down too far.
+	_fab = Button.new()
+	_fab.text = "≡"
+	_fab.add_theme_font_size_override("font_size", 32)
+	_fab.tooltip_text = I18n.t("ui.fab.tooltip")
+	_fab.set_meta("i18n_tooltip_key", "ui.fab.tooltip")
+	_fab.anchor_left = 1.0
+	_fab.anchor_top = 1.0
+	_fab.anchor_right = 1.0
+	_fab.anchor_bottom = 1.0
+	_fab.offset_left = -76
+	_fab.offset_top = -76
+	_fab.offset_right = -12
+	_fab.offset_bottom = -12
+	# Round-ish look via a stylebox.
+	var fab_sb := StyleBoxFlat.new()
+	fab_sb.bg_color = Color(0.18, 0.06, 0.22, 0.95)
+	fab_sb.set_corner_radius_all(32)
+	fab_sb.border_color = Color(0.85, 0.65, 0.30)
+	fab_sb.set_border_width_all(2)
+	fab_sb.shadow_color = Color(0, 0, 0, 0.55)
+	fab_sb.shadow_size = 8
+	_fab.add_theme_stylebox_override("normal", fab_sb)
+	_fab.add_theme_stylebox_override("hover", fab_sb)
+	_fab.add_theme_stylebox_override("pressed", fab_sb)
+	_fab.add_theme_stylebox_override("focus", fab_sb)
+	_fab.pressed.connect(_on_fab_pressed)
+	add_child(_fab)
 
-	# Bottom bar buttons. Each entry: [label_key_or_glyph, handler, is_i18n_key].
-	# Glyphs (zoom) keep a literal label; everything else routes through I18n
-	# so locale changes refresh the text.
-	var actions := [
-		["−",                       _on_btn_zoom_out,           false],
-		["⊙",                       _on_btn_zoom_reset,         false],
-		["+",                        _on_btn_zoom_in,            false],
-		["ui.btn.toggle_lang",       _on_btn_toggle_lang,        true],
-		["ui.btn.transgressions",    _on_btn_transgressions,     true],
-		["ui.btn.new_game",          _on_btn_new_game,           true],
-		["ui.btn.next_station",      _on_btn_force_next_station, true],
-		["ui.btn.puiser",            _on_btn_puiser,             true],
-		["ui.btn.journal",           _on_btn_toggle_log,         true],
-		["ui.btn.hotspots",          _on_btn_toggle_hotspots,    true],
-	]
-	for a in actions:
-		var btn := Button.new()
-		var is_key: bool = a[2]
-		btn.text = I18n.t(a[0]) if is_key else a[0]
-		btn.custom_minimum_size = Vector2(64, 56)
-		btn.add_theme_font_size_override("font_size", 22)
-		btn.pressed.connect(a[1])
-		if is_key:
-			btn.set_meta("i18n_key", a[0])
-		if a[0] == "ui.btn.toggle_lang":
-			btn.tooltip_text = I18n.t("ui.btn.toggle_lang.tooltip")
-			btn.set_meta("i18n_tooltip_key", "ui.btn.toggle_lang.tooltip")
-		elif a[0] == "ui.btn.puiser":
-			# Last-resort safety-net button. Disabled by default; lights up
-			# with a pulsing border when the active player's pool is empty.
-			btn.tooltip_text = I18n.t("ui.btn.puiser.tooltip")
-			btn.set_meta("i18n_tooltip_key", "ui.btn.puiser.tooltip")
-			_btn_puiser = btn
-		bar.add_child(btn)
-	_bottom_bar = bar
+	# PopupMenu that the FAB opens. Items are recreated on every popup so
+	# the labels follow the current locale and "Puiser" can be toggled
+	# disabled depending on the active player's Réserve.
+	_fab_menu = PopupMenu.new()
+	_fab_menu.id_pressed.connect(_on_fab_menu_pressed)
+	add_child(_fab_menu)
+
+
+# Stable item ids for the FAB popup. Same range as the popup at the top of
+# the file (PROVOKE_ITEM_ID_BASE = 100), but we use 1000+ here so they
+# never collide with anything else.
+const FAB_ZOOM_OUT   := 1000
+const FAB_ZOOM_RESET := 1001
+const FAB_ZOOM_IN    := 1002
+const FAB_LANG       := 1003
+const FAB_TRANS      := 1004
+const FAB_NEW_GAME   := 1005
+const FAB_NEXT_ST    := 1006
+const FAB_PUISER     := 1007
+const FAB_JOURNAL    := 1008
+const FAB_HOTSPOTS   := 1009
+
+
+func _on_fab_pressed() -> void:
+	_fab_menu.clear()
+	_fab_menu.add_item("−  " + I18n.t("ui.btn.zoom_out_label"), FAB_ZOOM_OUT)
+	_fab_menu.add_item("⊙  " + I18n.t("ui.btn.zoom_reset_label"), FAB_ZOOM_RESET)
+	_fab_menu.add_item("+  " + I18n.t("ui.btn.zoom_in_label"), FAB_ZOOM_IN)
+	_fab_menu.add_separator()
+	_fab_menu.add_item(I18n.t("ui.btn.toggle_lang") + "  —  " + I18n.t("ui.btn.toggle_lang.tooltip"), FAB_LANG)
+	_fab_menu.add_separator()
+	_fab_menu.add_item(I18n.t("ui.btn.transgressions"), FAB_TRANS)
+	_fab_menu.add_item(I18n.t("ui.btn.new_game"), FAB_NEW_GAME)
+	_fab_menu.add_item(I18n.t("ui.btn.next_station"), FAB_NEXT_ST)
+	# Puiser is shown but greyed when the active player still has Corruption.
+	var puiser_idx := _fab_menu.get_item_count()
+	_fab_menu.add_item(I18n.t("ui.btn.puiser") + "  —  " + I18n.t("ui.btn.puiser.tooltip"), FAB_PUISER)
+	if state != null and not GameRules.can_puiser(state, state.active_player):
+		_fab_menu.set_item_disabled(puiser_idx, true)
+	_fab_menu.add_separator()
+	_fab_menu.add_item(I18n.t("ui.btn.journal"), FAB_JOURNAL)
+	_fab_menu.add_item(I18n.t("ui.btn.hotspots"), FAB_HOTSPOTS)
+	# Position just above the FAB.
+	var fab_pos := _fab.get_screen_position()
+	var fab_size := _fab.size
+	_fab_menu.position = Vector2i(int(fab_pos.x - 240), int(fab_pos.y - 360))
+	_fab_menu.popup()
+
+
+func _on_fab_menu_pressed(id: int) -> void:
+	match id:
+		FAB_ZOOM_OUT:   _on_btn_zoom_out()
+		FAB_ZOOM_RESET: _on_btn_zoom_reset()
+		FAB_ZOOM_IN:    _on_btn_zoom_in()
+		FAB_LANG:       _on_btn_toggle_lang()
+		FAB_TRANS:      _on_btn_transgressions()
+		FAB_NEW_GAME:   _on_btn_new_game()
+		FAB_NEXT_ST:    _on_btn_force_next_station()
+		FAB_PUISER:     _on_btn_puiser()
+		FAB_JOURNAL:    _on_btn_toggle_log()
+		FAB_HOTSPOTS:   _on_btn_toggle_hotspots()
 
 
 func _build_log_panel() -> void:
@@ -471,66 +514,38 @@ func _refresh_all() -> void:
 	_refresh_overlays()
 	_refresh_log()
 	_refresh_player_transgression_panels()
-	_refresh_puiser_button()
+	_refresh_fab_highlight()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
 	_maybe_show_endgame_dialog()
 
 
-func _refresh_puiser_button() -> void:
-	if _btn_puiser == null or state == null:
+# When Puiser dans l'Ombre is the active player's only legal action (Réserve
+# at 0), tint the FAB so the user knows there's a forced action waiting in
+# the menu. Otherwise restore the default styling.
+func _refresh_fab_highlight() -> void:
+	if _fab == null or state == null:
 		return
-	var legal: bool = (not state.game_over) \
+	var puiser_legal: bool = (not state.game_over) \
 		and (not state.has_pending_decisions()) \
 		and GameRules.can_puiser(state, state.active_player)
-	_btn_puiser.disabled = not legal
-	if legal:
-		_start_puiser_pulse()
-	else:
-		_stop_puiser_pulse()
-
-
-# Pulsing crimson/gold border around the Puiser button to grab attention
-# when it's the only legal action left for the active player. Implemented
-# as a looping Tween that interpolates a StyleBoxFlat — kept on the
-# pressed/hover/normal states so the glow doesn't drop on hover or click.
-func _start_puiser_pulse() -> void:
-	if _puiser_pulse_tween != null and _puiser_pulse_tween.is_valid():
-		return
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.18, 0.06, 0.10)
-	sb.set_border_width_all(3)
-	sb.set_corner_radius_all(6)
-	sb.set_content_margin_all(6)
+	sb.set_corner_radius_all(32)
+	sb.set_border_width_all(2)
 	sb.shadow_size = 8
-	sb.border_color = Color(0.95, 0.55, 0.20)
-	sb.shadow_color = Color(0.95, 0.55, 0.20, 0.6)
+	if puiser_legal:
+		# Forced-action mode : crimson / gold halo, brighter ink.
+		sb.bg_color = Color(0.30, 0.06, 0.12, 0.95)
+		sb.border_color = Color(0.95, 0.55, 0.20)
+		sb.shadow_color = Color(0.95, 0.55, 0.20, 0.55)
+		_fab.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+	else:
+		sb.bg_color = Color(0.18, 0.06, 0.22, 0.95)
+		sb.border_color = Color(0.85, 0.65, 0.30)
+		sb.shadow_color = Color(0, 0, 0, 0.55)
+		_fab.remove_theme_color_override("font_color")
 	for state_name in ["normal", "hover", "pressed", "focus"]:
-		_btn_puiser.add_theme_stylebox_override(state_name, sb)
-	_btn_puiser.add_theme_color_override("font_color", Color(1, 0.95, 0.7))
-	# Animate the border + glow colour back and forth (golden ↔ crimson).
-	var tw := create_tween()
-	tw.set_loops()
-	tw.tween_method(_apply_puiser_pulse_phase.bind(sb), 0.0, 1.0, 0.7)
-	tw.tween_method(_apply_puiser_pulse_phase.bind(sb), 1.0, 0.0, 0.7)
-	_puiser_pulse_tween = tw
-
-
-func _apply_puiser_pulse_phase(sb: StyleBoxFlat, t: float) -> void:
-	var gold := Color(0.95, 0.65, 0.20)
-	var crim := Color(0.85, 0.18, 0.30)
-	var c := gold.lerp(crim, t)
-	sb.border_color = c
-	sb.shadow_color = Color(c.r, c.g, c.b, 0.55 + 0.30 * t)
-
-
-func _stop_puiser_pulse() -> void:
-	if _puiser_pulse_tween != null and _puiser_pulse_tween.is_valid():
-		_puiser_pulse_tween.kill()
-	_puiser_pulse_tween = null
-	for state_name in ["normal", "hover", "pressed", "focus"]:
-		_btn_puiser.remove_theme_stylebox_override(state_name)
-	_btn_puiser.remove_theme_color_override("font_color")
+		_fab.add_theme_stylebox_override(state_name, sb)
 
 
 func _refresh_status() -> void:
@@ -1011,16 +1026,25 @@ func _layout_player_transgression_panels() -> void:
 		return
 	var vp: Vector2 = get_viewport_rect().size
 	var portrait: bool = vp.y > vp.x
+	# Push the board to the right in landscape so the left column has room
+	# for the two player panels stacked vertically without overlapping the
+	# board artwork. In portrait the board still fills the full width.
+	if board_aspect != null:
+		if portrait:
+			board_aspect.anchor_left = 0.0
+		else:
+			board_aspect.anchor_left = 0.26
 	if portrait:
 		# Top strip (Red) and bottom strip (Blue), full width.
 		# Sandwich between the status label (~0..0.08) and the ascendant
-		# label (~0.78..0.86) / debug bar at the bottom.
+		# label (~0.78..0.86) / FAB at the bottom.
 		_set_anchors(_player_panel_red,  0.0, 0.08, 1.0, 0.20, 4, 4, 0, -2)
 		_set_anchors(_player_panel_blue, 0.0, 0.65, 1.0, 0.77, 4, -2, 0, 0)
 	else:
-		# Left column (Red) and right column (Blue).
-		_set_anchors(_player_panel_red,  0.0, 0.10, 0.16, 0.90, 4, 4, -4, -4)
-		_set_anchors(_player_panel_blue, 0.84, 0.10, 1.0, 0.90, 4, 4, -4, -4)
+		# Both panels on the LEFT, stacked vertically, with no overlap.
+		# Width = 0..0.25 of viewport (≈ 256 px on a 1024-wide iPad).
+		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.50, 4, 4, -4, -2)
+		_set_anchors(_player_panel_blue, 0.0, 0.50, 0.25, 0.96, 4, 2, -4, -4)
 
 
 func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
@@ -2192,17 +2216,12 @@ func _on_btn_toggle_lang() -> void:
 # Dynamic widgets (created on dialog popup or panel refresh) re-localise
 # automatically when they're recreated.
 func _relocalize() -> void:
-	# Bottom bar buttons
-	if _bottom_bar != null:
-		for child in _bottom_bar.get_children():
-			if child is Button:
-				var btn: Button = child
-				var key: String = btn.get_meta("i18n_key", "")
-				if key != "":
-					btn.text = I18n.t(key)
-				var tk: String = btn.get_meta("i18n_tooltip_key", "")
-				if tk != "":
-					btn.tooltip_text = I18n.t(tk)
+	# FAB tooltip — items inside the popup are recreated on each open so they
+	# pick up the current locale automatically.
+	if _fab != null:
+		var tk: String = _fab.get_meta("i18n_tooltip_key", "")
+		if tk != "":
+			_fab.tooltip_text = I18n.t(tk)
 	# Action popup
 	if _action_popup != null:
 		for idx in POPUP_ACTIONS.size():
