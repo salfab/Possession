@@ -771,8 +771,9 @@ func _refresh_liturgy_banners() -> void:
 				sb.border_color = Color(0.85, 0.65, 0.25)
 			fallback.add_theme_stylebox_override("panel", sb)
 
-		# Cartouche text — the localised liturgy summary for the current mode.
-		var text_key: String = "liturgy.%s.%s" % [resp_id, mode]
+		# Cartouche text — ultra-minimal one-liner, distinct from the full
+		# liturgy.<id>.<mode> text shown on the card itself.
+		var text_key: String = "banner.%s.%s" % [resp_id, mode]
 		lbl.text = I18n.t(text_key)
 		# Dim the parchment text a notch when impedita, to suggest "this is
 		# the corrupted face".
