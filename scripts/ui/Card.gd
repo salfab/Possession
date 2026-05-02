@@ -32,6 +32,12 @@ var _tid: String = ""            # transgression def_id
 var _face: int = GameEnums.TransgressionFace.SCANDALE
 var _station: int = -1
 var _impedita: bool = false
+# Liturgy target — caller supplies one of these (the picker logic lives in
+# LiturgyResolver and needs a GameState the Card doesn't have). Stored as ids
+# rather than a pre-formatted string so locale_changed can re-render the
+# abbreviation in the new language.
+var _target_domain: int = -1     # DomainId, or -1 if not a domain target
+var _target_player: int = -1     # PlayerId (>0), or -1 if not a player target
 
 
 func _ready() -> void:
@@ -97,10 +103,12 @@ func setup_transgression(tid: String, face: int) -> void:
 		_apply_binding()
 
 
-func setup_liturgy(station_id: int, impedita: bool) -> void:
+func setup_liturgy(station_id: int, impedita: bool, target_domain: int = -1, target_player: int = -1) -> void:
 	_kind = "liturgy"
 	_station = station_id
 	_impedita = impedita
+	_target_domain = target_domain
+	_target_player = target_player
 	if is_node_ready():
 		_apply_binding()
 
@@ -134,13 +142,13 @@ func flip_to_transgression(tid: String, face: int) -> void:
 	_run_flip_tween(func(): setup_transgression(tid, face))
 
 
-func flip_to_liturgy(station_id: int, impedita: bool) -> void:
+func flip_to_liturgy(station_id: int, impedita: bool, target_domain: int = -1, target_player: int = -1) -> void:
 	if not is_node_ready():
-		setup_liturgy(station_id, impedita)
+		setup_liturgy(station_id, impedita, target_domain, target_player)
 		return
 	if _is_flipping:
 		return
-	_run_flip_tween(func(): setup_liturgy(station_id, impedita))
+	_run_flip_tween(func(): setup_liturgy(station_id, impedita, target_domain, target_player))
 
 
 func _run_flip_tween(swap_callback: Callable) -> void:
@@ -209,13 +217,24 @@ func _refresh_text() -> void:
 			return
 		lbl_title.text = String(resp.get("name", "?"))
 		lbl_cost.text = "—"
-		lbl_domain.text = "—"
+		lbl_domain.text = _liturgy_target_text()
 		lbl_face.text = (I18n.t("liturgy.impedita") if _impedita else I18n.t("liturgy.in_integro")).to_upper()
 		var key: String = "text_impedita" if _impedita else "text_in_integro"
 		lbl_text.text = String(resp.get(key, ""))
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+# Renders the small-badge slot for a Liturgy: a 3-letter domain abbreviation
+# (e.g. "FOI"), or the uppercased player name for Confession (which targets a
+# demon rather than a Domain), or "—" when neither was provided.
+func _liturgy_target_text() -> String:
+	if _target_domain >= 0:
+		return _short_domain(_target_domain)
+	if _target_player > 0:
+		return GameEnums.player_name(_target_player).to_upper()
+	return "—"
+
 
 # Three-letter localised domain abbreviation that fits the small badge slot.
 static func _short_domain(d_id: int) -> String:

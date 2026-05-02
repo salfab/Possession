@@ -1359,11 +1359,16 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 	var resp_id: String = String(LiturgicalResponseData.get_response(st).get("id", ""))
 	var has_card: bool = resp_id != ""
 	_liturgy_card_thumb.visible = has_card
+	# Read the snapshot taken before resolution mutated the state.
+	var t_dom: int = int(info.get("target_domain", -1))
+	var t_pl: int = int(info.get("target_player", -1))
 	if has_card:
-		(_liturgy_card_thumb.get_meta("card_node") as Card).setup_liturgy(st, imp)
+		(_liturgy_card_thumb.get_meta("card_node") as Card).setup_liturgy(st, imp, t_dom, t_pl)
 	_liturgy_card_thumb.set_meta("station", st)
 	_liturgy_card_thumb.set_meta("impedita", imp)
 	_liturgy_card_thumb.set_meta("name", resp_name)
+	_liturgy_card_thumb.set_meta("target_domain", t_dom)
+	_liturgy_card_thumb.set_meta("target_player", t_pl)
 	# Text panel
 	_liturgy_rtl.clear()
 	_liturgy_rtl.append_text("[font_size=30][b]%s[/b][/font_size]\n" % resp_name)
@@ -1933,11 +1938,21 @@ func _show_fullscreen_transgression(tid: String, face: int, title_str: String) -
 	_popup_dialog_fullscreen(_fullscreen_card_dialog)
 
 
-func _show_fullscreen_liturgy(station: int, impedita: bool, title_str: String) -> void:
+func _show_fullscreen_liturgy(station: int, impedita: bool, title_str: String, target_domain: int = -2, target_player: int = -2) -> void:
 	_fullscreen_card_aspect.visible = true
 	_fullscreen_card_image.visible = false
-	_fullscreen_card_node.setup_liturgy(station, impedita)
-	_fullscreen_card_binding = {"kind": "liturgy", "station": station, "impedita": impedita}
+	# Sentinel -2 = "not provided" → compute from current state. -1 means the
+	# caller deliberately passed "no target". Banner clicks before resolution
+	# rely on the sentinel; the post-resolution thumb passes through the
+	# snapshot taken before mutation.
+	if target_domain == -2 and target_player == -2:
+		target_domain = LiturgyResolver.preview_target_domain(state, station) if state != null else -1
+		target_player = LiturgyResolver.preview_target_player(state, station) if state != null else -1
+	_fullscreen_card_node.setup_liturgy(station, impedita, target_domain, target_player)
+	_fullscreen_card_binding = {
+		"kind": "liturgy", "station": station, "impedita": impedita,
+		"target_domain": target_domain, "target_player": target_player,
+	}
 	_update_fullscreen_flip_button()
 	_fullscreen_card_dialog.title = title_str
 	_popup_dialog_fullscreen(_fullscreen_card_dialog)
@@ -2008,7 +2023,9 @@ func _on_fullscreen_card_entraver_pressed() -> void:
 		# Reflect the new state on the binding, the banner, and the
 		# button row of the open dialog.
 		_fullscreen_card_binding["impedita"] = true
-		_fullscreen_card_node.flip_to_liturgy(st, true)
+		var t_dom: int = int(_fullscreen_card_binding.get("target_domain", -1))
+		var t_pl: int = int(_fullscreen_card_binding.get("target_player", -1))
+		_fullscreen_card_node.flip_to_liturgy(st, true, t_dom, t_pl)
 		_update_fullscreen_flip_button()
 	_refresh_all()
 
@@ -2052,7 +2069,9 @@ func _on_fullscreen_card_flip_pressed() -> void:
 	elif kind == "liturgy":
 		var imp: bool = not bool(_fullscreen_card_binding.get("impedita", false))
 		_fullscreen_card_binding["impedita"] = imp
-		_fullscreen_card_node.flip_to_liturgy(int(_fullscreen_card_binding.get("station", 0)), imp)
+		var t_dom: int = int(_fullscreen_card_binding.get("target_domain", -1))
+		var t_pl: int = int(_fullscreen_card_binding.get("target_player", -1))
+		_fullscreen_card_node.flip_to_liturgy(int(_fullscreen_card_binding.get("station", 0)), imp, t_dom, t_pl)
 	_update_fullscreen_flip_button()
 
 
@@ -2121,7 +2140,9 @@ func _on_liturgy_image_clicked() -> void:
 		return
 	var imp: bool = bool(_liturgy_card_thumb.get_meta("impedita", false))
 	var name_str: String = String(_liturgy_card_thumb.get_meta("name", ""))
-	_show_fullscreen_liturgy(st, imp, name_str)
+	var t_dom: int = int(_liturgy_card_thumb.get_meta("target_domain", -1))
+	var t_pl: int = int(_liturgy_card_thumb.get_meta("target_player", -1))
+	_show_fullscreen_liturgy(st, imp, name_str, t_dom, t_pl)
 
 
 func _on_endgame_image_clicked() -> void:

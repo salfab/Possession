@@ -13,6 +13,11 @@ static func resolve_station_response(state: GameState) -> Dictionary:
 	if response.is_empty():
 		return {"resolved": false}
 	var entraved := GameRules.is_response_entraved(state, st)
+	# Snapshot the target *before* mutating state — Communion in particular
+	# changes the seal/emprise of the targeted Domain, which would change
+	# what a re-run of the picker would say.
+	var target_domain: int = preview_target_domain(state, st)
+	var target_player: int = preview_target_player(state, st)
 	# Simonie infamy: if the response targets Foi, force Impedita the next time.
 	# This is checked *after* selecting the target.
 	state.add_log("--- Réponse liturgique : %s (%s) ---" %
@@ -40,7 +45,36 @@ static func resolve_station_response(state: GameState) -> Dictionary:
 		"name": String(response["name"]),
 		"description": String(response.get(desc_key, "")),
 		"log_lines": produced,
+		"target_domain": target_domain,
+		"target_player": target_player,
 	}
+
+
+# --- Target preview (read-only) ---------------------------------------------
+# Used by the UI (Card / Main) to show the would-be target on a Liturgy card
+# before the resolver actually runs. Returns DomainId, or -1 when the station
+# either targets a player (Confession) or has no valid target right now
+# (Contrition with no transgressed Domain).
+static func preview_target_domain(state: GameState, station: int) -> int:
+	match station:
+		GameEnums.StationId.MURMURES:
+			return _pick_signe_target(state)
+		GameEnums.StationId.TENTATION:
+			return _pick_examen_target(state)
+		GameEnums.StationId.CHUTE:
+			return _pick_contrition_target(state)
+		GameEnums.StationId.OFFICE:
+			return _pick_communion_target(state)
+		_:
+			return -1
+
+
+# Confession targets a player rather than a Domain. Returns PlayerId, or -1
+# for any other station.
+static func preview_target_player(state: GameState, station: int) -> int:
+	if station == GameEnums.StationId.CONFESSION:
+		return int(_pick_confession_target_player(state)["player"])
+	return -1
 
 
 # --- Targeting helpers ------------------------------------------------------
@@ -74,17 +108,21 @@ static func _pick_max(values: Dictionary, tie_breaker: Callable) -> int:
 
 # --- I — Signe de croix -----------------------------------------------------
 
-static func _signe_de_croix(state: GameState, impedita: bool) -> void:
+static func _pick_signe_target(state: GameState) -> int:
 	var totals := {}
 	for d_id in DomainData.DOMAINS:
 		totals[d_id] = _total_emprise(state, d_id)
-	var target := _pick_max(totals, func(tied):
+	return _pick_max(totals, func(tied):
 		# Closest to Volonté on the priority list
 		for v in GameEnums.VOLONTE_PROXIMITY_PRIORITY:
 			if v in tied:
 				return v
 		return tied[0]
 	)
+
+
+static func _signe_de_croix(state: GameState, impedita: bool) -> void:
+	var target := _pick_signe_target(state)
 	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
 	impedita = _maybe_force_impedita(state, target, impedita)
 	if impedita:
@@ -114,12 +152,16 @@ static func _signe_de_croix(state: GameState, impedita: bool) -> void:
 
 # --- II — Examen de conscience ---------------------------------------------
 
-static func _examen(state: GameState, impedita: bool) -> void:
+static func _pick_examen_target(state: GameState) -> int:
 	var candidates := [GameEnums.DomainId.AMBITION, GameEnums.DomainId.DESIR]
 	var totals := {}
 	for d_id in candidates:
 		totals[d_id] = _total_emprise(state, d_id)
-	var target := _pick_max(totals, func(tied): return GameEnums.DomainId.AMBITION if GameEnums.DomainId.AMBITION in tied else tied[0])
+	return _pick_max(totals, func(tied): return GameEnums.DomainId.AMBITION if GameEnums.DomainId.AMBITION in tied else tied[0])
+
+
+static func _examen(state: GameState, impedita: bool) -> void:
+	var target := _pick_examen_target(state)
 	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
 	impedita = _maybe_force_impedita(state, target, impedita)
 	var d := state.domain(target)
@@ -147,15 +189,15 @@ static func _set_no_seal_until(state: GameState, d_id: int, station_inclusive: i
 
 # --- III — Contrition ------------------------------------------------------
 
-static func _contrition(state: GameState, impedita: bool) -> void:
-	# Most "serious" transgressed domain: most infamies, then scandals, then total emprise.
+# Most "serious" transgressed domain: most infamies, then scandals, then total emprise.
+# Returns -1 if no domain is transgressed.
+static func _pick_contrition_target(state: GameState) -> int:
 	var transgressed := []
 	for d_id in DomainData.DOMAINS:
 		if state.is_transgressed(d_id):
 			transgressed.append(d_id)
 	if transgressed.is_empty():
-		state.add_log("Contrition : aucun Domaine transgressé, pas d'effet.")
-		return
+		return -1
 	transgressed.sort_custom(func(a, b):
 		var da := state.domain(a)
 		var db := state.domain(b)
@@ -164,7 +206,14 @@ static func _contrition(state: GameState, impedita: bool) -> void:
 		if da.scandals.size() != db.scandals.size():
 			return da.scandals.size() > db.scandals.size()
 		return _total_emprise(state, a) > _total_emprise(state, b))
-	var target: int = transgressed[0]
+	return transgressed[0]
+
+
+static func _contrition(state: GameState, impedita: bool) -> void:
+	var target := _pick_contrition_target(state)
+	if target == -1:
+		state.add_log("Contrition : aucun Domaine transgressé, pas d'effet.")
+		return
 	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
 	impedita = _maybe_force_impedita(state, target, impedita)
 	var d := state.domain(target)
@@ -185,8 +234,11 @@ static func _contrition(state: GameState, impedita: bool) -> void:
 
 # --- IV — Confession --------------------------------------------------------
 
-static func _confession(state: GameState, impedita: bool) -> void:
-	# Target the demon with the most Transgressions (Scandale=1, Infamie=1).
+# Returns {"player": PlayerId, "total_transgressions": int}.
+# When total is 0 the resolution short-circuits with no effect, but a target
+# is still provided (the demon-without-initiative on tie) so the UI can label
+# the card.
+static func _pick_confession_target_player(state: GameState) -> Dictionary:
 	var counts := {GameEnums.PlayerId.RED: 0, GameEnums.PlayerId.BLUE: 0}
 	for d_id in DomainData.DOMAINS:
 		var d := state.domain(d_id)
@@ -207,8 +259,17 @@ static func _confession(state: GameState, impedita: bool) -> void:
 			target_player = GameEnums.PlayerId.BLUE
 		else:
 			target_player = _without_initiative_player(state)
+	return {
+		"player": target_player,
+		"total_transgressions": counts[GameEnums.PlayerId.RED] + counts[GameEnums.PlayerId.BLUE],
+	}
+
+
+static func _confession(state: GameState, impedita: bool) -> void:
+	var pick := _pick_confession_target_player(state)
+	var target_player: int = int(pick["player"])
 	state.add_log("Cible : %s." % GameEnums.player_name(target_player))
-	if counts[GameEnums.PlayerId.RED] + counts[GameEnums.PlayerId.BLUE] == 0:
+	if int(pick["total_transgressions"]) == 0:
 		state.add_log("Confession : aucune Transgression, pas d'effet.")
 		return
 	# Push a pending decision. The UI prompts target_player to pick N distinct
@@ -276,7 +337,7 @@ static func available_confession_kinds(state: GameState, dec: GameState.PendingD
 
 # --- V — Communion ---------------------------------------------------------
 
-static func _communion(state: GameState, impedita: bool) -> void:
+static func _pick_communion_target(state: GameState) -> int:
 	var candidates := [GameEnums.DomainId.FOI, GameEnums.DomainId.VOLONTE]
 	# Priority: sealed > has infamy > most emprise > demon-without-initiative chooses.
 	var sealed_c := []
@@ -286,17 +347,19 @@ static func _communion(state: GameState, impedita: bool) -> void:
 			sealed_c.append(d_id)
 		elif state.domain(d_id).infamies.size() > 0:
 			infamy_c.append(d_id)
-	var target := -1
 	if sealed_c.size() == 1:
-		target = sealed_c[0]
-	elif sealed_c.size() == 2:
-		target = _pick_max(_emprise_dict(state, sealed_c), func(tied): return tied[0])
-	elif infamy_c.size() == 1:
-		target = infamy_c[0]
-	elif infamy_c.size() == 2:
-		target = _pick_max(_emprise_dict(state, infamy_c), func(tied): return tied[0])
-	else:
-		target = _pick_max(_emprise_dict(state, candidates), func(tied): return tied[0])
+		return sealed_c[0]
+	if sealed_c.size() == 2:
+		return _pick_max(_emprise_dict(state, sealed_c), func(tied): return tied[0])
+	if infamy_c.size() == 1:
+		return infamy_c[0]
+	if infamy_c.size() == 2:
+		return _pick_max(_emprise_dict(state, infamy_c), func(tied): return tied[0])
+	return _pick_max(_emprise_dict(state, candidates), func(tied): return tied[0])
+
+
+static func _communion(state: GameState, impedita: bool) -> void:
+	var target := _pick_communion_target(state)
 	state.add_log("Cible : %s." % GameEnums.DOMAIN_NAMES[target])
 	impedita = _maybe_force_impedita(state, target, impedita)
 	var d := state.domain(target)
