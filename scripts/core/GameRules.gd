@@ -140,6 +140,24 @@ static func can_entraver(state: GameState, player: int, target_station: int) -> 
 		return false
 	return true
 
+
+# Same checks as can_entraver, but returning the user-facing reason string
+# (empty string = legal). Used to drive disabled-button tooltips.
+static func why_cannot_entraver(state: GameState, player: int, target_station: int) -> String:
+	if target_station == GameEnums.StationId.EXORCISME:
+		return I18n.t("err.entrave_exorcism")
+	if target_station < state.current_station:
+		return I18n.t("err.entrave_past_station")
+	if target_station > state.current_station + 2:
+		return I18n.t("err.entrave_too_far")
+	for pe in state.pending_entraves:
+		if pe.target_station == target_station:
+			return I18n.t("err.entrave_already")
+	var cost := entrave_cost(state, player, target_station)
+	if state.available_corruption[player] < cost:
+		return I18n.t("err.not_enough_corruption", [cost])
+	return ""
+
 static func is_response_entraved(state: GameState, station: int) -> bool:
 	for pe in state.pending_entraves:
 		if pe.target_station == station:
