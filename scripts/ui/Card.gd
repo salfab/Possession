@@ -36,10 +36,30 @@ var _impedita: bool = false
 
 func _ready() -> void:
 	resized.connect(_on_resized)
+	_configure_card_fonts()
 	_apply_styles()
 	_on_resized()
 	I18n.locale_changed.connect(_refresh_text)
 	_apply_binding()
+
+
+# Switch the three TTF FontFile resources to MSDF rendering. Without this,
+# Godot rasterises glyphs at the requested pixel size, which on Retina /
+# high-DPI displays (iPad in particular) shows subpixel anti-aliasing
+# rainbow fringing on the calligraphic IM Fell typefaces. MSDF stores
+# glyphs as a multichannel signed distance field that scales crisply at
+# any size. Configured once globally — the const preloaded resources are
+# shared across all Card instances.
+static var _fonts_msdf_configured: bool = false
+
+
+static func _configure_card_fonts() -> void:
+	if _fonts_msdf_configured:
+		return
+	for f in [FONT_TITLE, FONT_BODY, FONT_FACE]:
+		if not f.multichannel_signed_distance_field:
+			f.multichannel_signed_distance_field = true
+	_fonts_msdf_configured = true
 
 
 func _apply_styles() -> void:
@@ -59,10 +79,12 @@ func _setup_label(lbl: Label, font: Font, base_size: int, color: Color) -> void:
 
 func _on_resized() -> void:
 	# Scale label font sizes proportionally to the card's actual width.
+	# Floor bumped from 6 → 12 so the text stays legible even on very small
+	# thumbnail renders ; combined with MSDF this is crisp at any size.
 	var s: float = max(0.1, size.x / REF_WIDTH)
 	for lbl in [lbl_title, lbl_cost, lbl_domain, lbl_text, lbl_face]:
 		var base: int = int(lbl.get_meta("base_size", 20))
-		lbl.add_theme_font_size_override("font_size", max(6, int(round(base * s))))
+		lbl.add_theme_font_size_override("font_size", max(12, int(round(base * s))))
 
 
 # ─── Public setup methods ─────────────────────────────────────────────────────
