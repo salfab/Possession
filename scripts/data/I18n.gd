@@ -143,6 +143,7 @@ const STRINGS := {
 	"banner.communion.in_integro":           {"fr": "Fissure + bloque rescell.",
 	                                          "en": "Crack + bar reseal"},
 	"banner.communion.impedita":             {"fr": "Fissure ou Brise",       "en": "Crack or Break"},
+	"banner.exorcisme.special":              {"fr": "Exorcisme final",        "en": "Final Exorcism"},
 	"ui.popup.provoke_in":              {"fr": "Provoquer %s en %s",      "en": "Provoke %s in %s"},
 	"ui.popup.amplify_in":              {"fr": "Amplifier %s en %s",      "en": "Amplify %s in %s"},
 	"ui.popup.exploit_gain":            {"fr": "Exploiter %s  (+%d Corruption%s)",
