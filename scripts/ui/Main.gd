@@ -22,17 +22,19 @@ const DOMAIN_POS := {
 }
 const DOMAIN_HALF := Vector2(0.080, 0.085)
 
-# Liturgy banners — one per Station I-V, on the right edge of the board.
-# Width spans from Désir's right border (0.710 + 0.080 = 0.790) to the board
-# edge, keeping the source image's 2.667:1 aspect ratio
+# Liturgy banners — one per Station I-V plus the Exorcism, on the right edge
+# of the board. Width spans from Désir's right border (0.710 + 0.080 = 0.790)
+# to the board edge, keeping the source image's 2.667:1 aspect ratio
 # (banner_w × 1.333 / banner_h ≈ 2.667). Click → opens the fullscreen
-# liturgy view with an Entraver button.
+# liturgy view with an Entraver button (Station VI opens the endgame card —
+# the Exorcism has no in_integro/impedita variant and can't be entravé).
 const LITURGY_BANNER_POS := {
 	GameEnums.StationId.MURMURES:   Vector2(0.880, 0.180),
 	GameEnums.StationId.TENTATION:  Vector2(0.880, 0.300),
 	GameEnums.StationId.CHUTE:      Vector2(0.880, 0.420),
 	GameEnums.StationId.CONFESSION: Vector2(0.880, 0.540),
 	GameEnums.StationId.OFFICE:     Vector2(0.880, 0.660),
+	GameEnums.StationId.EXORCISME:  Vector2(0.880, 0.780),
 }
 const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
 
@@ -750,19 +752,28 @@ func _refresh_liturgy_banners() -> void:
 		var lbl: Label = _liturgy_banner_labels[st]
 		var tex_rect: TextureRect = panel.get_node("Texture") as TextureRect
 		var fallback: PanelContainer = panel.get_node("Fallback") as PanelContainer
-		var entraved: bool = state != null and GameRules.is_response_entraved(state, st)
+		# Station VI is the Exorcism — it has no LiturgicalResponse, no
+		# in_integro/impedita, and can't be entravé. One fixed banner image
+		# and one fixed cartouche line.
+		var is_exorcism: bool = st == GameEnums.StationId.EXORCISME
+		var entraved: bool = (not is_exorcism) and state != null and GameRules.is_response_entraved(state, st)
 		var resp: Dictionary = LiturgicalResponseData.get_response(st)
 		var resp_id: String = String(resp.get("id", ""))
 
 		# Pick the banner image for the current state, fall back to the in-
 		# integro variant if the impedita one isn't shipped yet.
 		var mode: String = "impedita" if entraved else "in_integro"
-		var path: String = "res://assets/cards/liturgy_banners/%s_%s.webp" % [resp_id, mode]
-		var alt_path: String = "res://assets/cards/liturgy_banners/%s_in_integro.webp" % resp_id
+		var path: String
+		var alt_path: String = ""
+		if is_exorcism:
+			path = "res://assets/cards/liturgy_banners/exorcisme.webp"
+		else:
+			path = "res://assets/cards/liturgy_banners/%s_%s.webp" % [resp_id, mode]
+			alt_path = "res://assets/cards/liturgy_banners/%s_in_integro.webp" % resp_id
 		var tex: Texture2D = null
 		if ResourceLoader.exists(path):
 			tex = load(path) as Texture2D
-		elif ResourceLoader.exists(alt_path):
+		elif alt_path != "" and ResourceLoader.exists(alt_path):
 			tex = load(alt_path) as Texture2D
 
 		if tex != null:
@@ -788,7 +799,7 @@ func _refresh_liturgy_banners() -> void:
 
 		# Cartouche text — ultra-minimal one-liner, distinct from the full
 		# liturgy.<id>.<mode> text shown on the card itself.
-		var text_key: String = "banner.%s.%s" % [resp_id, mode]
+		var text_key: String = "banner.exorcisme.special" if is_exorcism else "banner.%s.%s" % [resp_id, mode]
 		lbl.text = I18n.t(text_key)
 		# Dim the parchment text a notch when impedita, to suggest "this is
 		# the corrupted face".
@@ -811,6 +822,12 @@ func _on_liturgy_banner_input(event: InputEvent, station: int) -> void:
 	if not pressed_release:
 		return
 	if state == null:
+		return
+	# Station VI has no liturgical response — show the static endgame card.
+	if station == GameEnums.StationId.EXORCISME:
+		var endgame_tex := CardImages.exorcisme()
+		if endgame_tex != null:
+			_show_fullscreen_card(endgame_tex, I18n.t("ui.dialog.title.endgame"))
 		return
 	var resp: Dictionary = LiturgicalResponseData.get_response(station)
 	if resp.is_empty():
