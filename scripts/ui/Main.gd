@@ -88,6 +88,11 @@ var _bottom_bar: HBoxContainer
 # a pulsing border when their pool runs dry.
 var _btn_puiser: Button
 var _puiser_pulse_tween: Tween
+
+# Latches the most recently-shown Station id so _refresh_status can fire the
+# intro animation only when the value actually changes (not on every refresh).
+# -1 sentinel = "no station shown yet" → first station opens silently.
+var _last_seen_station: int = -1
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_node: Card               # composed view (transgression / liturgy)
 var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
@@ -151,6 +156,9 @@ func new_game() -> void:
 	pending_action = -1
 	pending_kwargs.clear()
 	_endgame_shown = false
+	# Reset the station-intro latch so the splash doesn't fire when starting
+	# a fresh game from mid-Exorcisme.
+	_last_seen_station = -1
 	_refresh_all()
 
 
@@ -508,14 +516,55 @@ func _refresh_status() -> void:
 	if state.game_over:
 		_status_label.text = I18n.t("ui.game_over", [GameEnums.player_name(state.winner)])
 		return
-	var st_name: String = GameEnums.STATION_NAMES[state.current_station]
-	var pulses: int = GameEnums.STATION_PULSES[state.current_station]
-	var init_p: int = GameEnums.STATION_INITIATIVE[state.current_station]
+	var st: int = state.current_station
+	var st_name: String = GameEnums.STATION_NAMES[st]
+	var pulses: int = GameEnums.STATION_PULSES[st]
+	var init_p: int = GameEnums.STATION_INITIATIVE[st]
 	_status_label.text = I18n.t("ui.status_label.fmt", [
 		st_name, state.current_pulse, pulses,
 		GameEnums.player_name(state.active_player),
 		GameEnums.player_name(init_p),
 	])
+	# Fire the intro animation when the station id actually changes.
+	# _last_seen_station == -1 means we just booted the game — skip the
+	# splash on the very first station so the intro doesn't fire on
+	# new_game().
+	if _last_seen_station >= 0 and st != _last_seen_station:
+		_play_station_intro(st)
+	_last_seen_station = st
+
+
+# Big station-name flash that fades in / scales up / holds / fades out.
+# Used as a soft cue between Stations II-VI; the very first Station opens
+# silently (the player has just hit "Nouvelle partie" and the title is
+# visible in the status bar already).
+func _play_station_intro(station_id: int) -> void:
+	var lbl := Label.new()
+	lbl.text = String(GameEnums.STATION_NAMES.get(station_id, ""))
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 10)
+	lbl.add_theme_font_size_override("font_size", 56)
+	lbl.anchor_left = 0.0
+	lbl.anchor_top = 0.32
+	lbl.anchor_right = 1.0
+	lbl.anchor_bottom = 0.55
+	lbl.modulate.a = 0.0
+	lbl.scale = Vector2(0.55, 0.55)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(lbl)
+	# Wait one frame so the label has a real size before we anchor the pivot.
+	await get_tree().process_frame
+	lbl.pivot_offset = lbl.size * 0.5
+	var tw := create_tween()
+	tw.tween_property(lbl, "modulate:a", 1.0, 0.35)
+	tw.parallel().tween_property(lbl, "scale", Vector2.ONE, 0.45) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.0)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(lbl.queue_free)
 
 
 func _refresh_overlays() -> void:
@@ -1636,6 +1685,9 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_aspect.ratio = 720.0 / 1008.0
 	_fullscreen_card_aspect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fullscreen_card_aspect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Tap or swipe anywhere on the card area triggers the flip.
+	_fullscreen_card_aspect.mouse_filter = Control.MOUSE_FILTER_STOP
+	_fullscreen_card_aspect.gui_input.connect(_on_fullscreen_card_input)
 	vbox.add_child(_fullscreen_card_aspect)
 	_fullscreen_card_node = preload("res://scenes/Card.tscn").instantiate()
 	_fullscreen_card_aspect.add_child(_fullscreen_card_node)
@@ -1710,6 +1762,33 @@ func _update_fullscreen_flip_button() -> void:
 		_fullscreen_card_flip_btn.visible = false
 
 
+# Tap or swipe anywhere on the fullscreen card area flips it. We treat any
+# left-mouse / touch release as "user wants to flip" — both quick taps and
+# horizontal swipes count, since all of them mean the same thing here.
+var _fullscreen_card_press_pos: Vector2 = Vector2.INF
+
+
+func _on_fullscreen_card_input(event: InputEvent) -> void:
+	if _fullscreen_card_binding.is_empty():
+		return
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mb.pressed:
+			_fullscreen_card_press_pos = mb.position
+		elif _fullscreen_card_press_pos != Vector2.INF:
+			_fullscreen_card_press_pos = Vector2.INF
+			_on_fullscreen_card_flip_pressed()
+	elif event is InputEventScreenTouch:
+		var st: InputEventScreenTouch = event
+		if st.pressed:
+			_fullscreen_card_press_pos = st.position
+		elif _fullscreen_card_press_pos != Vector2.INF:
+			_fullscreen_card_press_pos = Vector2.INF
+			_on_fullscreen_card_flip_pressed()
+
+
 func _on_fullscreen_card_flip_pressed() -> void:
 	if _fullscreen_card_binding.is_empty():
 		return
@@ -1718,11 +1797,11 @@ func _on_fullscreen_card_flip_pressed() -> void:
 		var cur: int = int(_fullscreen_card_binding.get("face", GameEnums.TransgressionFace.SCANDALE))
 		var nxt: int = GameEnums.TransgressionFace.INFAMIE if cur == GameEnums.TransgressionFace.SCANDALE else GameEnums.TransgressionFace.SCANDALE
 		_fullscreen_card_binding["face"] = nxt
-		_fullscreen_card_node.setup_transgression(String(_fullscreen_card_binding.get("tid", "")), nxt)
+		_fullscreen_card_node.flip_to_transgression(String(_fullscreen_card_binding.get("tid", "")), nxt)
 	elif kind == "liturgy":
 		var imp: bool = not bool(_fullscreen_card_binding.get("impedita", false))
 		_fullscreen_card_binding["impedita"] = imp
-		_fullscreen_card_node.setup_liturgy(int(_fullscreen_card_binding.get("station", 0)), imp)
+		_fullscreen_card_node.flip_to_liturgy(int(_fullscreen_card_binding.get("station", 0)), imp)
 	_update_fullscreen_flip_button()
 
 
@@ -1748,7 +1827,7 @@ func _on_transgression_flip_pressed(img: Control, btn: Button, tid: String) -> v
 	var cur: int = img.get_meta("face", GameEnums.TransgressionFace.SCANDALE)
 	var nxt: int = GameEnums.TransgressionFace.INFAMIE if cur == GameEnums.TransgressionFace.SCANDALE else GameEnums.TransgressionFace.SCANDALE
 	img.set_meta("face", nxt)
-	(img.get_meta("card_node") as Card).setup_transgression(tid, nxt)
+	(img.get_meta("card_node") as Card).flip_to_transgression(tid, nxt)
 	btn.text = _flip_button_label(nxt)
 
 
