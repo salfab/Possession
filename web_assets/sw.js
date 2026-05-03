@@ -29,8 +29,10 @@
 // the actual worker once registered. The branch on `typeof window`
 // is the standard discriminator.
 
-const CACHE_VERSION = '__SHA__';
-const CACHE_NAME = 'possession-' + CACHE_VERSION;
+// __SHA__ is rewritten by the CI workflow with the short commit SHA, so
+// the literal cache name appears in the deployed file (which lets the
+// CI grep for "possession-<sha>" as a sanity check).
+const CACHE_NAME = 'possession-__SHA__';
 
 // Bootstrap set — enough to cold-boot the game offline. Other assets
 // (audio worklets, optional icons) are picked up opportunistically by
