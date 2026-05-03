@@ -117,26 +117,30 @@ jobs:
           mv "${EXPORT_DIR}/index.html.new" "${EXPORT_DIR}/index.html"
           grep -q 'possession-loading-style' "${EXPORT_DIR}/index.html"
 
-      - name: Install COOP/COEP service worker and PWA manifest
+      - name: Install offline-cache service worker and PWA manifest
         # Force bash — the barichello container otherwise runs `run:` steps
         # under dash, which doesn't support the bash-isms we used here.
         shell: bash
-        # The Godot 4 web build needs SharedArrayBuffer, which requires
-        # Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy on
-        # every response. GitHub Pages can't set them, so the SW patches
-        # them in client-side (standard coi-serviceworker pattern).
+        # The web build no longer needs Cross-Origin isolation since the
+        # upgrade to Godot 4.3 nothreads (SAB-free), so the SW is now a
+        # pure offline cache : it precaches html/js/wasm/pck/manifest on
+        # install, serves them from cache on every fetch with stale-while-
+        # revalidate, and uses a per-deploy cache name (token __SHA__
+        # below substituted with the short SHA so each new build invalidates
+        # the previous cache automatically).
         # The web app manifest gives the page enough metadata for the
         # browser's "Install / Add to home screen" prompt and for the
-        # standalone-display mode once installed.
-        # NOTE : an earlier revision also pre-cached the export for offline
-        # play, but that broke the COI path on at least one device — the
-        # SW served cached responses without the headers and the page
-        # ended up without SharedArrayBuffer. Caching has been removed
-        # from this step until a safer scheme is in place.
+        # standalone-display mode once installed — that's what makes the
+        # game playable airplane-mode-on on iPad once first cached.
         run: |
           set -e
           cp web_assets/manifest.json "${EXPORT_DIR}/manifest.json"
-          cp web_assets/sw.js "${EXPORT_DIR}/sw.js"
+          # Bake the deploy SHA into the SW so each push gets its own
+          # cache namespace ; the `activate` handler garbage-collects the
+          # previous one.
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          sed "s|__SHA__|${SHORT_SHA}|g" web_assets/sw.js > "${EXPORT_DIR}/sw.js"
+          grep -q "possession-${SHORT_SHA}" "${EXPORT_DIR}/sw.js"
           # Register the SW + link the manifest at the start of <head>.
           sed -i -E 's|<head([^>]*)>|<head\1>\n<link rel="manifest" href="manifest.json">\n<meta name="theme-color" content="#4a0e5e">\n<script src="sw.js"></script>|' "${EXPORT_DIR}/index.html"
           grep -q 'sw.js' "${EXPORT_DIR}/index.html"
