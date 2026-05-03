@@ -838,6 +838,13 @@ func _refresh_liturgy_banners() -> void:
 
 # Tap or release on a banner — opens the fullscreen liturgical card view for
 # that Station, with the Entraver button if the action is currently legal.
+# Multi-touch suppressed : if a second finger lands during the gesture
+# (the user is trying to pinch-zoom the board), we abort the tap so the
+# release of the first finger doesn't false-trigger the dialog.
+var _banner_touches: Dictionary = {}
+var _banner_was_multi: bool = false
+
+
 func _on_liturgy_banner_input(event: InputEvent, station: int) -> void:
 	var pressed_release: bool = false
 	if event is InputEventMouseButton:
@@ -846,8 +853,23 @@ func _on_liturgy_banner_input(event: InputEvent, station: int) -> void:
 			pressed_release = true
 	elif event is InputEventScreenTouch:
 		var st_event: InputEventScreenTouch = event
-		if not st_event.pressed:
-			pressed_release = true
+		if st_event.pressed:
+			_banner_touches[st_event.index] = st_event.position
+			if _banner_touches.size() >= 2:
+				_banner_was_multi = true
+			return
+		_banner_touches.erase(st_event.index)
+		if not _banner_touches.is_empty():
+			# Other fingers still down — wait for the last release before
+			# deciding tap vs. pinch.
+			return
+		# Final release : only treat as tap if the gesture was single-finger
+		# throughout. Pinch always reaches here with _banner_was_multi true.
+		var was_single: bool = not _banner_was_multi
+		_banner_was_multi = false
+		if not was_single:
+			return
+		pressed_release = true
 	if not pressed_release:
 		return
 	if state == null:
@@ -2168,7 +2190,13 @@ func _on_fullscreen_card_entraver_pressed() -> void:
 # Tap or swipe anywhere on the fullscreen card area flips it. We treat any
 # left-mouse / touch release as "user wants to flip" — both quick taps and
 # horizontal swipes count, since all of them mean the same thing here.
+# Multi-touch is filtered out : if a second finger ever lands during the
+# gesture, we don't flip on the eventual release. Lets a pinch-zoom
+# attempt on the card ride through cleanly even if the user's index
+# fingers happen to start on the card area.
 var _fullscreen_card_press_pos: Vector2 = Vector2.INF
+var _fullscreen_card_touches: Dictionary = {}
+var _fullscreen_card_was_multi: bool = false
 
 
 func _on_fullscreen_card_input(event: InputEvent) -> void:
@@ -2186,9 +2214,18 @@ func _on_fullscreen_card_input(event: InputEvent) -> void:
 	elif event is InputEventScreenTouch:
 		var st: InputEventScreenTouch = event
 		if st.pressed:
-			_fullscreen_card_press_pos = st.position
-		elif _fullscreen_card_press_pos != Vector2.INF:
-			_fullscreen_card_press_pos = Vector2.INF
+			_fullscreen_card_touches[st.index] = st.position
+			if _fullscreen_card_touches.size() >= 2:
+				_fullscreen_card_was_multi = true
+			return
+		_fullscreen_card_touches.erase(st.index)
+		# Wait until every finger is up before deciding — multi-touch on
+		# release of the first finger would otherwise still trigger.
+		if not _fullscreen_card_touches.is_empty():
+			return
+		var was_single: bool = not _fullscreen_card_was_multi
+		_fullscreen_card_was_multi = false
+		if was_single:
 			_on_fullscreen_card_flip_pressed()
 
 
