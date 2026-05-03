@@ -110,8 +110,10 @@ var _fab_menu: PopupMenu
 var _last_seen_station: int = -1
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_node: Card               # composed view (transgression / liturgy)
-var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
-var _fullscreen_card_back: RichTextLabel      # text-only back side, used by Exorcism flip
+var _static_card_holder: AspectRatioContainer  # shared aspect for static front + back
+var _fullscreen_card_image: TextureRect       # static fallback front (Exorcism)
+var _fullscreen_card_back_panel: PanelContainer  # parchment back, child of _static_card_holder
+var _fullscreen_card_back: RichTextLabel      # rich text drawn on the back parchment
 var _fullscreen_card_aspect: AspectRatioContainer
 var _fullscreen_card_flip_btn: Button
 var _fullscreen_card_entraver_btn: Button
@@ -1920,30 +1922,53 @@ func _build_fullscreen_card_dialog() -> void:
 	# pulling a longer .detail variant when one's been shipped in i18n.
 	_fullscreen_card_node.effect_info_requested.connect(_on_card_effect_info_requested)
 
-	# TextureRect fallback used for cards we still ship pre-composed (Exorcism).
+	# Static-card holder : both faces of the Exorcism live inside a single
+	# AspectRatioContainer (720/1008, the card's printed ratio) so they
+	# share size + pivot, which lets the flip animation feel like turning a
+	# real card. Parent of _fullscreen_card_image (front) and the back
+	# parchment panel (back).
+	_static_card_holder = AspectRatioContainer.new()
+	_static_card_holder.ratio = 720.0 / 1008.0
+	_static_card_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_static_card_holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_static_card_holder.visible = false
+	vbox.add_child(_static_card_holder)
+
+	# Front : painted texture, anchored full-bleed inside the holder.
 	_fullscreen_card_image = TextureRect.new()
 	_fullscreen_card_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_fullscreen_card_image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_fullscreen_card_image.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_fullscreen_card_image.custom_minimum_size = Vector2(200, 280)
+	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_SCALE
+	_fullscreen_card_image.anchor_right = 1.0
+	_fullscreen_card_image.anchor_bottom = 1.0
 	_fullscreen_card_image.visible = false
-	vbox.add_child(_fullscreen_card_image)
+	_static_card_holder.add_child(_fullscreen_card_image)
 
-	# Text-only "back side" used when a static card has no second face image
-	# but does have textual rules to surface (e.g. the Exorcism : the front
-	# is the painted card, the back is the winner-determination ruleset).
+	# Back : parchment-styled PanelContainer holding a RichText. Same outer
+	# shape as the painted front, with IM Fell typography and dark ink so
+	# it reads as the actual back of the card rather than a separate panel.
+	_fullscreen_card_back_panel = PanelContainer.new()
+	_fullscreen_card_back_panel.anchor_right = 1.0
+	_fullscreen_card_back_panel.anchor_bottom = 1.0
+	var back_sb := StyleBoxFlat.new()
+	back_sb.bg_color = Color(0.86, 0.78, 0.62)              # parchment
+	back_sb.border_color = Color(0.42, 0.28, 0.16)          # umber border
+	back_sb.set_border_width_all(4)
+	back_sb.set_corner_radius_all(14)
+	back_sb.set_content_margin_all(24)
+	_fullscreen_card_back_panel.add_theme_stylebox_override("panel", back_sb)
+	_fullscreen_card_back_panel.visible = false
+	_static_card_holder.add_child(_fullscreen_card_back_panel)
+
 	_fullscreen_card_back = RichTextLabel.new()
 	_fullscreen_card_back.bbcode_enabled = true
-	_fullscreen_card_back.fit_content = true
+	_fullscreen_card_back.fit_content = false
 	_fullscreen_card_back.scroll_active = true
-	_fullscreen_card_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_fullscreen_card_back.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_fullscreen_card_back.custom_minimum_size = Vector2(300, 280)
+	_fullscreen_card_back.add_theme_color_override("default_color", Color(0.16, 0.07, 0.03))
+	_fullscreen_card_back.add_theme_font_override("normal_font", Card.FONT_BODY)
+	_fullscreen_card_back.add_theme_font_override("bold_font", Card.FONT_TITLE)
 	_fullscreen_card_back.add_theme_font_size_override("normal_font_size", 18)
-	_fullscreen_card_back.add_theme_font_size_override("bold_font_size", 20)
-	_fullscreen_card_back.visible = false
-	vbox.add_child(_fullscreen_card_back)
+	_fullscreen_card_back.add_theme_font_size_override("bold_font_size", 22)
+	_fullscreen_card_back_panel.add_child(_fullscreen_card_back)
 
 	# Action row : flip + entraver. Both are shown / hidden per binding by
 	# _update_fullscreen_buttons.
@@ -1970,9 +1995,14 @@ func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte", back_tex
 	if tex == null:
 		return
 	_fullscreen_card_aspect.visible = false
+	_static_card_holder.visible = true
+	# Reset any leftover flip transform from a previous open.
+	_static_card_holder.scale = Vector2.ONE
+	_static_card_holder.rotation = 0.0
+	_static_card_holder.modulate = Color.WHITE
 	_fullscreen_card_image.visible = true
 	_fullscreen_card_image.texture = tex
-	_fullscreen_card_back.visible = false
+	_fullscreen_card_back_panel.visible = false
 	# Cards that don't have a meaningful "other side" pass back_text == ""
 	# and stay un-flippable. When a back text is provided (Exorcism : the
 	# front is the painted card, the back is the winner-determination
@@ -1998,7 +2028,7 @@ func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte", back_tex
 
 func _show_fullscreen_transgression(tid: String, face: int, title_str: String) -> void:
 	_fullscreen_card_aspect.visible = true
-	_fullscreen_card_image.visible = false
+	_static_card_holder.visible = false
 	_fullscreen_card_node.setup_transgression(tid, face)
 	_fullscreen_card_binding = {"kind": "transgression", "tid": tid, "face": face}
 	_update_fullscreen_flip_button()
@@ -2008,7 +2038,7 @@ func _show_fullscreen_transgression(tid: String, face: int, title_str: String) -
 
 func _show_fullscreen_liturgy(station: int, impedita: bool, title_str: String, target_domain: int = -2, target_player: int = -2) -> void:
 	_fullscreen_card_aspect.visible = true
-	_fullscreen_card_image.visible = false
+	_static_card_holder.visible = false
 	# Sentinel -2 = "not provided" → compute from current state. -1 means the
 	# caller deliberately passed "no target". Banner clicks before resolution
 	# rely on the sentinel; the post-resolution thumb passes through the
@@ -2244,14 +2274,52 @@ func _on_fullscreen_card_flip_pressed() -> void:
 		var t_pl: int = int(_fullscreen_card_binding.get("target_player", -1))
 		_fullscreen_card_node.flip_to_liturgy(int(_fullscreen_card_binding.get("station", 0)), imp, t_dom, t_pl)
 	elif kind == "static":
-		var face: String = String(_fullscreen_card_binding.get("face", "front"))
-		var nxt: String = "back" if face == "front" else "front"
-		_fullscreen_card_binding["face"] = nxt
-		# No tween here — a static texture flipping to a text panel doesn't
-		# share the Card.tscn's scale-x rotation, so we just swap visibilities.
-		_fullscreen_card_image.visible = nxt == "front"
-		_fullscreen_card_back.visible = nxt == "back"
+		_flip_static_card()
+		return  # _flip_static_card calls _update_fullscreen_flip_button at end of tween
 	_update_fullscreen_flip_button()
+
+
+# Mirrors Card._run_flip_tween for the static-card holder (Exorcism). Same
+# perspective trick — scale.x 1→0→1 to fold edge-on, scale.y compression +
+# slight rotation + dim modulate for depth — with the binding swap and
+# child-visibility toggle happening at the edge-on midpoint.
+const _STATIC_FLIP_HALF_DURATION := 0.22
+const _STATIC_FLIP_TILT_DEG := 4.0
+const _STATIC_FLIP_DEPTH_SCALE := 0.82
+const _STATIC_FLIP_DIM := Color(0.78, 0.74, 0.78)
+var _static_is_flipping: bool = false
+
+
+func _flip_static_card() -> void:
+	if _static_is_flipping:
+		return
+	if _fullscreen_card_binding.is_empty():
+		return
+	_static_is_flipping = true
+	var face: String = String(_fullscreen_card_binding.get("face", "front"))
+	var nxt: String = "back" if face == "front" else "front"
+	_static_card_holder.pivot_offset = _static_card_holder.size * 0.5
+	var dur := _STATIC_FLIP_HALF_DURATION
+	var tilt_rad := deg_to_rad(_STATIC_FLIP_TILT_DEG)
+	var tw := create_tween()
+	# Phase 1 — fold to edge-on.
+	tw.tween_property(_static_card_holder, "scale:x", 0.0, dur).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(_static_card_holder, "scale:y", _STATIC_FLIP_DEPTH_SCALE, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(_static_card_holder, "rotation", tilt_rad, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(_static_card_holder, "modulate", _STATIC_FLIP_DIM, dur).set_trans(Tween.TRANS_SINE)
+	# Mid-tween : swap which face is shown and persist the binding.
+	tw.tween_callback(func():
+		_fullscreen_card_binding["face"] = nxt
+		_fullscreen_card_image.visible = nxt == "front"
+		_fullscreen_card_back_panel.visible = nxt == "back"
+		_update_fullscreen_flip_button()
+	)
+	# Phase 2 — unfold the new face.
+	tw.tween_property(_static_card_holder, "scale:x", 1.0, dur).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(_static_card_holder, "scale:y", 1.0, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(_static_card_holder, "rotation", 0.0, dur).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(_static_card_holder, "modulate", Color.WHITE, dur).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(func(): _static_is_flipping = false)
 
 
 func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
