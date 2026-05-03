@@ -29,12 +29,12 @@ const DOMAIN_HALF := Vector2(0.080, 0.085)
 # liturgy view with an Entraver button (Station VI opens the endgame card —
 # the Exorcism has no in_integro/impedita variant and can't be entravé).
 const LITURGY_BANNER_POS := {
-	GameEnums.StationId.MURMURES:   Vector2(0.880, 0.180),
-	GameEnums.StationId.TENTATION:  Vector2(0.880, 0.300),
-	GameEnums.StationId.CHUTE:      Vector2(0.880, 0.420),
-	GameEnums.StationId.CONFESSION: Vector2(0.880, 0.540),
-	GameEnums.StationId.OFFICE:     Vector2(0.880, 0.660),
-	GameEnums.StationId.EXORCISME:  Vector2(0.880, 0.780),
+	GameEnums.StationId.MURMURES:   Vector2(0.880, 0.135),
+	GameEnums.StationId.TENTATION:  Vector2(0.880, 0.255),
+	GameEnums.StationId.CHUTE:      Vector2(0.880, 0.375),
+	GameEnums.StationId.CONFESSION: Vector2(0.880, 0.495),
+	GameEnums.StationId.OFFICE:     Vector2(0.880, 0.615),
+	GameEnums.StationId.EXORCISME:  Vector2(0.880, 0.735),
 }
 const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
 
