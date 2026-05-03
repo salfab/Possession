@@ -117,6 +117,11 @@ var _fullscreen_card_entraver_btn: Button
 # Small popup that explains the targeting rule of a Liturgy. Triggered by
 # tapping the badge slot on a fullscreen Liturgy card.
 var _targeting_dialog: AcceptDialog
+# Companion popup that re-renders the body-text effect in a high-contrast
+# theme (Card body uses dark ink on parchment, which a few playtesters
+# struggled to read). Optionally surfaces a longer ".detail" i18n variant
+# when the rules text has been flagged as ambiguous.
+var _effect_detail_dialog: AcceptDialog
 # Binding for the currently shown composed card.
 # {"kind": "transgression", "tid": String, "face": int}
 # {"kind": "liturgy", "station": int, "impedita": bool}
@@ -1908,6 +1913,9 @@ func _build_fullscreen_card_dialog() -> void:
 	# a panel describing how the response picks its target — useful since
 	# the resolved target shifts with the board state.
 	_fullscreen_card_node.target_info_requested.connect(_on_card_target_info_requested)
+	# Tapping the body text re-renders the effect in a high-contrast popup,
+	# pulling a longer .detail variant when one's been shipped in i18n.
+	_fullscreen_card_node.effect_info_requested.connect(_on_card_effect_info_requested)
 
 	# TextureRect fallback used for cards we still ship pre-composed (Exorcism).
 	_fullscreen_card_image = TextureRect.new()
@@ -2124,6 +2132,57 @@ func _on_card_target_info_requested(station: int) -> void:
 	# Smaller than the fullscreen card it sits on — the rule is a couple of
 	# lines and the popup shouldn't occlude the card the player was reading.
 	_targeting_dialog.popup_centered_clamped(Vector2i(560, 280))
+
+
+# Re-renders the currently-shown card's effect text in a high-contrast
+# popup. Reads the binding off _fullscreen_card_binding rather than taking
+# parameters, since that's the source of truth for what's on screen.
+# Looks up an optional ".detail" suffix in i18n first (longer wording for
+# rules that proved ambiguous in playtesting) and falls back to the base
+# text otherwise.
+func _on_card_effect_info_requested() -> void:
+	if _fullscreen_card_binding.is_empty():
+		return
+	var kind: String = _fullscreen_card_binding.get("kind", "")
+	var base_key: String = ""
+	if kind == "liturgy":
+		var resp_id: String = String(LiturgicalResponseData.get_response(int(_fullscreen_card_binding.get("station", -1))).get("id", ""))
+		if resp_id == "":
+			return
+		var mode: String = "impedita" if bool(_fullscreen_card_binding.get("impedita", false)) else "in_integro"
+		base_key = "liturgy.%s.%s" % [resp_id, mode]
+	elif kind == "transgression":
+		var tid: String = String(_fullscreen_card_binding.get("tid", ""))
+		if tid == "":
+			return
+		var face_str: String = "infamy" if int(_fullscreen_card_binding.get("face", GameEnums.TransgressionFace.SCANDALE)) == GameEnums.TransgressionFace.INFAMIE else "scandal"
+		base_key = "transgression.%s.%s" % [tid, face_str]
+	else:
+		return
+
+	var detail_key: String = base_key + ".detail"
+	var detail_text: String = I18n.t(detail_key)
+	# I18n.t falls back to the key itself when the entry is missing — that's
+	# our cue to use the regular body text instead.
+	var text: String = detail_text if detail_text != detail_key else I18n.t(base_key)
+
+	if _effect_detail_dialog == null:
+		_effect_detail_dialog = AcceptDialog.new()
+		_effect_detail_dialog.exclusive = true
+		_effect_detail_dialog.ok_button_text = I18n.t("ui.dialog.close")
+		_effect_detail_dialog.wrap_controls = false
+		add_child(_effect_detail_dialog)
+		var ok_btn: Button = _effect_detail_dialog.get_ok_button()
+		if ok_btn != null:
+			ok_btn.add_theme_font_size_override("font_size", 22)
+		var dlg_lbl: Label = _effect_detail_dialog.get_label()
+		if dlg_lbl != null:
+			dlg_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			dlg_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			dlg_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_effect_detail_dialog.title = I18n.t("ui.dialog.title.effect_detail")
+	_effect_detail_dialog.dialog_text = text
+	_effect_detail_dialog.popup_centered_clamped(Vector2i(620, 360))
 
 
 func _on_fullscreen_card_flip_pressed() -> void:

@@ -131,8 +131,11 @@ const STRINGS := {
 	"ui.dialog.title.card":         {"fr": "Carte",                     "en": "Card"},
 	"ui.dialog.title.placed":       {"fr": "Transgressions posées",      "en": "Placed Transgressions"},
 	"ui.dialog.title.targeting_rule":{"fr": "Règle de ciblage",           "en": "Targeting rule"},
+	"ui.dialog.title.effect_detail":{"fr": "Détail de l'effet",          "en": "Effect detail"},
 	"ui.tooltip.tap_for_targeting_rule":{"fr": "Toucher pour voir la règle de ciblage",
 	                                    "en": "Tap to see the targeting rule"},
+	"ui.tooltip.tap_for_effect_detail":{"fr": "Toucher pour voir le détail de l'effet",
+	                                   "en": "Tap to see the detailed effect"},
 
 	# UI — labels / hints
 	"ui.tooltip.click_to_zoom":     {"fr": "Cliquer pour agrandir",   "en": "Click to enlarge"},

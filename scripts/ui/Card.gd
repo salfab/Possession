@@ -45,10 +45,18 @@ var _target_player: int = -1     # PlayerId (>0), or -1 if not a player target
 # (liturgy.targeting.<id>) so it's locale-aware.
 signal target_info_requested(station: int)
 
-# Transparent overlay over lbl_domain that captures taps without blocking
-# the card's other interactions (flip, zoom). Created at runtime so we
-# don't need to edit the .tscn.
+# Emitted when the user taps the body-text slot (lbl_text). The host UI
+# pops a high-contrast "effect detail" panel — useful when the parchment
+# background hurts readability or when the rules text is ambiguous and
+# benefits from a longer i18n variant (key suffix ".detail", with fallback
+# to the base text when no detailed variant is shipped).
+signal effect_info_requested
+
+# Transparent overlays over the small badge / body-text slots that capture
+# taps without blocking the card's other interactions (flip, zoom). Created
+# at runtime so we don't need to edit the .tscn.
 var _domain_btn: Button
+var _effect_btn: Button
 
 
 func _ready() -> void:
@@ -56,35 +64,52 @@ func _ready() -> void:
 	_configure_card_fonts()
 	_apply_styles()
 	_setup_domain_btn()
+	_setup_effect_btn()
 	_on_resized()
 	I18n.locale_changed.connect(_refresh_text)
 	_apply_binding()
 
 
 func _setup_domain_btn() -> void:
-	_domain_btn = Button.new()
-	_domain_btn.flat = true
-	_domain_btn.focus_mode = Control.FOCUS_NONE
-	_domain_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	# Invisible — we want the existing lbl_domain to remain the visible
-	# element. The Button is purely a hit-test target.
-	_domain_btn.modulate = Color(1, 1, 1, 0)
-	_domain_btn.anchor_left = lbl_domain.anchor_left
-	_domain_btn.anchor_top = lbl_domain.anchor_top
-	_domain_btn.anchor_right = lbl_domain.anchor_right
-	_domain_btn.anchor_bottom = lbl_domain.anchor_bottom
-	_domain_btn.offset_left = lbl_domain.offset_left
-	_domain_btn.offset_top = lbl_domain.offset_top
-	_domain_btn.offset_right = lbl_domain.offset_right
-	_domain_btn.offset_bottom = lbl_domain.offset_bottom
-	_domain_btn.visible = false
+	_domain_btn = _make_overlay_button(lbl_domain)
 	_domain_btn.pressed.connect(_on_domain_btn_pressed)
-	add_child(_domain_btn)
+
+
+func _setup_effect_btn() -> void:
+	_effect_btn = _make_overlay_button(lbl_text)
+	_effect_btn.pressed.connect(_on_effect_btn_pressed)
+
+
+# Builds a transparent Button that mirrors the anchors/offsets of `target`
+# and adds it as a sibling, so a tap on the labelled area is captured as a
+# Button press without obscuring the underlying Label visually.
+func _make_overlay_button(target: Control) -> Button:
+	var btn := Button.new()
+	btn.flat = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	btn.modulate = Color(1, 1, 1, 0)
+	btn.anchor_left = target.anchor_left
+	btn.anchor_top = target.anchor_top
+	btn.anchor_right = target.anchor_right
+	btn.anchor_bottom = target.anchor_bottom
+	btn.offset_left = target.offset_left
+	btn.offset_top = target.offset_top
+	btn.offset_right = target.offset_right
+	btn.offset_bottom = target.offset_bottom
+	btn.visible = false
+	add_child(btn)
+	return btn
 
 
 func _on_domain_btn_pressed() -> void:
 	if _kind == "liturgy":
 		target_info_requested.emit(_station)
+
+
+func _on_effect_btn_pressed() -> void:
+	if _kind == "liturgy" or _kind == "transgression":
+		effect_info_requested.emit()
 
 
 # Switch the three TTF FontFile resources to MSDF rendering. Without this,
@@ -229,6 +254,13 @@ func _apply_binding() -> void:
 		_domain_btn.visible = _kind == "liturgy"
 		if _kind == "liturgy":
 			_domain_btn.tooltip_text = I18n.t("ui.tooltip.tap_for_targeting_rule")
+	# Body-text tap target — re-shows the effect in a high-contrast popup
+	# (and a longer wording when an i18n .detail variant is shipped).
+	# Always available on Liturgy + Transgression cards.
+	if _effect_btn != null:
+		_effect_btn.visible = _kind == "liturgy" or _kind == "transgression"
+		if _effect_btn.visible:
+			_effect_btn.tooltip_text = I18n.t("ui.tooltip.tap_for_effect_detail")
 	_refresh_text()
 
 
