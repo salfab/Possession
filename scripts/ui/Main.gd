@@ -1932,6 +1932,12 @@ func _build_fullscreen_card_dialog() -> void:
 	_static_card_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_static_card_holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_static_card_holder.visible = false
+	# Tap anywhere on the static card area flips it, same as the composed
+	# Card.tscn path. We piggy-back on the existing _on_fullscreen_card_input
+	# handler — it dispatches by binding.kind and routes "static" through
+	# the dedicated tween.
+	_static_card_holder.mouse_filter = Control.MOUSE_FILTER_STOP
+	_static_card_holder.gui_input.connect(_on_fullscreen_card_input)
 	vbox.add_child(_static_card_holder)
 
 	# Front : painted texture, anchored full-bleed inside the holder.
@@ -1940,6 +1946,8 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_image.stretch_mode = TextureRect.STRETCH_SCALE
 	_fullscreen_card_image.anchor_right = 1.0
 	_fullscreen_card_image.anchor_bottom = 1.0
+	# Pass clicks through so taps flip the card (handled on the holder).
+	_fullscreen_card_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fullscreen_card_image.visible = false
 	_static_card_holder.add_child(_fullscreen_card_image)
 
@@ -1956,13 +1964,17 @@ func _build_fullscreen_card_dialog() -> void:
 	back_sb.set_corner_radius_all(14)
 	back_sb.set_content_margin_all(24)
 	_fullscreen_card_back_panel.add_theme_stylebox_override("panel", back_sb)
+	_fullscreen_card_back_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fullscreen_card_back_panel.visible = false
 	_static_card_holder.add_child(_fullscreen_card_back_panel)
 
 	_fullscreen_card_back = RichTextLabel.new()
 	_fullscreen_card_back.bbcode_enabled = true
 	_fullscreen_card_back.fit_content = false
-	_fullscreen_card_back.scroll_active = true
+	_fullscreen_card_back.scroll_active = false
+	# Same passthrough rationale as the front : a tap on the rules text
+	# flips the card back, rather than being swallowed by the label.
+	_fullscreen_card_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fullscreen_card_back.add_theme_color_override("default_color", Color(0.16, 0.07, 0.03))
 	_fullscreen_card_back.add_theme_font_override("normal_font", Card.FONT_BODY)
 	_fullscreen_card_back.add_theme_font_override("bold_font", Card.FONT_TITLE)
