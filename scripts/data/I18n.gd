@@ -146,6 +146,8 @@ const STRINGS := {
 	"ui.flip.see_scandal":          {"fr": "Voir Scandale",  "en": "View Scandal"},
 	"ui.flip.see_impedita":         {"fr": "Voir Impedita",  "en": "View Impedita"},
 	"ui.flip.see_in_integro":       {"fr": "Voir In Integro","en": "View In Integro"},
+	"ui.flip.see_back":             {"fr": "Voir les règles","en": "View rules"},
+	"ui.flip.see_front":            {"fr": "Voir la carte",  "en": "View card"},
 	"ui.player_panel.title":        {"fr": "%s — Transgressions", "en": "%s — Transgressions"},
 	"ui.player_panel.empty":        {"fr": "(aucune)", "en": "(none)"},
 	"ui.player_panel.reserve":      {"fr": "Réserve : %d Corruption%s",
@@ -285,6 +287,15 @@ const STRINGS := {
 	                                   "en": "If Sealed: Liturgical Crack. Then forbids resealing before the Exorcism."},
 	"liturgy.communion.impedita":      {"fr": "Si scellé : Fissure simple (Sceau retiré). Sinon : Brise la Domination.",
 	                                   "en": "If Sealed: simple Crack (Seal removed). Otherwise: Break Domination."},
+
+	# Exorcism — Station VI has no liturgical response and cannot be entravé.
+	# This text fills the back side of the fullscreen Exorcism card so the
+	# player can read both the Rupture conditions and the winner-determination
+	# rules without leaving the card view.
+	"liturgy.exorcisme.back": {
+		"fr": "[b]Rupture de l'âme[/b]\nL'Exorcisme final échoue si les trois conditions sont remplies :\n• [b]Profondeur[/b] : 3+ Infamies au total, ou Infamie en Foi/Volonté.\n• [b]Étendue[/b] : 4+ Domaines transgressés.\n• [b]Ancrage[/b] : 2+ Domaines scellés, ou Volonté scellée et transgressée.\n\n[b]Démon vainqueur[/b]\n1. [b]Fiat Tenebris[/b] : Volonté scellée et transgressée par le même démon → il l'emporte.\n2. Sinon, [b]Ascendant final[/b] (bonus appliqués) :\n   • +1 par Sceau (et +1 supplémentaire pour Volonté scellée),\n   • +1 par Infamie dans un Domaine que vous contrôlez,\n   • +1 par Infamie en Foi,\n   • bonus Pacte silencieux / Abdication intérieure.\n3. Égalité (Ascendant nul), dans l'ordre : démon ayant scellé Volonté ; sinon contrôleur de Volonté ; sinon plus d'Infamies ; sinon plus de Domaines contrôlés ; sinon Possession instable (pas de vainqueur).",
+		"en": "[b]Soul Rupture[/b]\nThe final Exorcism fails if all three conditions are met :\n• [b]Depth[/b] : 3+ total Infamies, or any Infamy in Faith/Will.\n• [b]Spread[/b] : 4+ transgressed Domains.\n• [b]Anchor[/b] : 2+ Sealed Domains, or Will sealed AND transgressed.\n\n[b]Winning demon[/b]\n1. [b]Fiat Tenebris[/b] : Will sealed AND transgressed by the same demon → that demon wins.\n2. Otherwise, [b]final Ascendancy[/b] (bonuses applied) :\n   • +1 per Seal (extra +1 for sealed Will),\n   • +1 per Infamy in a Domain you control,\n   • +1 per Infamy in Faith,\n   • Silent Pact / Inner Abdication bonuses.\n3. Tie (Ascendancy = 0), in order : demon who sealed Will ; otherwise Will's controller ; otherwise most Infamies ; otherwise most controlled Domains ; otherwise Unstable Possession (no winner).",
+	},
 
 	# GameRules error messages (why_cannot_*)
 	"err.sealed_by_opponent":          {"fr": "scellé par l'adversaire",            "en": "sealed by the opponent"},

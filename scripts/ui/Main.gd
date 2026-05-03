@@ -111,6 +111,7 @@ var _last_seen_station: int = -1
 var _fullscreen_card_dialog: AcceptDialog
 var _fullscreen_card_node: Card               # composed view (transgression / liturgy)
 var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
+var _fullscreen_card_back: RichTextLabel      # text-only back side, used by Exorcism flip
 var _fullscreen_card_aspect: AspectRatioContainer
 var _fullscreen_card_flip_btn: Button
 var _fullscreen_card_entraver_btn: Button
@@ -831,11 +832,13 @@ func _on_liturgy_banner_input(event: InputEvent, station: int) -> void:
 		return
 	if state == null:
 		return
-	# Station VI has no liturgical response — show the static endgame card.
+	# Station VI has no liturgical response — show the static endgame card,
+	# with a text-only back side describing the Rupture / winner-determination
+	# rules (since the Exorcism can't be entravé but does need explaining).
 	if station == GameEnums.StationId.EXORCISME:
 		var endgame_tex := CardImages.exorcisme()
 		if endgame_tex != null:
-			_show_fullscreen_card(endgame_tex, I18n.t("ui.dialog.title.endgame"))
+			_show_fullscreen_card(endgame_tex, I18n.t("ui.dialog.title.endgame"), I18n.t("liturgy.exorcisme.back"))
 		return
 	var resp: Dictionary = LiturgicalResponseData.get_response(station)
 	if resp.is_empty():
@@ -1927,6 +1930,21 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_image.visible = false
 	vbox.add_child(_fullscreen_card_image)
 
+	# Text-only "back side" used when a static card has no second face image
+	# but does have textual rules to surface (e.g. the Exorcism : the front
+	# is the painted card, the back is the winner-determination ruleset).
+	_fullscreen_card_back = RichTextLabel.new()
+	_fullscreen_card_back.bbcode_enabled = true
+	_fullscreen_card_back.fit_content = true
+	_fullscreen_card_back.scroll_active = true
+	_fullscreen_card_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fullscreen_card_back.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_fullscreen_card_back.custom_minimum_size = Vector2(300, 280)
+	_fullscreen_card_back.add_theme_font_size_override("normal_font_size", 18)
+	_fullscreen_card_back.add_theme_font_size_override("bold_font_size", 20)
+	_fullscreen_card_back.visible = false
+	vbox.add_child(_fullscreen_card_back)
+
 	# Action row : flip + entraver. Both are shown / hidden per binding by
 	# _update_fullscreen_buttons.
 	var actions := HBoxContainer.new()
@@ -1948,14 +1966,32 @@ func _build_fullscreen_card_dialog() -> void:
 
 
 # Static-image fallback (used by Exorcism only).
-func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte") -> void:
+func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte", back_text: String = "") -> void:
 	if tex == null:
 		return
 	_fullscreen_card_aspect.visible = false
 	_fullscreen_card_image.visible = true
 	_fullscreen_card_image.texture = tex
-	_fullscreen_card_flip_btn.visible = false
-	_fullscreen_card_binding = {}
+	_fullscreen_card_back.visible = false
+	# Cards that don't have a meaningful "other side" pass back_text == ""
+	# and stay un-flippable. When a back text is provided (Exorcism : the
+	# front is the painted card, the back is the winner-determination
+	# ruleset), the binding becomes {kind:"static", face:"front", ...}
+	# so the flip button is offered.
+	if back_text == "":
+		_fullscreen_card_flip_btn.visible = false
+		_fullscreen_card_entraver_btn.visible = false
+		_fullscreen_card_binding = {}
+	else:
+		_fullscreen_card_back.text = back_text
+		_fullscreen_card_binding = {
+			"kind": "static",
+			"face": "front",
+			"texture": tex,
+			"back_text": back_text,
+			"title": title_str,
+		}
+		_update_fullscreen_flip_button()
 	_fullscreen_card_dialog.title = title_str
 	_popup_dialog_fullscreen(_fullscreen_card_dialog)
 
@@ -2008,6 +2044,13 @@ func _update_fullscreen_flip_button() -> void:
 		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_in_integro") if imp else I18n.t("ui.flip.see_impedita")
 		_fullscreen_card_flip_btn.visible = true
 		_update_fullscreen_entraver_button()
+	elif kind == "static":
+		# Static-image card with a textual back side (Exorcism). Flip toggles
+		# image ↔ rules text ; entraver never applies.
+		var face: String = String(_fullscreen_card_binding.get("face", "front"))
+		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_back") if face == "front" else I18n.t("ui.flip.see_front")
+		_fullscreen_card_flip_btn.visible = true
+		_fullscreen_card_entraver_btn.visible = false
 	else:
 		_fullscreen_card_flip_btn.visible = false
 		_fullscreen_card_entraver_btn.visible = false
@@ -2200,6 +2243,14 @@ func _on_fullscreen_card_flip_pressed() -> void:
 		var t_dom: int = int(_fullscreen_card_binding.get("target_domain", -1))
 		var t_pl: int = int(_fullscreen_card_binding.get("target_player", -1))
 		_fullscreen_card_node.flip_to_liturgy(int(_fullscreen_card_binding.get("station", 0)), imp, t_dom, t_pl)
+	elif kind == "static":
+		var face: String = String(_fullscreen_card_binding.get("face", "front"))
+		var nxt: String = "back" if face == "front" else "front"
+		_fullscreen_card_binding["face"] = nxt
+		# No tween here — a static texture flipping to a text panel doesn't
+		# share the Card.tscn's scale-x rotation, so we just swap visibilities.
+		_fullscreen_card_image.visible = nxt == "front"
+		_fullscreen_card_back.visible = nxt == "back"
 	_update_fullscreen_flip_button()
 
 
@@ -2275,7 +2326,7 @@ func _on_liturgy_image_clicked() -> void:
 
 func _on_endgame_image_clicked() -> void:
 	if _endgame_image.texture_normal != null:
-		_show_fullscreen_card(_endgame_image.texture_normal, I18n.t("ui.dialog.title.endgame"))
+		_show_fullscreen_card(_endgame_image.texture_normal, I18n.t("ui.dialog.title.endgame"), I18n.t("liturgy.exorcisme.back"))
 
 
 func _on_provoquer_clicked(tid: String, origin: int) -> void:
