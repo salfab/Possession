@@ -728,6 +728,25 @@ func _build_liturgy_banners() -> void:
 		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(fallback)
 
+		# Station VI gets a saturated red-violet border so the Exorcism
+		# banner reads as the "endgame" outlier of the column at a glance,
+		# rather than another Liturgy. Painted as a transparent-fill Panel
+		# whose StyleBoxFlat carries only a coloured border ; sits above the
+		# texture but below the cartouche label so the text stays legible.
+		if st == GameEnums.StationId.EXORCISME:
+			var border := Panel.new()
+			border.name = "Border"
+			border.anchor_right = 1.0
+			border.anchor_bottom = 1.0
+			border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var bsb := StyleBoxFlat.new()
+			bsb.bg_color = Color(0, 0, 0, 0)
+			bsb.border_color = Color(0.78, 0.20, 0.55)
+			bsb.set_border_width_all(3)
+			bsb.set_corner_radius_all(4)
+			border.add_theme_stylebox_override("panel", bsb)
+			panel.add_child(border)
+
 		# Label sits on top of both, anchored to the right cartouche : 90 %
 		# of the banner's height (5 % top + 5 % bottom margin), 70 % of its
 		# width on the right (small inset offsets for readability).
