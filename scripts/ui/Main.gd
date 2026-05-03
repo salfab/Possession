@@ -2098,6 +2098,10 @@ func _on_card_target_info_requested(station: int) -> void:
 		_targeting_dialog = AcceptDialog.new()
 		_targeting_dialog.exclusive = true
 		_targeting_dialog.ok_button_text = I18n.t("ui.dialog.close")
+		# Force a max width by capping wrap_controls and pinning min_size.
+		# Without this, the internal Label measures its single-line width
+		# and the Window grows past the viewport on a long rule string.
+		_targeting_dialog.wrap_controls = false
 		add_child(_targeting_dialog)
 		# Bump the OK button for touch ; keep the title bar (we don't apply
 		# the full _make_dialog_touch_friendly here because the popup is much
@@ -2105,11 +2109,21 @@ func _on_card_target_info_requested(station: int) -> void:
 		var ok_btn: Button = _targeting_dialog.get_ok_button()
 		if ok_btn != null:
 			ok_btn.add_theme_font_size_override("font_size", 22)
+		# AcceptDialog ships a single Label for dialog_text with no autowrap
+		# by default, which on a phone-narrow window pushes long sentences
+		# off-screen. Force smart word wrap so the rule reflows inside the
+		# popup width.
+		var dlg_lbl: Label = _targeting_dialog.get_label()
+		if dlg_lbl != null:
+			dlg_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			dlg_lbl.custom_minimum_size = Vector2(0, 0)
+			dlg_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			dlg_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_targeting_dialog.title = I18n.t("ui.dialog.title.targeting_rule")
 	_targeting_dialog.dialog_text = I18n.t("liturgy.targeting." + resp_id)
 	# Smaller than the fullscreen card it sits on — the rule is a couple of
 	# lines and the popup shouldn't occlude the card the player was reading.
-	_targeting_dialog.popup_centered_clamped(Vector2i(640, 240))
+	_targeting_dialog.popup_centered_clamped(Vector2i(560, 280))
 
 
 func _on_fullscreen_card_flip_pressed() -> void:
