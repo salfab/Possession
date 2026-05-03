@@ -39,14 +39,52 @@ var _impedita: bool = false
 var _target_domain: int = -1     # DomainId, or -1 if not a domain target
 var _target_player: int = -1     # PlayerId (>0), or -1 if not a player target
 
+# Emitted when the user taps the small badge slot (lbl_domain) on a Liturgy
+# card. Connect from the host UI to pop a panel describing the targeting
+# rule for that Station — the rule itself stays in i18n
+# (liturgy.targeting.<id>) so it's locale-aware.
+signal target_info_requested(station: int)
+
+# Transparent overlay over lbl_domain that captures taps without blocking
+# the card's other interactions (flip, zoom). Created at runtime so we
+# don't need to edit the .tscn.
+var _domain_btn: Button
+
 
 func _ready() -> void:
 	resized.connect(_on_resized)
 	_configure_card_fonts()
 	_apply_styles()
+	_setup_domain_btn()
 	_on_resized()
 	I18n.locale_changed.connect(_refresh_text)
 	_apply_binding()
+
+
+func _setup_domain_btn() -> void:
+	_domain_btn = Button.new()
+	_domain_btn.flat = true
+	_domain_btn.focus_mode = Control.FOCUS_NONE
+	_domain_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Invisible — we want the existing lbl_domain to remain the visible
+	# element. The Button is purely a hit-test target.
+	_domain_btn.modulate = Color(1, 1, 1, 0)
+	_domain_btn.anchor_left = lbl_domain.anchor_left
+	_domain_btn.anchor_top = lbl_domain.anchor_top
+	_domain_btn.anchor_right = lbl_domain.anchor_right
+	_domain_btn.anchor_bottom = lbl_domain.anchor_bottom
+	_domain_btn.offset_left = lbl_domain.offset_left
+	_domain_btn.offset_top = lbl_domain.offset_top
+	_domain_btn.offset_right = lbl_domain.offset_right
+	_domain_btn.offset_bottom = lbl_domain.offset_bottom
+	_domain_btn.visible = false
+	_domain_btn.pressed.connect(_on_domain_btn_pressed)
+	add_child(_domain_btn)
+
+
+func _on_domain_btn_pressed() -> void:
+	if _kind == "liturgy":
+		target_info_requested.emit(_station)
 
 
 # Switch the three TTF FontFile resources to MSDF rendering. Without this,
@@ -184,6 +222,13 @@ func _apply_binding() -> void:
 		var resp: Dictionary = LiturgicalResponseData.get_response(_station)
 		if not resp.is_empty():
 			illustration.texture = CardImages.illustration(String(resp.get("id", "")))
+	# Badge tap target — only meaningful on Liturgy cards (the rule popup
+	# describes how the response picks its Domain / demon). Hidden on
+	# Transgressions, where the badge is a static domain requirement.
+	if _domain_btn != null:
+		_domain_btn.visible = _kind == "liturgy"
+		if _kind == "liturgy":
+			_domain_btn.tooltip_text = I18n.t("ui.tooltip.tap_for_targeting_rule")
 	_refresh_text()
 
 

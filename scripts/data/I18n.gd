@@ -78,6 +78,34 @@ const STRINGS := {
 	"liturgy.in_integro":   {"fr": "In Integro", "en": "In Integro"},
 	"liturgy.impedita":     {"fr": "Impedita",   "en": "Impedita"},
 	"liturgy.target_line":  {"fr": "Cible : %s", "en": "Target: %s"},
+	# Targeting-rule descriptions — shown by tapping the badge slot on a
+	# Liturgy card. They explain *how* the target is picked, since the
+	# resolved target itself can shift between Stations as the board state
+	# evolves.
+	"liturgy.targeting.signe_de_croix": {
+		"fr": "Le Domaine avec le plus d'Emprise totale. En cas d'égalité : priorité Volonté > Foi > Désir > Ambition > Peur.",
+		"en": "The Domain with the most total Grip. On tie: priority Will > Faith > Desire > Ambition > Fear.",
+	},
+	"liturgy.targeting.examen_de_conscience": {
+		"fr": "Ambition ou Désir, le Domaine avec le plus d'Emprise totale. Ambition en cas d'égalité.",
+		"en": "Ambition or Desire, the Domain with the most total Grip. Ambition on tie.",
+	},
+	"liturgy.targeting.contrition": {
+		"fr": "Le Domaine transgressé le plus grave : plus d'Infamies, puis plus de Scandales, puis plus d'Emprise. Aucune cible si aucun Domaine n'est transgressé (la Liturgie n'a alors aucun effet).",
+		"en": "The most-serious transgressed Domain: most Infamies, then most Scandals, then most Grip. No target if no Domain is transgressed (the Liturgy then has no effect).",
+	},
+	"liturgy.targeting.confession": {
+		"fr": "Le démon avec le plus de Transgressions placées (Scandales + Infamies). En cas d'égalité : démon avec Ascendant ; sinon, démon sans Initiative à cette Station.",
+		"en": "The demon with the most placed Transgressions (Scandals + Infamies). On tie: demon holding Ascendancy; otherwise the demon without Initiative at this Station.",
+	},
+	"liturgy.targeting.communion": {
+		"fr": "Foi ou Volonté. Priorité : Domaine scellé > Domaine avec Infamie > Domaine avec le plus d'Emprise.",
+		"en": "Faith or Will. Priority: Sealed Domain > Domain with an Infamy > Domain with the most Grip.",
+	},
+	"liturgy.targeting.exorcisme": {
+		"fr": "Pas de cible — résolution finale du jeu (issue calculée à partir de l'état du plateau).",
+		"en": "No target — final resolution of the game (outcome computed from board state).",
+	},
 
 	# UI — bottom bar
 	"ui.btn.transgressions":{"fr": "Trans.",      "en": "Trans."},
@@ -102,6 +130,9 @@ const STRINGS := {
 	"ui.dialog.title.transgressions":{"fr": "Transgressions",           "en": "Transgressions"},
 	"ui.dialog.title.card":         {"fr": "Carte",                     "en": "Card"},
 	"ui.dialog.title.placed":       {"fr": "Transgressions posées",      "en": "Placed Transgressions"},
+	"ui.dialog.title.targeting_rule":{"fr": "Règle de ciblage",           "en": "Targeting rule"},
+	"ui.tooltip.tap_for_targeting_rule":{"fr": "Toucher pour voir la règle de ciblage",
+	                                    "en": "Tap to see the targeting rule"},
 
 	# UI — labels / hints
 	"ui.tooltip.click_to_zoom":     {"fr": "Cliquer pour agrandir",   "en": "Click to enlarge"},
@@ -237,10 +268,10 @@ const STRINGS := {
 	"liturgy.examen_de_conscience.impedita":{"fr": "Ce Domaine ne peut pas être scellé jusqu'à la fin de cette Station.",
 	                                        "en": "This Domain cannot be Sealed until the end of this Station."},
 	"liturgy.contrition.name":         {"fr": "Contrition", "en": "Contrition"},
-	"liturgy.contrition.in_integro":   {"fr": "Si scellé : Fissure liturgique (Sceau retiré + Domination brisée). Sinon : Brise la Domination. Puis Pénitence.",
-	                                   "en": "If Sealed: Liturgical Crack (Seal removed + Domination broken). Otherwise: Break Domination. Then Penitence."},
-	"liturgy.contrition.impedita":     {"fr": "Mettez ce Domaine en Pénitence jusqu'à la fin de la prochaine Station.",
-	                                   "en": "Put this Domain in Penitence until the end of the next Station."},
+	"liturgy.contrition.in_integro":   {"fr": "Vise le Domaine transgressé le plus grave. Si scellé : Fissure liturgique (Sceau retiré + Domination brisée). Sinon : Brise la Domination. Puis Pénitence.",
+	                                   "en": "Targets the most-serious transgressed Domain. If Sealed: Liturgical Crack (Seal removed + Domination broken). Otherwise: Break Domination. Then Penitence."},
+	"liturgy.contrition.impedita":     {"fr": "Vise le Domaine transgressé le plus grave. Pénitence jusqu'à la fin de la prochaine Station.",
+	                                   "en": "Targets the most-serious transgressed Domain. Penitence until the end of the next Station."},
 	"liturgy.confession.name":         {"fr": "Confession", "en": "Confession"},
 	"liturgy.confession.in_integro":   {"fr": "Le démon ciblé choisit DEUX pénitences différentes parmi 3.",
 	                                   "en": "The targeted demon chooses TWO different penitences out of 3."},

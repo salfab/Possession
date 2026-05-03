@@ -114,6 +114,9 @@ var _fullscreen_card_image: TextureRect       # static fallback (Exorcism)
 var _fullscreen_card_aspect: AspectRatioContainer
 var _fullscreen_card_flip_btn: Button
 var _fullscreen_card_entraver_btn: Button
+# Small popup that explains the targeting rule of a Liturgy. Triggered by
+# tapping the badge slot on a fullscreen Liturgy card.
+var _targeting_dialog: AcceptDialog
 # Binding for the currently shown composed card.
 # {"kind": "transgression", "tid": String, "face": int}
 # {"kind": "liturgy", "station": int, "impedita": bool}
@@ -1901,6 +1904,10 @@ func _build_fullscreen_card_dialog() -> void:
 	vbox.add_child(_fullscreen_card_aspect)
 	_fullscreen_card_node = preload("res://scenes/Card.tscn").instantiate()
 	_fullscreen_card_aspect.add_child(_fullscreen_card_node)
+	# Tapping the small badge slot ("FOI", "ROUGE"…) on a Liturgy card pops
+	# a panel describing how the response picks its target — useful since
+	# the resolved target shifts with the board state.
+	_fullscreen_card_node.target_info_requested.connect(_on_card_target_info_requested)
 
 	# TextureRect fallback used for cards we still ship pre-composed (Exorcism).
 	_fullscreen_card_image = TextureRect.new()
@@ -2072,6 +2079,37 @@ func _on_fullscreen_card_input(event: InputEvent) -> void:
 		elif _fullscreen_card_press_pos != Vector2.INF:
 			_fullscreen_card_press_pos = Vector2.INF
 			_on_fullscreen_card_flip_pressed()
+
+
+# Pops a small modal explaining how the response at this Station picks its
+# target. Built lazily on first use ; the body text comes from the
+# liturgy.targeting.<id> i18n keys so it's localised. For Station VI the
+# response is the final Exorcism — we still surface a one-liner because the
+# resp_id lookup won't find anything in LiturgicalResponseData.
+func _on_card_target_info_requested(station: int) -> void:
+	var resp_id: String = ""
+	if station == GameEnums.StationId.EXORCISME:
+		resp_id = "exorcisme"
+	else:
+		resp_id = String(LiturgicalResponseData.get_response(station).get("id", ""))
+	if resp_id == "":
+		return
+	if _targeting_dialog == null:
+		_targeting_dialog = AcceptDialog.new()
+		_targeting_dialog.exclusive = true
+		_targeting_dialog.ok_button_text = I18n.t("ui.dialog.close")
+		add_child(_targeting_dialog)
+		# Bump the OK button for touch ; keep the title bar (we don't apply
+		# the full _make_dialog_touch_friendly here because the popup is much
+		# smaller than a fullscreen modal and the title carries information).
+		var ok_btn: Button = _targeting_dialog.get_ok_button()
+		if ok_btn != null:
+			ok_btn.add_theme_font_size_override("font_size", 22)
+	_targeting_dialog.title = I18n.t("ui.dialog.title.targeting_rule")
+	_targeting_dialog.dialog_text = I18n.t("liturgy.targeting." + resp_id)
+	# Smaller than the fullscreen card it sits on — the rule is a couple of
+	# lines and the popup shouldn't occlude the card the player was reading.
+	_targeting_dialog.popup_centered_clamped(Vector2i(640, 240))
 
 
 func _on_fullscreen_card_flip_pressed() -> void:
