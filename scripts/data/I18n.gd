@@ -77,6 +77,7 @@ const STRINGS := {
 	"face.infamie":         {"fr": "Infamie",  "en": "Infamy"},
 	"liturgy.in_integro":   {"fr": "In Integro", "en": "In Integro"},
 	"liturgy.impedita":     {"fr": "Impedita",   "en": "Impedita"},
+	"liturgy.target_line":  {"fr": "Cible : %s", "en": "Target: %s"},
 
 	# UI — bottom bar
 	"ui.btn.transgressions":{"fr": "Trans.",      "en": "Trans."},
