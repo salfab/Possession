@@ -220,7 +220,15 @@ func _refresh_text() -> void:
 		lbl_domain.text = _liturgy_target_text()
 		lbl_face.text = (I18n.t("liturgy.impedita") if _impedita else I18n.t("liturgy.in_integro")).to_upper()
 		var key: String = "text_impedita" if _impedita else "text_in_integro"
-		lbl_text.text = String(resp.get(key, ""))
+		# The body text uses generic phrasing ("le Domaine ciblé", "le démon
+		# ciblé") because it's the same string regardless of target. Prepend a
+		# concrete "Cible : <name>" line so the player sees who's actually hit
+		# without having to decode the 3-letter badge.
+		var body: String = String(resp.get(key, ""))
+		var tgt_full: String = _liturgy_target_full()
+		if tgt_full != "":
+			body = I18n.t("liturgy.target_line", [tgt_full]) + "\n\n" + body
+		lbl_text.text = body
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -234,6 +242,17 @@ func _liturgy_target_text() -> String:
 	if _target_player > 0:
 		return GameEnums.player_name(_target_player).to_upper()
 	return "—"
+
+
+# Full localised target name for the body line ("Foi", "Volonté", "Rouge",
+# "Violet"). Empty string when the target is unknown — the body is then shown
+# as-is, with its generic "le Domaine ciblé" phrasing.
+func _liturgy_target_full() -> String:
+	if _target_domain >= 0:
+		return String(GameEnums.DOMAIN_NAMES.get(_target_domain, ""))
+	if _target_player > 0:
+		return GameEnums.player_name(_target_player)
+	return ""
 
 
 # Three-letter localised domain abbreviation that fits the small badge slot.
