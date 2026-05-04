@@ -25,36 +25,40 @@ CardImages="*res://scripts/data/CardImages.gd"
 window/size/viewport_width=1280
 window/size/viewport_height=800
 window/handheld/orientation=1
-; Stretch mode "canvas_items" : the root viewport matches the window pixel
-; size, and every CanvasItem (Label, Button stylebox, TextureRect…) gets
-; a 2D transform scaled by (window_size / base_size). Items grow with
-; the window AND get rasterised at the larger pixel grid — labels stay
-; sharp at any zoom because the font rasteriser sees the post-scale
-; size, vector buttons stay sharp because the stylebox is redrawn at
-; the final pixel count, only bitmap textures soften by their own
-; source-vs-display ratio.
+; Stretch mode "disabled" : the root viewport always matches the actual
+; window pixel size and CanvasItems render at their canvas-coord pixel
+; sizes — no automatic linear scaling of UI by window size.
 ;
-; "disabled" was attempted briefly but causes items to render at
-; canvas-pixel sizes regardless of window size — on a 2.4K monitor the
-; UI then looks tiny (the "downscaled" feel) even though the rendering
-; is technically crisp. canvas_items keeps proportional scaling AND
-; per-element pixel-perfect rasterisation.
+; This is what we want for a responsive game UI :
 ;
-; aspect=keep_height : compute the scale from the height ratio and keep
-; the same horizontal scale, letterboxing left/right if the window is
-; wider than the base aspect. This avoids the non-integer mismatch
-; between horizontal and vertical scales that "expand" produces on
-; ultra-wide ratios — which can land glyphs and 1-pixel borders on
-; sub-pixel positions and read as soft.
+; - Buttons stay at their absolute pixel size across devices. A 22 pt
+;   button reads as 22 pt on a phone, on a tablet AND on a 2.4K monitor.
+;   No "buttons three times bigger on a 4K screen" effect, which is
+;   what canvas_items mode produces since it linearly scales every
+;   CanvasItem by (window / base).
 ;
-; scale=1.0 : no extra multiplier on top of the window/base ratio. The
-; previous scale=1.5 was a fractional multiplier on top of an already
-; fractional ratio (window/base), stacking sub-pixel rounding errors
-; that came across as overall mushiness even when nothing was actually
-; bilinearly stretched.
-window/stretch/mode="canvas_items"
-window/stretch/aspect="keep_height"
-window/stretch/scale=1.0
+; - Image visuals (board, fullscreen card art, liturgy banners) use
+;   anchors and Containers to fill the available space, so a bigger
+;   screen automatically shows a bigger card image — exactly what is
+;   wanted there.
+;
+; - Rendering is crisp because the viewport is the window : labels
+;   rasterise their fonts at the displayed pixel grid, vector buttons
+;   draw their styleboxes at the displayed pixel grid, no bilinear
+;   blit pass anywhere.
+;
+; canvas_items mode was used briefly but causes the opposite : it
+; grows EVERY CanvasItem with the window, including buttons and dialog
+; chrome, which we don't want. The user explicitly called this out as
+; "I do NOT want everything scaled linearly with the screen, including
+; buttons".
+;
+; The previous concern about "tout est downscaled" on a 2.4K screen
+; (items at small absolute pixel size) was actually the desired
+; behaviour and not a bug — what was broken back then was the *blur*,
+; not the absolute size. Blur is fixed by the viewport-matches-window
+; pipeline plus allow_hidpi below.
+window/stretch/mode="disabled"
 ; Render at the device's physical pixel resolution rather than at CSS /
 ; logical pixel size. Required on HiDPI displays (iPad Retina, Windows
 ; scaling 150 %, recent phones 2-3×) so Godot draws into the actual
@@ -83,15 +87,10 @@ pointing/emulate_mouse_from_touch=false
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 environment/defaults/default_clear_color=Color(0.04, 0.05, 0.1, 1)
-; Snap 2D transforms and vertices to integer pixel positions. Without
-; this, with a non-integer canvas_items scale (window/base ratio that
-; falls between 1.0 and 2.0 on most monitors), Godot draws CanvasItems
-; at sub-pixel positions and the GPU's bilinear sampling smears
-; 1-pixel borders / glyph edges across two adjacent pixels — the
-; classic "everything looks slightly fuzzy" symptom. Forcing
-; integer-pixel placement keeps stylebox borders, label baselines and
-; banner outlines locked to whole pixels and removes the perceived
-; softness on big screens at non-integer scales (2.4K, Windows
-; scaling 125 / 150 %, 1.75× browser zoom, etc.).
+; Snap 2D transforms and vertices to integer pixel positions. Mostly a
+; no-op in stretch_mode=disabled where everything already renders at
+; the displayed pixel grid, but harmless and protects against any
+; transient sub-pixel placement coming from animations (card flip
+; tween, panel slides) or zoom (the _zoom_layer scale during pinch).
 2d/snap/snap_2d_transforms_to_pixel=true
 2d/snap/snap_2d_vertices_to_pixel=true
