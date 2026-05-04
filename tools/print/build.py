@@ -30,7 +30,7 @@ from typing import Optional
 import io
 
 from PIL import Image, ImageDraw, ImageFont
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, A3, landscape
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.lib.utils import ImageReader
@@ -44,6 +44,8 @@ FONTS_DIR = ASSETS / "fonts"
 ILLUSTRATIONS_DIR = ASSETS / "cards" / "illustrations"
 TEMPLATES_DIR = ASSETS / "cards" / "templates"
 SPECIAL_DIR = ASSETS / "cards" / "special"
+BANNERS_DIR = ASSETS / "cards" / "liturgy_banners"
+BOARD_PATH = ASSETS / "board.jpg"
 I18N_GD = REPO_ROOT / "scripts" / "data" / "I18n.gd"
 OUT_DIR = REPO_ROOT / "print"
 INDIVIDUAL_DIR = OUT_DIR / "cards_individual"
@@ -828,6 +830,139 @@ def compose_pdf(card_pngs: list[tuple[Path, Path]], pdf_path: Path):
     c.save()
 
 
+# ─── Board PDF (A3 landscape) ──────────────────────────────────────────────────
+
+def _jpg_reader_from_path(image_path: Path) -> ImageReader:
+    """Re-encode an image (PNG, WebP, JPG) as JPG quality 88 in memory and
+    return an ImageReader on the buffer. Keeps the PDF small."""
+    with Image.open(image_path) as im:
+        buf = io.BytesIO()
+        im.convert("RGB").save(buf, format="JPEG", quality=88, optimize=True)
+        buf.seek(0)
+    return ImageReader(buf)
+
+
+def compose_board_pdf(pdf_path: Path):
+    """A3 landscape (420×297 mm) with the game board centred and full-bleed
+    inside a 10 mm safe margin. Cut marks at the four corners of the
+    image bbox so a print shop can trim it off the A3 sheet."""
+    page_size = landscape(A3)        # (420, 297) mm in points
+    page_w, page_h = page_size
+    margin = 10 * mm
+    avail_w = page_w - 2 * margin
+    avail_h = page_h - 2 * margin
+    # Board aspect : 1448 × 1086 ≈ 1.333.
+    with Image.open(BOARD_PATH) as im:
+        bw, bh = im.size
+    board_aspect = bw / bh
+    avail_aspect = avail_w / avail_h
+    if board_aspect > avail_aspect:
+        draw_w = avail_w
+        draw_h = avail_w / board_aspect
+    else:
+        draw_h = avail_h
+        draw_w = avail_h * board_aspect
+    x = (page_w - draw_w) / 2
+    y = (page_h - draw_h) / 2
+
+    c = pdfcanvas.Canvas(str(pdf_path), pagesize=page_size)
+    c.drawImage(_jpg_reader_from_path(BOARD_PATH), x, y, width=draw_w, height=draw_h,
+                preserveAspectRatio=True, anchor='c')
+
+    # Cut marks at the four image corners.
+    tick = 5 * mm
+    c.setLineWidth(0.4)
+    c.setStrokeColorRGB(0.4, 0.4, 0.4)
+    for cx_mark, cy_mark in [(x, y), (x + draw_w, y), (x, y + draw_h), (x + draw_w, y + draw_h)]:
+        c.line(cx_mark - tick, cy_mark, cx_mark, cy_mark)
+        c.line(cx_mark, cy_mark - tick, cx_mark, cy_mark)
+
+    # Footer label.
+    c.setFont("Helvetica", 9)
+    c.setFillColorRGB(0.5, 0.5, 0.5)
+    c.drawString(margin, margin / 2, "Possession V1g — game board (A3 landscape, EN print kit)")
+    c.save()
+
+
+# ─── Banners PDF (A4 portrait, 3 banners per page) ─────────────────────────────
+
+# Order : station-by-station, both modes adjacent so a player can cut + glue
+# back-to-back into 5 double-sided station banners + 1 single-sided Exorcism.
+BANNER_ORDER = [
+    ("signe_de_croix",         "in_integro", "I — Whispers · In Integro"),
+    ("signe_de_croix",         "impedita",   "I — Whispers · Impedita"),
+    ("examen_de_conscience",   "in_integro", "II — Temptation · In Integro"),
+    ("examen_de_conscience",   "impedita",   "II — Temptation · Impedita"),
+    ("contrition",             "in_integro", "III — Fall · In Integro"),
+    ("contrition",             "impedita",   "III — Fall · Impedita"),
+    ("confession",             "in_integro", "IV — Confession · In Integro"),
+    ("confession",             "impedita",   "IV — Confession · Impedita"),
+    ("communion",              "in_integro", "V — Holy Office · In Integro"),
+    ("communion",              "impedita",   "V — Holy Office · Impedita"),
+    ("exorcisme",              "special",    "VI — Final Exorcism"),
+]
+
+
+def compose_banners_pdf(pdf_path: Path):
+    """A4 portrait — 3 banners per page, stacked vertically with their
+    station label printed underneath, cut marks at every banner corner.
+    11 banners total → 4 pages (last page carries 2 banners + space)."""
+    page_w, page_h = A4
+    side_margin = 15 * mm
+    top_margin = 18 * mm
+    label_gap = 4 * mm
+    label_h = 4 * mm
+    banner_w = page_w - 2 * side_margin
+    # Banner aspect 600 × 225 ≈ 2.667.
+    banner_h = banner_w / (600.0 / 225.0)
+    block_h = banner_h + label_gap + label_h
+    page_capacity = 3       # 3 banners per A4 portrait
+    inter_block = (page_h - 2 * top_margin - page_capacity * block_h) / max(1, page_capacity - 1)
+
+    c = pdfcanvas.Canvas(str(pdf_path), pagesize=A4)
+
+    def draw_banner(idx_on_page: int, rid: str, mode: str, label_str: str):
+        # Top-of-page-down stack.
+        block_top = page_h - top_margin - idx_on_page * (block_h + inter_block)
+        y_banner_top = block_top
+        y_banner_bot = y_banner_top - banner_h
+        # Resolve the banner asset path.
+        if mode == "special":
+            path = BANNERS_DIR / f"{rid}.webp"
+        else:
+            path = BANNERS_DIR / f"{rid}_{mode}.webp"
+        c.drawImage(_jpg_reader_from_path(path),
+                    side_margin, y_banner_bot,
+                    width=banner_w, height=banner_h,
+                    preserveAspectRatio=False, anchor='c')
+        # Cut marks at the four banner corners.
+        tick = 4 * mm
+        c.setLineWidth(0.4)
+        c.setStrokeColorRGB(0.4, 0.4, 0.4)
+        for cx, cy in [(side_margin, y_banner_bot),
+                       (side_margin + banner_w, y_banner_bot),
+                       (side_margin, y_banner_top),
+                       (side_margin + banner_w, y_banner_top)]:
+            c.line(cx - tick, cy, cx, cy)
+            c.line(cx, cy - tick, cx, cy)
+        # Caption underneath.
+        c.setFont("Helvetica", 9)
+        c.setFillColorRGB(0.3, 0.3, 0.3)
+        c.drawString(side_margin, y_banner_bot - label_gap - label_h + 2, label_str)
+
+    pages_count = (len(BANNER_ORDER) + page_capacity - 1) // page_capacity
+    for page in range(pages_count):
+        chunk = BANNER_ORDER[page * page_capacity : (page + 1) * page_capacity]
+        for i, (rid, mode, label) in enumerate(chunk):
+            draw_banner(i, rid, mode, label)
+        c.setFont("Helvetica", 8)
+        c.setFillColorRGB(0.5, 0.5, 0.5)
+        c.drawString(side_margin, 8 * mm,
+                     f"Possession V1g — liturgy banners (EN print kit) — page {page + 1}")
+        c.showPage()
+    c.save()
+
+
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -918,14 +1053,29 @@ def main():
         card_pairs.append((front_path, back_path))
         print(f"    {spec.card_id} A+B")
 
-    print("[4/4] Composing A4 PDF ...")
-    pdf_path = OUT_DIR / "possession_print_kit_en.pdf"
-    compose_pdf(card_pairs, pdf_path)
-    print(f"    {pdf_path}")
+    print("[4/6] Composing cards A4 PDF ...")
+    cards_pdf = OUT_DIR / "possession_print_kit_en.pdf"
+    compose_pdf(card_pairs, cards_pdf)
+    print(f"    {cards_pdf}")
+
+    print("[5/6] Composing board A3 PDF ...")
+    board_pdf = OUT_DIR / "possession_board_a3.pdf"
+    compose_board_pdf(board_pdf)
+    print(f"    {board_pdf}")
+
+    print("[6/6] Composing banners A4 PDF ...")
+    banners_pdf = OUT_DIR / "possession_banners_a4.pdf"
+    compose_banners_pdf(banners_pdf)
+    print(f"    {banners_pdf}")
 
     print()
-    print("Done. Open the PDF, print duplex (long-edge binding) on 200-250 g/m² cardstock,")
-    print("then trim along the cut marks. Card backs land mirrored for double-sided alignment.")
+    print("Done. Three PDFs produced :")
+    print(" - cards : print duplex (long-edge binding) on 200-250 g/m² cardstock,")
+    print("           trim along the cut marks. Final card 65×91 mm.")
+    print(" - board : print A3 landscape on heavy paper, trim to the cut marks.")
+    print(" - banners : print A4 portrait, 3 per page over 4 pages, trim and")
+    print("             pair adjacent (in_integro / impedita) for 5 double-sided")
+    print("             station banners plus the single-sided Exorcism banner.")
 
 
 if __name__ == "__main__":
