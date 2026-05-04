@@ -1369,10 +1369,6 @@ func _build_player_transgression_panels() -> void:
 	add_child(_player_panel_blue)
 	# React to viewport rotation / window resize
 	get_viewport().size_changed.connect(_layout_player_transgression_panels)
-	# Same trigger refreshes every cached AcceptDialog's content_scale_factor
-	# so a browser resize between two opens of the same dialog instance picks
-	# up the new canvas_items scale rather than rendering at the old one.
-	get_viewport().size_changed.connect(_refresh_subwindow_content_scales)
 	_layout_player_transgression_panels()
 	print("[panels] Built Red+Blue transgression panels")
 
@@ -2472,17 +2468,6 @@ func _apply_canvas_scale_to_subwindow(w: Window) -> void:
 	w.content_scale_factor = max(1.0, s)
 
 
-# Walk every AcceptDialog under self and re-apply the canvas scale. Wired
-# to the root viewport's size_changed so cached dialogs that were built
-# at a different window size pick up the new scale before their next popup.
-# find_children with class_name = "AcceptDialog" scoops them recursively
-# so this also catches any future popups added under nested containers.
-func _refresh_subwindow_content_scales() -> void:
-	for w in find_children("*", "AcceptDialog", true, false):
-		if is_instance_valid(w):
-			_apply_canvas_scale_to_subwindow(w)
-
-
 # ─── FULLSCREEN CARD VIEWER ───────────────────────────────────────────────────
 
 func _build_fullscreen_card_dialog() -> void:
@@ -2837,10 +2822,6 @@ func _on_card_target_info_requested(station: int) -> void:
 			dlg_lbl.custom_minimum_size = Vector2(0, 0)
 			dlg_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			dlg_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	# Recompute the sub-window content scale every popup, not only at first
-	# build : the user may have resized the browser between two opens of
-	# this same cached dialog instance.
-	_apply_canvas_scale_to_subwindow(_targeting_dialog)
 	_targeting_dialog.title = I18n.t("ui.dialog.title.targeting_rule")
 	_targeting_dialog.dialog_text = I18n.t("liturgy.targeting." + resp_id)
 	# Smaller than the fullscreen card it sits on — the rule is a couple of
@@ -2894,10 +2875,6 @@ func _on_card_effect_info_requested() -> void:
 			dlg_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			dlg_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			dlg_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	# Same per-popup recompute as the targeting dialog — picks up a
-	# browser resize that happened between two opens of this cached
-	# dialog instance.
-	_apply_canvas_scale_to_subwindow(_effect_detail_dialog)
 	_effect_detail_dialog.title = I18n.t("ui.dialog.title.effect_detail")
 	_effect_detail_dialog.dialog_text = text
 	_effect_detail_dialog.popup_centered_clamped(Vector2i(620, 360))
