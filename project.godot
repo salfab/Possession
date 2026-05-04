@@ -25,19 +25,33 @@ CardImages="*res://scripts/data/CardImages.gd"
 window/size/viewport_width=1280
 window/size/viewport_height=800
 window/handheld/orientation=1
-window/stretch/mode="canvas_items"
-window/stretch/aspect="expand"
-window/stretch/scale=1.5
+; Stretch mode "disabled" : the root viewport always matches the actual
+; window pixel size. Godot draws every canvas item — labels, buttons,
+; textures — straight into the window backbuffer at its native
+; resolution. No bilinear upscale pass.
+;
+; The previous combination (canvas_items + aspect=expand + scale=1.5)
+; rendered into a buffer of (base_size × scale) and then stretched the
+; result to fill the window. On a 1080p screen at 1× display scaling
+; (1920×1200 effective base) the buffer matched and everything was
+; crisp ; on anything bigger (4K, 2.5K, Windows scaling 150 %, iPad
+; Retina past zoom 1.0) it became a render-at-low-then-blow-up
+; pipeline. Painted card art (Exorcism), Godot-rendered text and
+; vector-drawn dialog buttons all read as uniformly soft because they
+; were : the whole canvas was a bilinearly-upsampled bitmap.
+;
+; Layout in this project is entirely Container + anchor based (Main.tscn
+; HSplitContainer / VBoxContainer, _zoom_layer at anchor 0..1, hotspots
+; / banners / panels all in normalized coords) so it adapts to the new
+; window-sized viewport without code changes. The "1.5x bigger" feel
+; the old scale=1.5 gave on small screens is recovered automatically by
+; the bigger viewport on a bigger screen — Containers grow with it.
+window/stretch/mode="disabled"
 ; Render at the device's physical pixel resolution rather than at CSS /
-; logical pixel size. Without this, on every HiDPI display (iPad
-; Retina = 2×, modern Windows tablets and 4K monitors with display
-; scaling, recent phones = 2-3×) Godot renders into a half-density
-; backbuffer and the browser/OS upscales the result, producing a
-; uniformly blurry image — the painted card art (Exorcism etc.) and
-; the calligraphic IM Fell text both lose their crispness. Enabling
-; allow_hidpi tells the engine to ask the platform for the real
-; device pixels and render straight into them. Combined with the MSDF
-; flag on the Card fonts, text stays sharp at any zoom.
+; logical pixel size. Required on HiDPI displays (iPad Retina, Windows
+; scaling 150 %, recent phones 2-3×) so Godot draws into the actual
+; device pixels rather than a half-density buffer the browser then
+; upscales.
 window/dpi/allow_hidpi=true
 
 [input_devices]
