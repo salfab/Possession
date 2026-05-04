@@ -1086,14 +1086,13 @@ func _build_liturgy_banners() -> void:
 		lbl.offset_right = -10
 		lbl.offset_top = 0
 		lbl.offset_bottom = 0
-		# Match the body-text styling of Card.tscn : IMFellEnglish-Regular
-		# at 20 pt, dark-ink colour. The banner cartouche reads as
-		# "the printed page underneath" of the same liturgy that the
-		# card represents, so using the same calligraphic font + size
-		# keeps the visual continuity between banner and card.
-		lbl.add_theme_font_override("font", Card.FONT_BODY)
-		lbl.add_theme_font_size_override("font_size", 20)
-		lbl.add_theme_color_override("font_color", Color(0.16, 0.07, 0.03))
+		# 14 vs the original 11 : with stretch_mode=disabled the cartouche
+		# label is a fixed 11 px on every screen instead of scaling with
+		# canvas_items, so it read as too small on bigger displays. 14 sits
+		# comfortably inside the cartouche bbox (≈ 312×178 canvas-coord
+		# pixels) without forcing extra wrap on the longest banner labels.
+		lbl.add_theme_font_size_override("font_size", 14)
+		lbl.add_theme_color_override("font_color", Color(0.18, 0.10, 0.05))
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
