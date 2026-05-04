@@ -884,82 +884,172 @@ def compose_board_pdf(pdf_path: Path):
     c.save()
 
 
-# ─── Banners PDF (A4 portrait, 3 banners per page) ─────────────────────────────
+# ─── Banners : text overlay + PDF (A4 portrait, slot-sized) ────────────────────
+
+# Cartouche anchors on the banner WebP, mean of the 10 banner masters per
+# tools/banner_calibrate.py — same values used in-game by Main.gd to place
+# the runtime label on the parchment area of each banner.
+BANNER_CARTOUCHE = (0.40, 0.10, 0.92, 0.89)
+
+# Banner physical size on the printed A3 board, derived from
+# LITURGY_BANNER_HALF = Vector2(0.090, 0.045) in Main.gd (= 0.180 × 0.090
+# of the board image). The board PDF lays the board at ~369.4 × 277 mm
+# (height-limited inside the A3 minus margins envelope), so each banner
+# slot is :
+#   width  : 0.180 × 369.4 ≈ 66.5 mm
+#   height : 0.090 × 277   ≈ 24.93 mm
+# That matches the 600/225 ≈ 2.67 banner aspect cleanly. Print at this
+# size so the cut banners drop right onto their slot on the printed board.
+BANNER_PRINT_W_MM = 66.5
+BANNER_PRINT_H_MM = 25.0
+
+
+def render_banner_with_text(banner_path: Path, banner_text: str) -> Image.Image:
+    """
+    Load the WebP banner and overlay the cartouche text in IM Fell English
+    Regular at the same anchors the in-game banner uses. The shipped WebP
+    is 600 × 225 with an empty parchment cartouche on the right ; the
+    runtime layer would normally provide the text — we have to bake it in
+    for print.
+    """
+    img = Image.open(banner_path).convert("RGB")
+    bw, bh = img.size
+    d = ImageDraw.Draw(img)
+
+    cl, ct, cr, cb = BANNER_CARTOUCHE
+    x0 = int(cl * bw)
+    y0 = int(ct * bh)
+    x1 = int(cr * bw)
+    y1 = int(cb * bh)
+    box_w = x1 - x0
+    box_h = y1 - y0
+    inner_pad = 6
+    text_max_w = box_w - 2 * inner_pad
+
+    # Auto-shrink : start from a generous size and shrink until the wrapped
+    # text height stays inside the cartouche.
+    size = 32
+    fnt = font(size, "body")
+    while size > 12:
+        wrapped = wrap_text(d, banner_text, fnt, text_max_w)
+        line_h = size + 4
+        total_h = line_h * len(wrapped)
+        if total_h <= box_h - 2 * inner_pad and all(
+                measure_text(d, line, fnt)[0] <= text_max_w for line in wrapped):
+            break
+        size -= 2
+        fnt = font(size, "body")
+    wrapped = wrap_text(d, banner_text, fnt, text_max_w)
+    line_h = size + 4
+    total_h = line_h * len(wrapped)
+
+    # Vertically centre the wrapped block inside the cartouche.
+    cur_y = y0 + (box_h - total_h) // 2
+    ink = (40, 22, 12)         # near-black umber, same as the templated cards
+    for line in wrapped:
+        lw, _ = measure_text(d, line, fnt)
+        d.text((x0 + (box_w - lw) // 2, cur_y), line, fill=ink, font=fnt)
+        cur_y += line_h
+
+    return img
+
 
 # Order : station-by-station, both modes adjacent so a player can cut + glue
 # back-to-back into 5 double-sided station banners + 1 single-sided Exorcism.
+# Tuple = (response_id, mode, station_label_for_caption, i18n_key_for_text)
 BANNER_ORDER = [
-    ("signe_de_croix",         "in_integro", "I — Whispers · In Integro"),
-    ("signe_de_croix",         "impedita",   "I — Whispers · Impedita"),
-    ("examen_de_conscience",   "in_integro", "II — Temptation · In Integro"),
-    ("examen_de_conscience",   "impedita",   "II — Temptation · Impedita"),
-    ("contrition",             "in_integro", "III — Fall · In Integro"),
-    ("contrition",             "impedita",   "III — Fall · Impedita"),
-    ("confession",             "in_integro", "IV — Confession · In Integro"),
-    ("confession",             "impedita",   "IV — Confession · Impedita"),
-    ("communion",              "in_integro", "V — Holy Office · In Integro"),
-    ("communion",              "impedita",   "V — Holy Office · Impedita"),
-    ("exorcisme",              "special",    "VI — Final Exorcism"),
+    ("signe_de_croix",         "in_integro", "I — Whispers · In Integro",       "banner.signe_de_croix.in_integro"),
+    ("signe_de_croix",         "impedita",   "I — Whispers · Impedita",         "banner.signe_de_croix.impedita"),
+    ("examen_de_conscience",   "in_integro", "II — Temptation · In Integro",    "banner.examen_de_conscience.in_integro"),
+    ("examen_de_conscience",   "impedita",   "II — Temptation · Impedita",      "banner.examen_de_conscience.impedita"),
+    ("contrition",             "in_integro", "III — Fall · In Integro",         "banner.contrition.in_integro"),
+    ("contrition",             "impedita",   "III — Fall · Impedita",           "banner.contrition.impedita"),
+    ("confession",             "in_integro", "IV — Confession · In Integro",    "banner.confession.in_integro"),
+    ("confession",             "impedita",   "IV — Confession · Impedita",      "banner.confession.impedita"),
+    ("communion",              "in_integro", "V — Holy Office · In Integro",    "banner.communion.in_integro"),
+    ("communion",              "impedita",   "V — Holy Office · Impedita",      "banner.communion.impedita"),
+    ("exorcisme",              "special",    "VI — Final Exorcism",             "banner.exorcisme.special"),
 ]
 
 
-def compose_banners_pdf(pdf_path: Path):
-    """A4 portrait — 3 banners per page, stacked vertically with their
-    station label printed underneath, cut marks at every banner corner.
-    11 banners total → 4 pages (last page carries 2 banners + space)."""
+def compose_banners_pdf(pdf_path: Path, i18n: dict[str, str]):
+    """
+    A4 portrait — 11 banners on a single page laid out 2 columns × 6 rows.
+    Left column = in_integro variants, right column = impedita variants of
+    the same Station, so a print + cut + glue gives 5 double-sided station
+    banners + 1 single-sided Exorcism. Banner physical size on paper
+    matches the corresponding banner slot on the A3 game board, so the
+    cut pieces drop right onto the slots.
+    """
     page_w, page_h = A4
-    side_margin = 15 * mm
-    top_margin = 18 * mm
-    label_gap = 4 * mm
-    label_h = 4 * mm
-    banner_w = page_w - 2 * side_margin
-    # Banner aspect 600 × 225 ≈ 2.667.
-    banner_h = banner_w / (600.0 / 225.0)
-    block_h = banner_h + label_gap + label_h
-    page_capacity = 3       # 3 banners per A4 portrait
-    inter_block = (page_h - 2 * top_margin - page_capacity * block_h) / max(1, page_capacity - 1)
+    cw_mm_pt = BANNER_PRINT_W_MM * mm
+    ch_mm_pt = BANNER_PRINT_H_MM * mm
+    grid_cols = 2
+    grid_rows = 6
+    col_gap = 6 * mm
+    row_gap = 5 * mm
+    label_gap = 1.5 * mm
+    label_h = 3 * mm
+    grid_w = grid_cols * cw_mm_pt + (grid_cols - 1) * col_gap
+    grid_h = grid_rows * (ch_mm_pt + label_gap + label_h) + (grid_rows - 1) * row_gap
+    margin_x = (page_w - grid_w) / 2
+    margin_y = (page_h - grid_h) / 2
 
     c = pdfcanvas.Canvas(str(pdf_path), pagesize=A4)
 
-    def draw_banner(idx_on_page: int, rid: str, mode: str, label_str: str):
-        # Top-of-page-down stack.
-        block_top = page_h - top_margin - idx_on_page * (block_h + inter_block)
-        y_banner_top = block_top
-        y_banner_bot = y_banner_top - banner_h
-        # Resolve the banner asset path.
+    def draw_banner(rid: str, mode: str, caption: str, text_key: str, col: int, row: int):
+        x = margin_x + col * (cw_mm_pt + col_gap)
+        # Top-of-page-down rows.
+        block_h = ch_mm_pt + label_gap + label_h
+        y_top = page_h - margin_y - row * (block_h + row_gap)
+        y_banner_bot = y_top - ch_mm_pt
+        # Resolve banner asset path.
         if mode == "special":
             path = BANNERS_DIR / f"{rid}.webp"
         else:
             path = BANNERS_DIR / f"{rid}_{mode}.webp"
-        c.drawImage(_jpg_reader_from_path(path),
-                    side_margin, y_banner_bot,
-                    width=banner_w, height=banner_h,
+        # Render text overlay onto the WebP, JPG-encode in memory.
+        text = i18n.get(text_key, "")
+        composed = render_banner_with_text(path, text)
+        buf = io.BytesIO()
+        composed.save(buf, format="JPEG", quality=88, optimize=True)
+        buf.seek(0)
+        c.drawImage(ImageReader(buf), x, y_banner_bot,
+                    width=cw_mm_pt, height=ch_mm_pt,
                     preserveAspectRatio=False, anchor='c')
-        # Cut marks at the four banner corners.
-        tick = 4 * mm
+        # Cut marks at the four corners.
+        tick = 3 * mm
         c.setLineWidth(0.4)
         c.setStrokeColorRGB(0.4, 0.4, 0.4)
-        for cx, cy in [(side_margin, y_banner_bot),
-                       (side_margin + banner_w, y_banner_bot),
-                       (side_margin, y_banner_top),
-                       (side_margin + banner_w, y_banner_top)]:
-            c.line(cx - tick, cy, cx, cy)
-            c.line(cx, cy - tick, cx, cy)
+        for cx_mark, cy_mark in [(x, y_banner_bot),
+                                 (x + cw_mm_pt, y_banner_bot),
+                                 (x, y_top),
+                                 (x + cw_mm_pt, y_top)]:
+            c.line(cx_mark - tick, cy_mark, cx_mark, cy_mark)
+            c.line(cx_mark, cy_mark - tick, cx_mark, cy_mark)
         # Caption underneath.
-        c.setFont("Helvetica", 9)
+        c.setFont("Helvetica", 7)
         c.setFillColorRGB(0.3, 0.3, 0.3)
-        c.drawString(side_margin, y_banner_bot - label_gap - label_h + 2, label_str)
+        c.drawString(x, y_banner_bot - label_gap - label_h + 1, caption)
 
-    pages_count = (len(BANNER_ORDER) + page_capacity - 1) // page_capacity
-    for page in range(pages_count):
-        chunk = BANNER_ORDER[page * page_capacity : (page + 1) * page_capacity]
-        for i, (rid, mode, label) in enumerate(chunk):
-            draw_banner(i, rid, mode, label)
-        c.setFont("Helvetica", 8)
-        c.setFillColorRGB(0.5, 0.5, 0.5)
-        c.drawString(side_margin, 8 * mm,
-                     f"Possession V1g — liturgy banners (EN print kit) — page {page + 1}")
-        c.showPage()
+    # Lay out station-by-station : row N has (in_integro, impedita) of the
+    # same station in columns 0/1 ; the Exorcism single-sided takes col 0
+    # of the last row, col 1 stays empty.
+    for i in range(0, 10, 2):
+        row = i // 2
+        rid, mode, cap, key = BANNER_ORDER[i]
+        draw_banner(rid, mode, cap, key, col=0, row=row)
+        rid, mode, cap, key = BANNER_ORDER[i + 1]
+        draw_banner(rid, mode, cap, key, col=1, row=row)
+    # Exorcism on row 5, col 0.
+    rid, mode, cap, key = BANNER_ORDER[10]
+    draw_banner(rid, mode, cap, key, col=0, row=5)
+
+    c.setFont("Helvetica", 8)
+    c.setFillColorRGB(0.5, 0.5, 0.5)
+    c.drawString(margin_x, 8 * mm,
+                 "Possession V1g — liturgy banners (EN print kit) — sized to A3 board slots")
+    c.showPage()
     c.save()
 
 
@@ -1065,7 +1155,7 @@ def main():
 
     print("[6/6] Composing banners A4 PDF ...")
     banners_pdf = OUT_DIR / "possession_banners_a4.pdf"
-    compose_banners_pdf(banners_pdf)
+    compose_banners_pdf(banners_pdf, i18n)
     print(f"    {banners_pdf}")
 
     print()
