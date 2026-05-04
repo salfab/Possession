@@ -477,12 +477,15 @@ func _build_debug_bar() -> void:
 	# Replaces the previous full-width row of buttons because on iPad the
 	# row pushed the playable area down too far.
 	_fab = Button.new()
-	# Plain text label rather than ≡ / ☰ glyphs — the embedded web-export
-	# fallback font on some iPad builds doesn't carry U+2261 / U+2630 and
-	# rendered the FAB as a tofu box. "Menu" reads everywhere.
-	_fab.text = I18n.t("ui.fab.label")
-	_fab.set_meta("i18n_label_key", "ui.fab.label")
-	_fab.add_theme_font_size_override("font_size", 24)
+	# Hamburger icon drawn in code (three horizontal bars) rather than a
+	# Unicode glyph — both ≡ U+2261 and ☰ U+2630 tofu-ed on the embedded
+	# font Godot ships with the web export, and ellipsis variants don't
+	# read as "menu". Generating a tiny PNG-equivalent ImageTexture at
+	# startup avoids shipping a Material Icons font (~80 kB) just for
+	# this one button.
+	_fab.text = ""
+	_fab.icon = _make_hamburger_icon()
+	_fab.expand_icon = true
 	_fab.tooltip_text = I18n.t("ui.fab.tooltip")
 	_fab.set_meta("i18n_tooltip_key", "ui.fab.tooltip")
 	_fab.anchor_left = 1.0
@@ -530,6 +533,27 @@ const FAB_PUISER     := 1007
 const FAB_JOURNAL    := 1008
 const FAB_HOTSPOTS   := 1009
 const FAB_GLOSSARY   := 1010
+
+
+# Hamburger icon synthesised at startup so we don't depend on a Unicode
+# glyph (which tofu'd on the embedded font some web-export builds use)
+# and don't have to ship a dedicated icon font for one button. Three
+# white horizontal bars on transparent, sized for a 28×28 button icon
+# slot — Godot scales it down via expand_icon when the FAB is smaller.
+func _make_hamburger_icon() -> ImageTexture:
+	const W := 28
+	const H := 28
+	const BAR_THICKNESS := 4
+	const BAR_LENGTH := 22
+	const BAR_X := (W - BAR_LENGTH) / 2
+	const ROWS = [6, 13, 20]   # vertical centre of each of the 3 bars
+	const FG := Color(0.95, 0.94, 0.92)  # warm cream — matches button text colour elsewhere
+	var img := Image.create(W, H, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for cy in ROWS:
+		var top: int = cy - BAR_THICKNESS / 2
+		img.fill_rect(Rect2i(BAR_X, top, BAR_LENGTH, BAR_THICKNESS), FG)
+	return ImageTexture.create_from_image(img)
 
 
 func _on_fab_pressed() -> void:
