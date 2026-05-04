@@ -233,8 +233,6 @@ func _maybe_offer_resume() -> void:
 	dlg.ok_button_text = I18n.t("ui.dialog.resume_yes")
 	dlg.add_cancel_button(I18n.t("ui.dialog.resume_no"))
 	add_child(dlg)
-	# Keep body text + buttons crisp on big screens — see helper comment.
-	_apply_canvas_scale_to_subwindow(dlg)
 	dlg.confirmed.connect(func():
 		if _load_game():
 			_refresh_all()
@@ -2434,38 +2432,6 @@ func _make_dialog_touch_friendly(dlg: AcceptDialog) -> void:
 	if ok_btn != null:
 		ok_btn.add_theme_font_size_override("font_size", 24)
 		ok_btn.custom_minimum_size = Vector2(160, 64)
-	_apply_canvas_scale_to_subwindow(dlg)
-
-
-# AcceptDialog (and any Window) embedded under the root Viewport renders its
-# content into its OWN sub-viewport, which Godot then composites as a texture
-# into the parent canvas. With stretch_mode=canvas_items the parent canvas is
-# scaled by (window_size / base_size), so the composite stretches the
-# sub-viewport's texture bilinearly — body text, buttons and any styleboxes
-# inside the dialog read as soft, while the decoration drawn by the Window
-# class itself (title bar, frame) stays crisp because IT goes through the
-# parent canvas directly. Setting content_scale_factor on the sub-window
-# tells Godot to render the sub-viewport at a higher pixel count so the
-# composite ends up 1:1 against the displayed pixel grid.
-#
-# We mirror the canvas_items scale by reading the root window's height
-# against the project base height (aspect=keep_height locks both axes to
-# the same scale, so height is sufficient). Recomputed each popup so a
-# resize between popups picks up the new factor — most dialogs are
-# short-lived enough that we don't need to wire size_changed.
-func _apply_canvas_scale_to_subwindow(w: Window) -> void:
-	var root: Window = get_tree().root
-	if root == null or root.size.y <= 0:
-		return
-	var base_h: float = float(ProjectSettings.get_setting(
-			"display/window/size/viewport_height", 800))
-	if base_h <= 0.0:
-		return
-	var s: float = float(root.size.y) / base_h
-	# Cap below at 1.0 — a smaller-than-base window doesn't gain anything
-	# from a sub-1.0 factor and would instead render the dialog at lower
-	# than canvas resolution, which IS the bug we're trying to avoid.
-	w.content_scale_factor = max(1.0, s)
 
 
 # ─── FULLSCREEN CARD VIEWER ───────────────────────────────────────────────────
