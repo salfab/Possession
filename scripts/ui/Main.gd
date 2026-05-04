@@ -309,6 +309,11 @@ func _build_overlays() -> void:
 		btn.offset_bottom = 0
 		var did: int = d_id
 		btn.pressed.connect(func(): _on_domain_clicked(did))
+		# Drag handler — only active in calibration mode (FAB → Hotspots).
+		# Reads InputEventMouseMotion / InputEventScreenDrag and slides
+		# the button's anchors so we can re-position the click area
+		# directly on the live board.
+		btn.gui_input.connect(_on_hotspot_calibration_input.bind(did))
 		_zoom_layer.add_child(btn)
 		_hotspots[d_id] = btn
 
@@ -1520,6 +1525,11 @@ func _scroll_log_to_bottom() -> void:
 # ─── INTERACTION ──────────────────────────────────────────────────────────────
 
 func _on_domain_clicked(d_id: int) -> void:
+	# Calibration mode swallows taps so a drag-to-move gesture doesn't
+	# also fire the action popup (we only want the gui_input drag handler
+	# to react). The cyan-overlay toggle (FAB → Hotspots) flips this flag.
+	if _debug_hotspots:
+		return
 	if state.game_over:
 		return
 	if state.has_pending_decisions():
@@ -1717,8 +1727,9 @@ func _on_btn_glossary() -> void:
 
 
 # Debug toggle — paints each domain hotspot with a translucent cyan
-# stylebox so the user can see where the click areas actually are. Useful
-# for re-calibrating DOMAIN_POS / DOMAIN_HALF against the board artwork.
+# stylebox AND makes them draggable so the click areas can be
+# re-calibrated against the board artwork directly in-game. On toggle-off
+# the new positions are dumped as a paste-ready DOMAIN_POS block.
 func _on_btn_toggle_hotspots() -> void:
 	_debug_hotspots = not _debug_hotspots
 	for d_id in _hotspots:
@@ -1733,11 +1744,136 @@ func _on_btn_toggle_hotspots() -> void:
 			btn.add_theme_stylebox_override("hover",   sb)
 			btn.add_theme_stylebox_override("pressed", sb)
 			btn.add_theme_stylebox_override("focus",   sb)
+			_ensure_calibration_label(d_id)
 		else:
 			btn.remove_theme_stylebox_override("normal")
 			btn.remove_theme_stylebox_override("hover")
 			btn.remove_theme_stylebox_override("pressed")
 			btn.remove_theme_stylebox_override("focus")
+			_remove_calibration_label(d_id)
+	if not _debug_hotspots:
+		# Just exited calibration : dump current positions in a paste-
+		# ready GDScript block so the user can replace DOMAIN_POS in
+		# Main.gd with the new layout.
+		_dump_domain_pos_for_paste()
+
+
+# Domain id → small Label showing "Foi (0.510, 0.460)" so the user can
+# read off the position they're dragging towards. Built per session,
+# torn down with the calibration toggle.
+var _calibration_labels: Dictionary = {}
+
+
+func _ensure_calibration_label(d_id: int) -> void:
+	if _calibration_labels.has(d_id):
+		_refresh_calibration_label(d_id)
+		return
+	var lbl := Label.new()
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.add_theme_font_size_override("font_size", 14)
+	lbl.add_theme_color_override("font_color", Color(0.95, 1.0, 1.0))
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 4)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_zoom_layer.add_child(lbl)
+	_calibration_labels[d_id] = lbl
+	_refresh_calibration_label(d_id)
+
+
+func _remove_calibration_label(d_id: int) -> void:
+	var lbl: Label = _calibration_labels.get(d_id)
+	if lbl != null and is_instance_valid(lbl):
+		lbl.queue_free()
+	_calibration_labels.erase(d_id)
+
+
+func _refresh_calibration_label(d_id: int) -> void:
+	var lbl: Label = _calibration_labels.get(d_id)
+	if lbl == null:
+		return
+	var btn: Button = _hotspots[d_id]
+	# Centre of the (current, possibly-dragged) hotspot.
+	var cx: float = (btn.anchor_left + btn.anchor_right) * 0.5
+	var cy: float = (btn.anchor_top + btn.anchor_bottom) * 0.5
+	var dname: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
+	lbl.text = "%s\n(%.3f, %.3f)" % [dname, cx, cy]
+	lbl.anchor_left = cx - 0.06
+	lbl.anchor_right = cx + 0.06
+	lbl.anchor_top = btn.anchor_top - 0.04
+	lbl.anchor_bottom = btn.anchor_top - 0.005
+
+
+# gui_input on every domain hotspot — drag-to-move when calibration is
+# on, no-op otherwise (the regular pressed signal opens the action
+# popup, gated by _on_domain_clicked's _debug_hotspots early-return).
+func _on_hotspot_calibration_input(event: InputEvent, d_id: int) -> void:
+	if not _debug_hotspots:
+		return
+	var delta: Vector2 = Vector2.ZERO
+	if event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		if (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+			return
+		delta = mm.relative
+	elif event is InputEventScreenDrag:
+		var sd: InputEventScreenDrag = event
+		delta = sd.relative
+	else:
+		return
+	if delta == Vector2.ZERO:
+		return
+	# Drag deltas come in screen-pixel space ; the zoom layer can be
+	# scaled, so convert through its scaled rect to get a fractional
+	# anchor delta that lands the hotspot exactly under the finger /
+	# cursor regardless of current zoom.
+	var screen_size: Vector2 = _zoom_layer.size * _zoom_layer.scale
+	if screen_size.x <= 0 or screen_size.y <= 0:
+		return
+	var dx: float = delta.x / screen_size.x
+	var dy: float = delta.y / screen_size.y
+	var btn: Button = _hotspots[d_id]
+	btn.anchor_left += dx
+	btn.anchor_right += dx
+	btn.anchor_top += dy
+	btn.anchor_bottom += dy
+	_refresh_calibration_label(d_id)
+
+
+# Pretty-print the current hotspot centres in a GDScript block so the
+# user can copy-paste it over DOMAIN_POS in Main.gd. Output lands in an
+# OS.alert (so it sits on top of the running game) AND in the journal,
+# in case the alert is dismissed before the SHA can be screenshotted.
+func _dump_domain_pos_for_paste() -> void:
+	var lines: PackedStringArray = PackedStringArray(["const DOMAIN_POS := {"])
+	for d_id in DOMAIN_POS.keys():
+		var btn: Button = _hotspots[d_id]
+		var cx: float = (btn.anchor_left + btn.anchor_right) * 0.5
+		var cy: float = (btn.anchor_top + btn.anchor_bottom) * 0.5
+		lines.append("\tGameEnums.DomainId.%s: Vector2(%.3f, %.3f)," %
+			[_domain_id_to_enum_name(d_id), cx, cy])
+	lines.append("}")
+	var block: String = ""
+	for ln in lines:
+		block += ln + "\n"
+	if state != null:
+		state.add_log("[Calibration] Nouvelles positions :")
+		for ln in lines:
+			state.add_log(ln)
+		_refresh_log()
+	OS.alert(block, "Calibration des hotspots — coller dans Main.gd")
+
+
+# Map DomainId int → constant name. Used to emit the
+# `GameEnums.DomainId.FOI` form rather than the numeric value in the
+# paste-ready block, so the dumped block is human-readable.
+func _domain_id_to_enum_name(d_id: int) -> String:
+	match d_id:
+		GameEnums.DomainId.AMBITION: return "AMBITION"
+		GameEnums.DomainId.DESIR:    return "DESIR"
+		GameEnums.DomainId.FOI:      return "FOI"
+		GameEnums.DomainId.PEUR:     return "PEUR"
+		GameEnums.DomainId.VOLONTE:  return "VOLONTE"
+	return "UNKNOWN"
 
 
 # ─── LITURGY DIALOG ───────────────────────────────────────────────────────────
