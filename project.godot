@@ -29,6 +29,22 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/stretch/scale=1.5
 
+[input_devices]
+
+; Without this disable, every touchscreen tap also fires a synthesised
+; InputEventMouseButton, so any handler that listens to both branches
+; (the fullscreen card flip, the liturgy banner click) processes one tap
+; twice. The double-fire flips the card forward then back so the second
+; tap visibly «runs the animation but stops on the same face». Order /
+; timing of the touch-vs-mouse pair varies across browsers, so a
+; per-handler dedupe by timestamp is not reliable enough — disabling
+; the synthesis entirely is the only solution that holds on Safari iOS,
+; Chrome on Windows tablet and the rest. Every gui_input handler in
+; the project already supports both InputEventScreenTouch and
+; InputEventMouseButton on its own, so cutting the emulation costs us
+; nothing.
+pointing/emulate_mouse_from_touch=false
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
