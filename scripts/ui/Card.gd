@@ -131,12 +131,23 @@ static func _configure_card_fonts() -> void:
 	# Card font's fallbacks chain at ThemeDB.fallback_font (NotoSans, very
 	# broad Unicode coverage) means missing glyphs route through it
 	# instead, on a per-glyph basis.
+	#
+	# Important : after toggling multichannel_signed_distance_field or
+	# touching fallbacks, clear_cache() is required for the change to
+	# take effect. Skipping this on f57eedf left the engine serving the
+	# pre-MSDF bitmap cache, which on a high-DPI Windows tablet showed
+	# up as the rainbow-fringed rendering MSDF was meant to fix.
 	var fallback: Font = ThemeDB.fallback_font
 	for f in [FONT_TITLE, FONT_BODY, FONT_FACE]:
+		var dirty := false
 		if not f.multichannel_signed_distance_field:
 			f.multichannel_signed_distance_field = true
+			dirty = true
 		if fallback != null and f.fallbacks.is_empty():
 			f.fallbacks = [fallback]
+			dirty = true
+		if dirty:
+			f.clear_cache()
 	_fonts_msdf_configured = true
 
 

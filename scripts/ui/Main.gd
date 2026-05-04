@@ -1147,16 +1147,24 @@ func _refresh_liturgy_banners() -> void:
 # release of the first finger doesn't false-trigger the dialog.
 var _banner_touches: Dictionary = {}
 var _banner_was_multi: bool = false
+# Same emulate_mouse_from_touch dedupe story as the fullscreen card —
+# a tap on a tablet would otherwise both fire ScreenTouch + a synthesised
+# MouseButton, opening the dialog twice.
+var _banner_last_touch_ms: int = -1
 
 
 func _on_liturgy_banner_input(event: InputEvent, station: int) -> void:
 	var pressed_release: bool = false
 	if event is InputEventMouseButton:
+		if _banner_last_touch_ms >= 0 and \
+				Time.get_ticks_msec() - _banner_last_touch_ms < _MOUSE_AFTER_TOUCH_GRACE_MS:
+			return
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_LEFT and not mb.pressed:
 			pressed_release = true
 	elif event is InputEventScreenTouch:
 		var st_event: InputEventScreenTouch = event
+		_banner_last_touch_ms = Time.get_ticks_msec()
 		if st_event.pressed:
 			_banner_touches[st_event.index] = st_event.position
 			if _banner_touches.size() >= 2:
@@ -2673,12 +2681,24 @@ func _on_fullscreen_card_entraver_pressed() -> void:
 var _fullscreen_card_press_pos: Vector2 = Vector2.INF
 var _fullscreen_card_touches: Dictionary = {}
 var _fullscreen_card_was_multi: bool = false
+# emulate_mouse_from_touch is on by default in Godot, so a tap on a
+# touchscreen fires *both* an InputEventScreenTouch and a synthesised
+# InputEventMouseButton. Without dedupe, both branches below would each
+# flip the card → the visible state ends back at the starting face for
+# every tap, looking like nothing happened. Stash the timestamp of the
+# last touch handled and skip mouse events that arrive within 250 ms.
+var _fullscreen_card_last_touch_ms: int = -1
+const _MOUSE_AFTER_TOUCH_GRACE_MS := 250
 
 
 func _on_fullscreen_card_input(event: InputEvent) -> void:
 	if _fullscreen_card_binding.is_empty():
 		return
 	if event is InputEventMouseButton:
+		# Drop the synthesised mouse event that mirrors a finger tap.
+		if _fullscreen_card_last_touch_ms >= 0 and \
+				Time.get_ticks_msec() - _fullscreen_card_last_touch_ms < _MOUSE_AFTER_TOUCH_GRACE_MS:
+			return
 		var mb: InputEventMouseButton = event
 		if mb.button_index != MOUSE_BUTTON_LEFT:
 			return
@@ -2689,6 +2709,7 @@ func _on_fullscreen_card_input(event: InputEvent) -> void:
 			_on_fullscreen_card_flip_pressed()
 	elif event is InputEventScreenTouch:
 		var st: InputEventScreenTouch = event
+		_fullscreen_card_last_touch_ms = Time.get_ticks_msec()
 		if st.pressed:
 			_fullscreen_card_touches[st.index] = st.position
 			if _fullscreen_card_touches.size() >= 2:
