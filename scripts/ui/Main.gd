@@ -1045,14 +1045,17 @@ func _build_liturgy_banners() -> void:
 		border.add_theme_stylebox_override("panel", bsb)
 		panel.add_child(border)
 
-		# Label sits on top of both, anchored to the right cartouche : 90 %
-		# of the banner's height (5 % top + 5 % bottom margin), 70 % of its
-		# width on the right (small inset offsets for readability).
+		# Label sits on top of both, anchored to the parchment cartouche
+		# zone — values determined by tools/banner_calibrate.py over the
+		# 10 shipped banner masters (mean cartouche bbox L=0.39 T=0.09
+		# R=0.93 B=0.89, nudged 1 % inward so the text tucks comfortably
+		# even on the loosest banner). Re-run the script if the artwork
+		# changes.
 		var lbl := Label.new()
-		lbl.anchor_left = 0.30
-		lbl.anchor_right = 1.0
-		lbl.anchor_top = 0.05
-		lbl.anchor_bottom = 0.95
+		lbl.anchor_left = 0.40
+		lbl.anchor_right = 0.92
+		lbl.anchor_top = 0.10
+		lbl.anchor_bottom = 0.89
 		lbl.offset_left = 6
 		lbl.offset_right = -10
 		lbl.offset_top = 0
