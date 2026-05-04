@@ -110,7 +110,7 @@ const STRINGS := {
 	# UI — bottom bar
 	"ui.btn.transgressions":{"fr": "Trans.",      "en": "Trans."},
 	"ui.btn.new_game":      {"fr": "Nouvelle",    "en": "New game"},
-	"ui.btn.next_station":  {"fr": "Station →",   "en": "Station →"},
+	"ui.btn.next_station":  {"fr": "Station »",   "en": "Station »"},
 	"ui.btn.pass":          {"fr": "Passer",      "en": "Pass"},
 	"ui.btn.journal":       {"fr": "Journal",     "en": "Journal"},
 	"ui.btn.glossary":      {"fr": "Glossaire",   "en": "Glossary"},
@@ -402,6 +402,7 @@ const STRINGS := {
 	"ui.btn.zoom_in_label":            {"fr": "Zoomer",       "en": "Zoom in"},
 	"ui.btn.zoom_reset_label":         {"fr": "Recadrer",     "en": "Reset zoom"},
 	"ui.fab.tooltip":                  {"fr": "Menu",         "en": "Menu"},
+	"ui.fab.label":                    {"fr": "Menu",         "en": "Menu"},
 
 	# DomainData yields (printed in domain tooltips/debug)
 	"domain.yield.transgressed_2_3":   {"fr": "2 (3 si transgressé)",             "en": "2 (3 if Transgressed)"},

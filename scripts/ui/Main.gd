@@ -475,8 +475,12 @@ func _build_debug_bar() -> void:
 	# Replaces the previous full-width row of buttons because on iPad the
 	# row pushed the playable area down too far.
 	_fab = Button.new()
-	_fab.text = "≡"
-	_fab.add_theme_font_size_override("font_size", 32)
+	# Plain text label rather than ≡ / ☰ glyphs — the embedded web-export
+	# fallback font on some iPad builds doesn't carry U+2261 / U+2630 and
+	# rendered the FAB as a tofu box. "Menu" reads everywhere.
+	_fab.text = I18n.t("ui.fab.label")
+	_fab.set_meta("i18n_label_key", "ui.fab.label")
+	_fab.add_theme_font_size_override("font_size", 24)
 	_fab.tooltip_text = I18n.t("ui.fab.tooltip")
 	_fab.set_meta("i18n_tooltip_key", "ui.fab.tooltip")
 	_fab.anchor_left = 1.0
@@ -528,9 +532,13 @@ const FAB_GLOSSARY   := 1010
 
 func _on_fab_pressed() -> void:
 	_fab_menu.clear()
-	_fab_menu.add_item("−  " + I18n.t("ui.btn.zoom_out_label"), FAB_ZOOM_OUT)
-	_fab_menu.add_item("⊙  " + I18n.t("ui.btn.zoom_reset_label"), FAB_ZOOM_RESET)
-	_fab_menu.add_item("+  " + I18n.t("ui.btn.zoom_in_label"), FAB_ZOOM_IN)
+	# Drop the glyph prefixes (− / ⊙) — they tofu on the embedded font
+	# Godot ships in some web-export builds. The labels are descriptive
+	# enough on their own ("Dézoomer", "Recadrer", "Zoomer") that we
+	# don't need iconography here.
+	_fab_menu.add_item(I18n.t("ui.btn.zoom_out_label"), FAB_ZOOM_OUT)
+	_fab_menu.add_item(I18n.t("ui.btn.zoom_reset_label"), FAB_ZOOM_RESET)
+	_fab_menu.add_item(I18n.t("ui.btn.zoom_in_label"), FAB_ZOOM_IN)
 	_fab_menu.add_separator()
 	_fab_menu.add_item(I18n.t("ui.btn.toggle_lang") + "  —  " + I18n.t("ui.btn.toggle_lang.tooltip"), FAB_LANG)
 	_fab_menu.add_separator()
@@ -2881,9 +2889,12 @@ func _on_btn_toggle_lang() -> void:
 # Dynamic widgets (created on dialog popup or panel refresh) re-localise
 # automatically when they're recreated.
 func _relocalize() -> void:
-	# FAB tooltip — items inside the popup are recreated on each open so they
-	# pick up the current locale automatically.
+	# FAB label + tooltip — items inside the popup are recreated on each
+	# open so they pick up the current locale automatically.
 	if _fab != null:
+		var lk: String = _fab.get_meta("i18n_label_key", "")
+		if lk != "":
+			_fab.text = I18n.t(lk)
 		var tk: String = _fab.get_meta("i18n_tooltip_key", "")
 		if tk != "":
 			_fab.tooltip_text = I18n.t(tk)
