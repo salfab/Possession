@@ -28,6 +28,17 @@ window/handheld/orientation=1
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/stretch/scale=1.5
+; Render at the device's physical pixel resolution rather than at CSS /
+; logical pixel size. Without this, on every HiDPI display (iPad
+; Retina = 2×, modern Windows tablets and 4K monitors with display
+; scaling, recent phones = 2-3×) Godot renders into a half-density
+; backbuffer and the browser/OS upscales the result, producing a
+; uniformly blurry image — the painted card art (Exorcism etc.) and
+; the calligraphic IM Fell text both lose their crispness. Enabling
+; allow_hidpi tells the engine to ask the platform for the real
+; device pixels and render straight into them. Combined with the MSDF
+; flag on the Card fonts, text stays sharp at any zoom.
+window/dpi/allow_hidpi=true
 
 [input_devices]
 
