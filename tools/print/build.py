@@ -954,6 +954,21 @@ def render_banner_with_text(banner_path: Path, banner_text: str) -> Image.Image:
     return img
 
 
+# Print-only banner text overrides. The in-game i18n strings are tuned for
+# the runtime cartouche on a phone-portrait screen, so they use compressed
+# abbreviations ("Corr.", "Dom.") and the U+2212 minus glyph which IM Fell
+# English doesn't carry — that minus would tofu when baked in for print.
+# At print scale the cartouche has room for the full words ; this map
+# expands them and substitutes ASCII hyphen-minus for the tofu-prone glyph.
+# Keys are i18n keys ; values are the strings to render in print only.
+BANNER_PRINT_TEXT_OVERRIDE = {
+    "banner.signe_de_croix.impedita":         "-1 Corruption on top dominant",
+    "banner.examen_de_conscience.in_integro": "Break Domination + bar Seal",
+    # All other banner strings already render cleanly with no tofu and no
+    # truncated abbreviations, so they fall through to the i18n value.
+}
+
+
 # Order : station-by-station, both modes adjacent so a player can cut + glue
 # back-to-back into 5 double-sided station banners + 1 single-sided Exorcism.
 # Tuple = (response_id, mode, station_label_for_caption, i18n_key_for_text)
@@ -1008,8 +1023,12 @@ def compose_banners_pdf(pdf_path: Path, i18n: dict[str, str]):
             path = BANNERS_DIR / f"{rid}.webp"
         else:
             path = BANNERS_DIR / f"{rid}_{mode}.webp"
-        # Render text overlay onto the WebP, JPG-encode in memory.
-        text = i18n.get(text_key, "")
+        # Render text overlay onto the WebP, JPG-encode in memory. Print
+        # override takes precedence over the i18n string so abbreviations
+        # ("Corr." → "Corruption") and tofu-prone glyphs ("−" → "-") get
+        # corrected for the printed kit while the live game keeps the
+        # phone-cartouche-friendly compressed wording.
+        text = BANNER_PRINT_TEXT_OVERRIDE.get(text_key) or i18n.get(text_key, "")
         composed = render_banner_with_text(path, text)
         buf = io.BytesIO()
         composed.save(buf, format="JPEG", quality=88, optimize=True)
