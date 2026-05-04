@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import io
+
 from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -609,6 +611,7 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
         in_int = i18n.get(f"liturgy.{rid}.in_integro", "")
         impedita = i18n.get(f"liturgy.{rid}.impedita", "")
         target = i18n.get(f"liturgy.targeting.{rid}", "")
+        ill_path = ILLUSTRATIONS_DIR / f"{rid}.jpg"
 
         out.append(CardSpec(
             card_id=f"liturgy_{rid}",
@@ -634,6 +637,7 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
                 # to render at a legible size.
                 ("Impedita effect", impedita),
             ],
+            illustration_path=ill_path if ill_path.exists() else None,
             front_template=TEMPLATES_DIR / "liturgie_in_integro.webp",
             back_template=TEMPLATES_DIR / "liturgie_impedita.webp",
         ))
@@ -641,7 +645,13 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
 
 
 def build_exorcism_spec(i18n: dict[str, str]) -> CardSpec:
-    back_text = i18n.get("liturgy.exorcisme.back", "")
+    # Restructure the long Exorcism back text into discrete (label, body)
+    # blocks instead of a single 700-char paragraph. The i18n source ships
+    # this rule as one BBCode string with [b]…[/b] section headers ; we
+    # split on those markers and rebuild as the kind of block the
+    # render_face draw_paragraph helper consumes (label promoted to a
+    # FACE-font header, body rendered as flowing text). Bullet markers (•)
+    # are preserved since IM Fell carries U+2022.
     return CardSpec(
         card_id="exorcism_final",
         title="Final Exorcism",
@@ -653,12 +663,24 @@ def build_exorcism_spec(i18n: dict[str, str]) -> CardSpec:
         back_cost=None,
         front_body=[],   # ignored — the painted JPG occupies the full face
         back_body=[
-            ("Endgame rules", back_text),
+            ("Soul Rupture",
+             "The final Exorcism fails if all three conditions are met:"),
+            ("Depth",
+             "3+ total Infamies, or any Infamy in Faith / Will."),
+            ("Spread",
+             "4+ transgressed Domains."),
+            ("Anchor",
+             "2+ Sealed Domains, or Will sealed AND transgressed."),
+            ("Winning demon",
+             "Fiat Tenebris — Will sealed AND transgressed by the same demon — that demon wins. Otherwise: final Ascendancy with bonuses (+1 per Seal, extra +1 for sealed Will, +1 per Infamy in a controlled Domain, +1 per Infamy in Faith, plus Silent Pact / Inner Abdication bonuses)."),
+            ("Tie-break",
+             "If Ascendancy is 0 for both: demon who sealed Will, else Will's controller, else most Infamies, else most controlled Domains, else Unstable Possession (no winner)."),
         ],
         # Front : the painted endgame card gets reproduced edge-to-edge
         # because the artwork already carries title + image + rules in
         # the printed source asset.
         front_full_bleed=SPECIAL_DIR / "exorcisme_final.jpg",
+        is_reference=True,    # routes to compact custom layout (smaller fonts)
     )
 
 
@@ -740,11 +762,30 @@ def compose_pdf(card_pngs: list[tuple[Path, Path]], pdf_path: Path):
 
     c = pdfcanvas.Canvas(str(pdf_path), pagesize=A4)
 
+    # Cache of compressed JPG bytes per PNG path. Embedding the raw PNGs
+    # in the PDF gave a 112 MB output that hit GitHub's 100 MB hard limit.
+    # Converting once to JPG quality 85 cuts the file ~5× while staying
+    # at print quality (illustrations are photographic, JPG is the right
+    # codec for them anyway). The few solid-fill UI cards lose nothing
+    # visible at 85.
+    jpg_cache: dict[Path, ImageReader] = {}
+
+    def jpg_reader_for(image_path: Path) -> ImageReader:
+        if image_path in jpg_cache:
+            return jpg_cache[image_path]
+        with Image.open(image_path) as im:
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, format="JPEG", quality=85, optimize=True)
+            buf.seek(0)
+            reader = ImageReader(buf)
+        jpg_cache[image_path] = reader
+        return reader
+
     def draw_card(image_path: Path, col: int, row: int):
         x = margin_x + col * cw_mm
         # ReportLab origin is bottom-left, so rows count from the top.
         y = page_h - margin_y - (row + 1) * ch_mm
-        c.drawImage(ImageReader(str(image_path)), x, y, width=cw_mm, height=ch_mm,
+        c.drawImage(jpg_reader_for(image_path), x, y, width=cw_mm, height=ch_mm,
                     preserveAspectRatio=True, anchor='c')
         # Cut marks at corners — small ticks 4 mm long, sitting just outside
         # the card box, so the print shop can guillotine accurately.
