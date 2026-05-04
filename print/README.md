@@ -11,11 +11,12 @@ strings or the card list change.
 - `possession_board_a3.pdf` — A3 landscape, single page with the game
   board centred and full-bleed inside a 10 mm margin. Cut marks at the
   four corners of the board image.
-- `possession_banners_a4.pdf` — A4 portrait, 4 pages, 3 banners per
-  page. The 11 liturgy-banner variants in station order with both modes
-  adjacent (in_integro then impedita), plus the single-sided Exorcism
-  banner at the end. Cut and glue back-to-back to make 5 double-sided
-  station banners + 1 single-sided Exorcism banner.
+- `possession_banners_a4.pdf` — A4 portrait, **1 page**, 2 columns ×
+  6 rows. Left column = in_integro variants (with cartouche text baked
+  in), right column = impedita of the same Station ; row 6 col 0 holds
+  the single-sided Exorcism, col 1 stays blank. Each banner is sized
+  to **66.5 × 25 mm**, matching the banner slot on the printed A3
+  board so cut pieces drop straight onto the slots.
 - `cards_individual/*.png` — every card face as a 900×1260 PNG, one
   `_A.png` (front face) and one `_B.png` (back face) per card. Useful for
   spot-checking before printing or for sharing single-card previews.
@@ -52,13 +53,15 @@ strings or the card list change.
 4. Optional : mount on a thin chipboard backer for rigidity.
 
 ### Banners (`possession_banners_a4.pdf`)
-1. Print all 4 pages **single-sided** at 100 % scale on **160 g/m²
+1. Print the single page **single-sided** at 100 % scale on **160 g/m²
    paper** (regular cardstock is too thick for back-to-back gluing).
-2. Cut along the corner marks. Each banner is **180 × 67.5 mm**.
-3. Pair adjacent banners (in_integro on top of impedita for the same
-   station) and glue back-to-back with a glue stick or repositionable
-   adhesive — gives 5 double-sided station banners. The Exorcism
-   banner at the end stays single-sided.
+2. Cut along the corner marks. Each banner is **66.5 × 25 mm** —
+   matches the banner slot on the printed A3 board.
+3. Pair each row's two banners (in_integro on the left, impedita on
+   the right of the same Station) and glue back-to-back with a glue
+   stick or repositionable adhesive — gives 5 double-sided station
+   banners. The Exorcism on row 6 stays single-sided.
+4. Drop each finished piece onto its banner slot on the printed board.
 
 ## Regenerating
 
