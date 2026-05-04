@@ -620,10 +620,42 @@ func _refresh_all() -> void:
 	_refresh_overlays()
 	_refresh_log()
 	_refresh_player_transgression_panels()
+	_refresh_active_player_highlight()
 	_refresh_fab_highlight()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
 	_maybe_show_endgame_dialog()
+
+
+# Whose turn is it ? Active player's panel gets a brighter border + heavier
+# shadow ; the other one drops to ~35 % alpha so it visually recedes. Means
+# even with two panels stacked next to each other, a glance at the column
+# tells you who's playing without having to read the status bar.
+func _refresh_active_player_highlight() -> void:
+	if _player_panel_red == null or _player_panel_blue == null or state == null:
+		return
+	var active: int = state.active_player
+	_apply_player_panel_style(_player_panel_red, GameEnums.PlayerId.RED, active == GameEnums.PlayerId.RED)
+	_apply_player_panel_style(_player_panel_blue, GameEnums.PlayerId.BLUE, active == GameEnums.PlayerId.BLUE)
+
+
+func _apply_player_panel_style(panel: PanelContainer, pid: int, is_active: bool) -> void:
+	var accent: Color = GameEnums.player_color_light(pid)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.04, 0.02, 0.08, 0.95)
+	if is_active:
+		sb.border_color = accent
+		sb.set_border_width_all(4)
+		sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.60)
+		sb.shadow_size = 12
+	else:
+		sb.border_color = Color(accent.r, accent.g, accent.b, 0.35)
+		sb.set_border_width_all(2)
+		sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.10)
+		sb.shadow_size = 4
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(6)
+	panel.add_theme_stylebox_override("panel", sb)
 
 
 # When Puiser dans l'Ombre is the active player's only legal action (Réserve
