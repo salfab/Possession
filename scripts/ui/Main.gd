@@ -166,11 +166,86 @@ const PROVOKE_ITEM_ID_BASE := 100
 const AMPLIFY_ITEM_ID_BASE := 200
 
 
+const SAVE_PATH := "user://save_game.json"
+
+
 func _ready() -> void:
 	_apply_theme()
 	_build_overlays()
 	I18n.locale_changed.connect(_relocalize)
 	new_game()
+	# After the fresh-game refresh has run (so the UI is laid out), check
+	# whether a save from a previous browser session exists and offer to
+	# resume. Deferred a frame so the dialog overlays the freshly-painted
+	# board rather than racing the layout pass.
+	call_deferred("_maybe_offer_resume")
+
+
+# Serialises the full GameState to user://save_game.json so an iPad
+# refresh / accidental tab close doesn't wipe the in-progress game.
+# JSON over an IndexedDB-backed FileAccess on the web export ; works
+# cold-boot offline thanks to the SW cache.
+func _save_game() -> void:
+	if state == null:
+		return
+	if state.game_over:
+		_delete_save()
+		return
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify(state.to_dict()))
+	f.close()
+
+
+# Reads the save file back into the current GameState. Returns false on
+# any failure (no file, parse error, wrong shape) so the caller can fall
+# back to a fresh game without crashing.
+func _load_game() -> bool:
+	if state == null:
+		return false
+	if not FileAccess.file_exists(SAVE_PATH):
+		return false
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return false
+	var raw := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(raw)
+	if not (parsed is Dictionary):
+		return false
+	state.from_dict(parsed)
+	return true
+
+
+func _delete_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(SAVE_PATH)
+
+
+# If a save is on disk, prompt the user : Reprendre / Nouvelle partie.
+# Confirm → load + refresh. Cancel → wipe the save and keep the fresh
+# new_game() state that's already on screen. No save → no-op.
+func _maybe_offer_resume() -> void:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return
+	var dlg := AcceptDialog.new()
+	dlg.exclusive = true
+	dlg.title = I18n.t("ui.dialog.title.resume")
+	dlg.dialog_text = I18n.t("ui.dialog.resume_message")
+	dlg.ok_button_text = I18n.t("ui.dialog.resume_yes")
+	dlg.add_cancel_button(I18n.t("ui.dialog.resume_no"))
+	add_child(dlg)
+	dlg.confirmed.connect(func():
+		if _load_game():
+			_refresh_all()
+		dlg.queue_free()
+	)
+	dlg.canceled.connect(func():
+		_delete_save()
+		dlg.queue_free()
+	)
+	dlg.popup_centered()
 
 
 func _apply_theme() -> void:
@@ -614,7 +689,12 @@ func _handle_action_result(result: Dictionary, success_text: String = "") -> voi
 		if state != null:
 			state.add_log("[%s] %s" % [I18n.t("log.refused"), msg])
 		_flash_action_toast(msg, "refused")
-	elif success_text != "":
+		return
+	# Successful action — persist the new state so a refresh / iPad swipe
+	# away doesn't lose progress. _save_game itself short-circuits on
+	# game_over (it deletes the save instead).
+	_save_game()
+	if success_text != "":
 		_flash_action_toast(success_text, "accepted")
 
 
@@ -1543,6 +1623,10 @@ func _on_popup_action(action_id: int) -> void:
 # ─── DEBUG BUTTONS ────────────────────────────────────────────────────────────
 
 func _on_btn_new_game() -> void:
+	# Manual new-game wipes any persisted save so the next refresh starts
+	# fresh too (otherwise the resume prompt would offer the *previous*
+	# game's state on next launch).
+	_delete_save()
 	new_game()
 	state.add_log(I18n.t("log.new_game", [Time.get_time_string_from_system()]))
 	_refresh_log()
@@ -1702,6 +1786,7 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 
 func _on_liturgy_acknowledged() -> void:
 	manager.acknowledge_liturgy()
+	_save_game()
 	_refresh_all()
 
 
