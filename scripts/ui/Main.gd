@@ -73,6 +73,8 @@ var _log_scroll: ScrollContainer
 var _action_toast: Panel
 var _action_toast_label: Label
 var _action_toast_tween: Tween
+# In-game glossary popup, built lazily on first request.
+var _glossary_dialog: AcceptDialog
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
 var _liturgy_card_thumb: Control      # Card.tscn wrapped + clickable
@@ -446,6 +448,7 @@ const FAB_NEXT_ST    := 1006
 const FAB_PUISER     := 1007
 const FAB_JOURNAL    := 1008
 const FAB_HOTSPOTS   := 1009
+const FAB_GLOSSARY   := 1010
 
 
 func _on_fab_pressed() -> void:
@@ -465,6 +468,7 @@ func _on_fab_pressed() -> void:
 	if state != null and not GameRules.can_puiser(state, state.active_player):
 		_fab_menu.set_item_disabled(puiser_idx, true)
 	_fab_menu.add_separator()
+	_fab_menu.add_item(I18n.t("ui.btn.glossary"), FAB_GLOSSARY)
 	_fab_menu.add_item(I18n.t("ui.btn.journal"), FAB_JOURNAL)
 	_fab_menu.add_item(I18n.t("ui.btn.hotspots"), FAB_HOTSPOTS)
 	# Position just above the FAB.
@@ -484,6 +488,7 @@ func _on_fab_menu_pressed(id: int) -> void:
 		FAB_NEW_GAME:   _on_btn_new_game()
 		FAB_NEXT_ST:    _on_btn_force_next_station()
 		FAB_PUISER:     _on_btn_puiser()
+		FAB_GLOSSARY:   _on_btn_glossary()
 		FAB_JOURNAL:    _on_btn_toggle_log()
 		FAB_HOTSPOTS:   _on_btn_toggle_hotspots()
 
@@ -1573,6 +1578,47 @@ func _on_btn_toggle_log() -> void:
 	_log_panel.visible = not _log_panel.visible
 	if _log_panel.visible:
 		_refresh_log()
+
+
+# Pop a modal listing the key terms (Domaine, Emprise, Sceau, etc.) so a
+# new player can look up vocabulary without leaving the game.
+# Built lazily on first request — the body text comes from i18n keys
+# under glossary.* and is reformatted on every open in the current
+# locale (in case the user toggled FR <-> EN since last open).
+func _on_btn_glossary() -> void:
+	if _glossary_dialog == null:
+		_glossary_dialog = AcceptDialog.new()
+		_glossary_dialog.exclusive = true
+		_glossary_dialog.ok_button_text = I18n.t("ui.dialog.close")
+		add_child(_glossary_dialog)
+		_make_dialog_touch_friendly(_glossary_dialog)
+		var rtl := RichTextLabel.new()
+		rtl.bbcode_enabled = true
+		rtl.fit_content = false
+		rtl.scroll_active = true
+		rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		rtl.add_theme_font_size_override("normal_font_size", 18)
+		rtl.add_theme_font_size_override("bold_font_size", 22)
+		rtl.name = "GlossaryRTL"
+		_glossary_dialog.add_child(rtl)
+	var rtl: RichTextLabel = _glossary_dialog.get_node("GlossaryRTL")
+	rtl.clear()
+	# Pull each glossary term from i18n. Format : "[b]Term[/b] — definition."
+	# Keeps the schema flat so adding a term means one new pair of keys.
+	const TERMS := [
+		"domain", "emprise", "domination",
+		"transgression", "scandale", "infamie",
+		"sceau", "penitence",
+		"liturgie", "in_integro", "impedita",
+		"rupture_ame", "fiat_tenebris", "ascendant",
+	]
+	for k in TERMS:
+		var label_key: String = "glossary." + k + ".name"
+		var def_key: String = "glossary." + k + ".def"
+		rtl.append_text("[b]%s[/b] — %s\n\n" % [I18n.t(label_key), I18n.t(def_key)])
+	_glossary_dialog.title = I18n.t("ui.dialog.title.glossary")
+	_popup_dialog_fullscreen(_glossary_dialog)
 
 
 # Debug toggle — paints each domain hotspot with a translucent cyan
