@@ -166,9 +166,6 @@ const PROVOKE_ITEM_ID_BASE := 100
 const AMPLIFY_ITEM_ID_BASE := 200
 
 
-const SAVE_PATH := "user://save_game.json"
-
-
 func _ready() -> void:
 	_apply_theme()
 	_build_overlays()
