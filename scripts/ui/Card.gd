@@ -125,9 +125,18 @@ static var _fonts_msdf_configured: bool = false
 static func _configure_card_fonts() -> void:
 	if _fonts_msdf_configured:
 		return
+	# Defensive fallback : if a card's i18n string ever contains a glyph
+	# the IM Fell / Cinzel fonts don't carry (e.g. arrows, math operators,
+	# checkmarks), Godot would render it as a tofu box. Pointing each
+	# Card font's fallbacks chain at ThemeDB.fallback_font (NotoSans, very
+	# broad Unicode coverage) means missing glyphs route through it
+	# instead, on a per-glyph basis.
+	var fallback: Font = ThemeDB.fallback_font
 	for f in [FONT_TITLE, FONT_BODY, FONT_FACE]:
 		if not f.multichannel_signed_distance_field:
 			f.multichannel_signed_distance_field = true
+		if fallback != null and f.fallbacks.is_empty():
+			f.fallbacks = [fallback]
 	_fonts_msdf_configured = true
 
 
