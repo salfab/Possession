@@ -68,6 +68,11 @@ var _selected_domain: int = -1
 var _log_rtl: RichTextLabel
 var _log_panel: PanelContainer
 var _log_scroll: ScrollContainer
+# Toast surfaced at the top of the viewport on action result (refusal in
+# particular — the journal is hidden by default).
+var _action_toast: Panel
+var _action_toast_label: Label
+var _action_toast_tween: Tween
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
 var _liturgy_card_thumb: Control      # Card.tscn wrapped + clickable
@@ -326,6 +331,10 @@ func _build_overlays() -> void:
 	# Log panel (right side, hidden by default; toggled with a button)
 	_build_log_panel()
 
+	# Floating toast for action results (refusal in particular — the log
+	# is hidden by default so refusals would otherwise be invisible).
+	_build_action_toast()
+
 	# Action popup
 	_action_popup = PopupMenu.new()
 	for aid in POPUP_ACTIONS:
@@ -518,6 +527,90 @@ func _build_log_panel() -> void:
 	_log_rtl.add_theme_color_override("default_color", Color(0.95, 0.9, 0.75))
 	_log_rtl.add_theme_font_size_override("normal_font_size", 18)
 	sc.add_child(_log_rtl)
+
+
+# Top-centred toast used to surface action results (refusal mainly).
+# Built once, hidden by default ; _flash_action_toast(text, kind) drives
+# both the per-flash style and the fade-in / hold / fade-out tween.
+func _build_action_toast() -> void:
+	_action_toast = Panel.new()
+	_action_toast.name = "ActionToast"
+	_action_toast.anchor_left = 0.5
+	_action_toast.anchor_right = 0.5
+	_action_toast.anchor_top = 0.0
+	_action_toast.offset_left = -260
+	_action_toast.offset_right = 260
+	_action_toast.offset_top = 24
+	_action_toast.offset_bottom = 24 + 64
+	_action_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_action_toast.modulate.a = 0.0
+	_action_toast.visible = false
+	add_child(_action_toast)
+
+	_action_toast_label = Label.new()
+	_action_toast_label.anchor_right = 1.0
+	_action_toast_label.anchor_bottom = 1.0
+	_action_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_action_toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_action_toast_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_action_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_action_toast_label.add_theme_font_size_override("font_size", 18)
+	_action_toast_label.add_theme_constant_override("outline_size", 0)
+	_action_toast.add_child(_action_toast_label)
+
+
+# Pulse a coloured panel at the top of the viewport with `text`.
+# `kind` drives the palette : "refused" (warm amber) / "accepted"
+# (muted green). Cancels any in-flight tween so consecutive actions
+# don't queue up.
+func _flash_action_toast(text: String, kind: String) -> void:
+	if _action_toast == null or text == "":
+		return
+	var sb := StyleBoxFlat.new()
+	var fg: Color
+	match kind:
+		"refused":
+			sb.bg_color = Color(0.32, 0.20, 0.06, 0.94)
+			sb.border_color = Color(0.86, 0.62, 0.20)
+			fg = Color(1.00, 0.92, 0.78)
+		"accepted":
+			sb.bg_color = Color(0.10, 0.22, 0.14, 0.94)
+			sb.border_color = Color(0.40, 0.70, 0.45)
+			fg = Color(0.86, 1.00, 0.88)
+		_:
+			sb.bg_color = Color(0.10, 0.10, 0.10, 0.94)
+			sb.border_color = Color(0.40, 0.40, 0.40)
+			fg = Color(1.00, 1.00, 1.00)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(14)
+	_action_toast.add_theme_stylebox_override("panel", sb)
+	_action_toast_label.text = text
+	_action_toast_label.add_theme_color_override("font_color", fg)
+	_action_toast.visible = true
+	if _action_toast_tween != null and _action_toast_tween.is_valid():
+		_action_toast_tween.kill()
+	_action_toast.modulate.a = 0.0
+	_action_toast_tween = create_tween()
+	_action_toast_tween.tween_property(_action_toast, "modulate:a", 1.0, 0.15)
+	var hold: float = 1.4 if kind == "accepted" else 2.4
+	_action_toast_tween.tween_interval(hold)
+	_action_toast_tween.tween_property(_action_toast, "modulate:a", 0.0, 0.30)
+	_action_toast_tween.tween_callback(func(): _action_toast.visible = false)
+
+
+# Centralised handler for action results : logs + toasts. Call after
+# every manager.perform_action(...). Pass an optional success_text to
+# also flash a green toast on accept (default : silent on accept since
+# the board itself updates).
+func _handle_action_result(result: Dictionary, success_text: String = "") -> void:
+	if not result.get("ok", false):
+		var msg: String = String(result.get("message", "?"))
+		if state != null:
+			state.add_log("[%s] %s" % [I18n.t("log.refused"), msg])
+		_flash_action_toast(msg, "refused")
+	elif success_text != "":
+		_flash_action_toast(success_text, "accepted")
 
 
 # ─── REFRESH ──────────────────────────────────────────────────────────────────
@@ -1333,8 +1426,7 @@ func _on_popup_action(action_id: int) -> void:
 		result = manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": String(tids[idx]), "origin": origin})
 	else:
 		result = manager.perform_action(action_id, {"domain": _selected_domain})
-	if not result.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
+	_handle_action_result(result)
 	_selected_domain = -1
 	_refresh_all()
 
@@ -1369,8 +1461,7 @@ func _on_btn_puiser() -> void:
 		_refresh_log()
 		return
 	var result := manager.perform_action(GameEnums.ActionId.PUISER, {})
-	if not result.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
+	_handle_action_result(result)
 	_refresh_all()
 
 
@@ -1575,8 +1666,7 @@ func _on_decision_pick(picks: Dictionary) -> void:
 	# Hide first so the AcceptDialog "confirmed" signal is NOT emitted.
 	_decision_dialog.hide()
 	var r := manager.resolve_decision(picks)
-	if not r.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
+	_handle_action_result(r)
 	_refresh_all()
 
 
@@ -1591,8 +1681,7 @@ func _on_decision_skip() -> void:
 		_refresh_all()
 		return
 	var r := manager.resolve_decision({"skip": true})
-	if not r.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
+	_handle_action_result(r)
 	_refresh_all()
 
 
@@ -2183,9 +2272,8 @@ func _on_fullscreen_card_entraver_pressed() -> void:
 	if st < 0:
 		return
 	var result := manager.perform_action(GameEnums.ActionId.ENTRAVER, {"station": st})
-	if not result.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), result.get("message", "?")])
-	else:
+	_handle_action_result(result)
+	if result.get("ok", false):
 		# Reflect the new state on the binding, the banner, and the
 		# button row of the open dialog.
 		_fullscreen_card_binding["impedita"] = true
@@ -2476,16 +2564,14 @@ func _on_endgame_image_clicked() -> void:
 func _on_provoquer_clicked(tid: String, origin: int) -> void:
 	_trans_dialog.hide()
 	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": tid, "origin": origin})
-	if not r.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
+	_handle_action_result(r)
 	_refresh_all()
 
 
 func _on_amplifier_clicked(tid: String) -> void:
 	_trans_dialog.hide()
 	var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
-	if not r.get("ok", false):
-		state.add_log("[%s] %s" % [I18n.t("log.refused"), r.get("message", "?")])
+	_handle_action_result(r)
 	_refresh_all()
 
 
