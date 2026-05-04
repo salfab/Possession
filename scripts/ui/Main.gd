@@ -622,9 +622,69 @@ func _refresh_all() -> void:
 	_refresh_player_transgression_panels()
 	_refresh_active_player_highlight()
 	_refresh_fab_highlight()
+	_animate_state_deltas()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
 	_maybe_show_endgame_dialog()
+
+
+# Per-domain board snapshot kept between refreshes so _animate_state_deltas
+# can spot what actually changed and flash only the affected slots.
+var _prev_board_state: Dictionary = {}
+
+
+func _snapshot_board_state() -> Dictionary:
+	var snap: Dictionary = {}
+	if state == null:
+		return snap
+	for d_id in DOMAIN_POS.keys():
+		var d := state.domain(d_id)
+		snap[d_id] = {
+			"red": d.red_corruption,
+			"blue": d.blue_corruption,
+			"seal": d.seal_owner,
+			"scandals": d.scandals.size(),
+			"infamies": d.infamies.size(),
+			"controller": state.controller_of(d_id),
+			"penitence": state.is_in_penitence(d_id),
+		}
+	return snap
+
+
+# Compare the previous snapshot to the current one ; for every Domain
+# that actually changed, brighten the chip row + drawn badges briefly so
+# the eye is drawn there. Works for any state change (corruption +/-,
+# seal placed/lifted, transgression posed/removed, penitence) without
+# needing per-event hooks. First call after launch (snapshot empty) is
+# a no-op so we don't flash the initial layout.
+func _animate_state_deltas() -> void:
+	if state == null:
+		return
+	var curr: Dictionary = _snapshot_board_state()
+	if not _prev_board_state.is_empty():
+		for d_id in curr.keys():
+			if not _prev_board_state.has(d_id):
+				continue
+			if _prev_board_state[d_id] != curr[d_id]:
+				_flash_domain(d_id)
+	_prev_board_state = curr
+
+
+func _flash_domain(d_id: int) -> void:
+	var targets: Array = []
+	if _domain_marker_rows.has(d_id):
+		targets.append(_domain_marker_rows[d_id])
+	if _domain_badges.has(d_id):
+		targets.append(_domain_badges[d_id])
+	for t in targets:
+		var node := t as CanvasItem
+		if node == null:
+			continue
+		node.modulate = Color(1.6, 1.6, 1.6, 1.0)
+		var tw := create_tween()
+		tw.tween_property(node, "modulate", Color.WHITE, 0.45) \
+			.set_trans(Tween.TRANS_EXPO) \
+			.set_ease(Tween.EASE_OUT)
 
 
 # Whose turn is it ? Active player's panel gets a brighter border + heavier
