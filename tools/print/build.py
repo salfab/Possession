@@ -40,10 +40,25 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ASSETS = REPO_ROOT / "assets"
 FONTS_DIR = ASSETS / "fonts"
 ILLUSTRATIONS_DIR = ASSETS / "cards" / "illustrations"
+TEMPLATES_DIR = ASSETS / "cards" / "templates"
 SPECIAL_DIR = ASSETS / "cards" / "special"
 I18N_GD = REPO_ROOT / "scripts" / "data" / "I18n.gd"
 OUT_DIR = REPO_ROOT / "print"
 INDIVIDUAL_DIR = OUT_DIR / "cards_individual"
+
+
+# ─── Template slot anchors ─────────────────────────────────────────────────────
+
+# Mirrors Card.tscn — normalised [0,1] anchors of every text / illustration
+# slot inside the WebP template. Used to compose printable cards on top of
+# the illustrated frame at exactly the positions Card.gd would draw them
+# in-game, so the print kit reads the same as the game.
+SLOT_TITLE       = (0.283, 0.057, 0.726, 0.128)
+SLOT_COST        = (0.066, 0.047, 0.245, 0.179)
+SLOT_DOMAIN      = (0.774, 0.088, 0.929, 0.145)
+SLOT_ILLUSTR     = (0.123, 0.135, 0.873, 0.728)
+SLOT_EFFECT_TEXT = (0.203, 0.743, 0.807, 0.890)
+SLOT_FACE        = (0.302, 0.917, 0.708, 0.957)
 
 
 # ─── Card / page constants ──────────────────────────────────────────────────────
@@ -116,7 +131,10 @@ class CardSpec:
     front_body: list[tuple[str, str]]   # list of (label, paragraph) blocks for the front
     back_body: list[tuple[str, str]]    # same for the back
     illustration_path: Optional[Path] = None  # optional artwork file
+    front_template: Optional[Path] = None  # WebP frame to use as background, front face
+    back_template: Optional[Path] = None   # WebP frame to use as background, back face
     is_reference: bool = False
+    front_full_bleed: Optional[Path] = None  # painted card art that occupies the entire face (Exorcism)
 
 
 # Hardcoded transgression catalogue (domain + costs from TransgressionData.gd).
@@ -247,7 +265,171 @@ def draw_paragraph(draw, x, y, max_width, blocks, body_font, label_font, ink, la
     return cur_y
 
 
-# ─── Per-face card render ──────────────────────────────────────────────────────
+# ─── Per-face card render — illustrated template path ─────────────────────────
+
+# Slot palette for templated cards — dark ink on parchment, warm gold for
+# the title pill which sits on a darker plate in the template.
+COL_TPL_INK         = (40, 22, 12)         # near-black umber for body
+COL_TPL_INK_TITLE   = (32, 16, 8)          # near-black for the title pill — readable
+                                           # on both dark velvet (transgression
+                                           # template) and pale parchment (liturgy
+                                           # template) without per-template tuning.
+COL_TPL_INK_LABEL   = (84, 50, 18)         # darker umber for block labels
+COL_TPL_RIBBON_INK  = (32, 16, 8)          # near-black on the bottom face plate
+
+
+def render_face_with_template(
+    *,
+    template_path: Path,
+    title: str,
+    cost: Optional[int],
+    domain_label: str,
+    face: str,
+    body: list[tuple[str, str]],
+    illustration: Optional[Image.Image] = None,
+) -> Image.Image:
+    """
+    Compose a printable card face by overlaying text + illustration onto
+    the supplied WebP template frame. Slot positions match Card.tscn so
+    the printed card reads the same way as the in-game card.
+    """
+    # Load the template at our render resolution. The shipped templates are
+    # 720×1008 ; we render at 900×1260 (1.25×) so we resample once with
+    # LANCZOS — losing some fine detail but staying ahead of the print DPI
+    # (~300) at the final 65×91 mm trim size.
+    template = Image.open(template_path).convert("RGBA").resize(
+        (CARD_W, CARD_H), Image.LANCZOS)
+
+    # Composite onto a white background so any transparent margin in the
+    # template doesn't leak through to the PDF page.
+    img = Image.new("RGB", (CARD_W, CARD_H), (250, 245, 232))
+    img.paste(template, (0, 0), template)
+    d = ImageDraw.Draw(img)
+
+    def slot_box(slot):
+        l, t, r, b = slot
+        return (int(l * CARD_W), int(t * CARD_H), int(r * CARD_W), int(b * CARD_H))
+
+    # Illustration into the central arch slot, cover-cropped to fill it
+    # exactly. Drawn first so the template's arch ornaments overlay on top.
+    if illustration is not None:
+        x0, y0, x1, y1 = slot_box(SLOT_ILLUSTR)
+        ill_w, ill_h = x1 - x0, y1 - y0
+        sw, shh = illustration.size
+        target_aspect = ill_w / ill_h
+        src_aspect = sw / shh
+        if src_aspect > target_aspect:
+            new_w = int(shh * target_aspect)
+            cx = (sw - new_w) // 2
+            cropped = illustration.crop((cx, 0, cx + new_w, shh))
+        else:
+            new_h = int(sw / target_aspect)
+            cy = (shh - new_h) // 2
+            cropped = illustration.crop((0, cy, sw, cy + new_h))
+        cropped = cropped.resize((ill_w, ill_h), Image.LANCZOS)
+        # Paste *under* the template's arch frame ; we already pasted the
+        # template above so we can't simply re-paste. Workaround : composite
+        # the illustration first, then re-paste the template on top.
+        base = Image.new("RGB", (CARD_W, CARD_H), (250, 245, 232))
+        base.paste(cropped, (x0, y0))
+        base.paste(template, (0, 0), template)
+        img = base
+        d = ImageDraw.Draw(img)
+
+    # Title — fits inside the top center pill of the template. Mirrors the
+    # in-game Card.gd which uses FONT_TITLE base size 30 at a 720 wide
+    # reference card → ~37 px at our 900 wide canvas. Shrink further only
+    # if the longest titles ("Sign of the Cross", "Inner Abdication")
+    # need it. Tighter horizontal padding (24 px each side) than the raw
+    # slot — the liturgy template's pill graphic is visibly narrower than
+    # the slot's bounding box.
+    tx0, ty0, tx1, ty1 = slot_box(SLOT_TITLE)
+    title_h = ty1 - ty0
+    title_w = tx1 - tx0
+    safe_title_w = title_w - 48
+    title_size = 38
+    title_font = font(title_size, "title")
+    while measure_text(d, title, title_font)[0] > safe_title_w and title_size > 18:
+        title_size -= 2
+        title_font = font(title_size, "title")
+    tw, th = measure_text(d, title, title_font)
+    d.text((tx0 + (title_w - tw) // 2, ty0 + (title_h - th) // 2 - 4),
+           title, fill=COL_TPL_INK_TITLE, font=title_font)
+
+    # Cost — number centered in the top-left circle of the template.
+    if cost is not None:
+        cx0, cy0, cx1, cy1 = slot_box(SLOT_COST)
+        cost_size = (cy1 - cy0) - 32
+        cost_font = font(cost_size, "face")
+        cs = str(cost)
+        cw, chh = measure_text(d, cs, cost_font)
+        d.text((cx0 + (cx1 - cx0 - cw) // 2,
+                cy0 + (cy1 - cy0 - chh) // 2 - 6),
+               cs, fill=COL_TPL_INK_LABEL, font=cost_font)
+
+    # Domain — short label in the top-right shield.
+    dx0, dy0, dx1, dy1 = slot_box(SLOT_DOMAIN)
+    dom_w = dx1 - dx0
+    dom_h = dy1 - dy0
+    dom_size = dom_h - 12
+    dom_font = font(dom_size, "title")
+    while measure_text(d, domain_label, dom_font)[0] > dom_w - 8 and dom_size > 14:
+        dom_size -= 2
+        dom_font = font(dom_size, "title")
+    dw, dh = measure_text(d, domain_label, dom_font)
+    d.text((dx0 + (dom_w - dw) // 2, dy0 + (dom_h - dh) // 2 - 2),
+           domain_label, fill=COL_TPL_INK_LABEL, font=dom_font)
+
+    # Effect text — body blocks inside the bottom parchment plate.
+    ex0, ey0, ex1, ey1 = slot_box(SLOT_EFFECT_TEXT)
+    text_max_w = ex1 - ex0 - 20
+    body_size = 24
+    body_font_lg = font(body_size, "body")
+    label_font = font(20, "face")
+    line_h = 30
+    label_h = 24
+    # Pre-flight : if the body is too tall for the slot at the default size,
+    # scale fonts down progressively until it fits. Avoids the body
+    # overflowing the parchment plate on long Infamy effects.
+    def total_body_height(b_font, lbl_font, lh, lh_label):
+        h = 0
+        for label, text in body:
+            if label:
+                h += lh_label + 4
+            wrapped = wrap_text(d, text, b_font, text_max_w)
+            h += lh * len(wrapped)
+            h += 6
+        return h
+
+    while body_size > 14 and total_body_height(body_font_lg, label_font, line_h, label_h) > (ey1 - ey0):
+        body_size -= 2
+        body_font_lg = font(body_size, "body")
+        label_font = font(max(14, body_size - 4), "face")
+        line_h = body_size + 6
+        label_h = max(18, body_size - 2)
+
+    draw_paragraph(d, ex0 + 10, ey0 + 8, text_max_w, body, body_font_lg, label_font,
+                   COL_TPL_INK, COL_TPL_INK_LABEL, line_h, label_h, paragraph_gap=6)
+
+    # Face label — "SCANDAL" / "INFAMY" / "IN INTEGRO" / "IMPEDITA" centred
+    # on the bottom small pill.
+    fx0, fy0, fx1, fy1 = slot_box(SLOT_FACE)
+    face_w = fx1 - fx0
+    face_h = fy1 - fy0
+    face_size = face_h - 12
+    face_font = font(face_size, "face")
+    face_text = face.upper()
+    while measure_text(d, face_text, face_font)[0] > face_w - 12 and face_size > 14:
+        face_size -= 2
+        face_font = font(face_size, "face")
+    fw, fh = measure_text(d, face_text, face_font)
+    d.text((fx0 + (face_w - fw) // 2, fy0 + (face_h - fh) // 2 - 2),
+           face_text, fill=COL_TPL_RIBBON_INK, font=face_font)
+
+    return img
+
+
+# ─── Per-face card render — fallback custom layout (reference cards) ──────────
 
 def render_face(
     *,
@@ -408,14 +590,14 @@ def build_transgression_specs(i18n: dict[str, str]) -> list[CardSpec]:
             front_cost=sc,
             back_cost=ac,
             front_body=[
-                ("Required Domain", domain_label.replace(" ▸ ", " or ")),
                 ("Scandal effect", scandal_text),
             ],
             back_body=[
-                ("Required Domain", domain_label.replace(" ▸ ", " or ")),
                 ("Infamy effect", infamy_text),
             ],
             illustration_path=ill_path if ill_path.exists() else None,
+            front_template=TEMPLATES_DIR / "transgression_scandale.webp",
+            back_template=TEMPLATES_DIR / "transgression_infamie.webp",
         ))
     return out
 
@@ -432,10 +614,10 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
             card_id=f"liturgy_{rid}",
             title=name,
             subtitle=station_name,
-            # "Liturgy" alone (was "Liturgical Response") so the ribbon
-            # text "Liturgy — In Integro" / "Liturgy — Impedita" fits
-            # comfortably within the inset ribbon width.
-            domain_label="Liturgy",
+            # Domain shield on the templated card now carries the Station
+            # number (the in-game card uses the resolved target Domain ;
+            # for printable use the static Station ID is more useful).
+            domain_label=station_name.split(" — ")[0],   # "I", "II", …
             front_face="In Integro",
             back_face="Impedita",
             front_cost=None,
@@ -445,10 +627,15 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
                 ("In Integro effect", in_int),
             ],
             back_body=[
-                ("Targeting", target),
+                # Drop the Targeting block on the back — same rule as the
+                # front, and the impedita template's parchment plate has
+                # ornate skull / candle ornaments that eat into the usable
+                # text area, so the Impedita effect needs the full slot
+                # to render at a legible size.
                 ("Impedita effect", impedita),
-                ("Reminder", "Hindering a Liturgy costs Corruption from the active demon."),
             ],
+            front_template=TEMPLATES_DIR / "liturgie_in_integro.webp",
+            back_template=TEMPLATES_DIR / "liturgie_impedita.webp",
         ))
     return out
 
@@ -464,14 +651,14 @@ def build_exorcism_spec(i18n: dict[str, str]) -> CardSpec:
         back_face="Resolution Rules",
         front_cost=None,
         back_cost=None,
-        front_body=[
-            ("Trigger", "Reached when Station VI begins. The Liturgical Response cannot be Hindered."),
-            ("Resolution", "The game ends — outcome is determined from the board state at this moment."),
-        ],
+        front_body=[],   # ignored — the painted JPG occupies the full face
         back_body=[
             ("Endgame rules", back_text),
         ],
-        illustration_path=SPECIAL_DIR / "exorcisme_final.jpg",
+        # Front : the painted endgame card gets reproduced edge-to-edge
+        # because the artwork already carries title + image + rules in
+        # the printed source asset.
+        front_full_bleed=SPECIAL_DIR / "exorcisme_final.jpg",
     )
 
 
@@ -629,28 +816,60 @@ def main():
             except Exception as e:
                 print(f"    illustration failed for {spec.card_id}: {e}")
 
-        front_img = render_face(
-            title=spec.title,
-            subtitle=spec.subtitle,
-            domain_label=spec.domain_label,
-            face=spec.front_face,
-            cost=spec.front_cost,
-            body=spec.front_body,
-            illustration=ill,
-            is_reference=spec.is_reference,
-            compact_body=spec.is_reference,
-        )
-        back_img = render_face(
-            title=spec.title,
-            subtitle=spec.subtitle,
-            domain_label=spec.domain_label,
-            face=spec.back_face,
-            cost=spec.back_cost,
-            body=spec.back_body,
-            illustration=ill,
-            is_reference=spec.is_reference,
-            compact_body=spec.is_reference,
-        )
+        # Dispatcher : templated cards (transgressions, liturgies) use the
+        # illustrated WebP frame from assets/cards/templates/ ; reference
+        # cards (player aids) and the Exorcism back use the custom navy
+        # layout via render_face. The Exorcism front is just the painted
+        # JPG full-bleed — no template needed.
+        if spec.front_full_bleed and spec.front_full_bleed.exists():
+            full = Image.open(spec.front_full_bleed).convert("RGB").resize(
+                (CARD_W, CARD_H), Image.LANCZOS)
+            front_img = full
+        elif spec.front_template and spec.front_template.exists():
+            front_img = render_face_with_template(
+                template_path=spec.front_template,
+                title=spec.title,
+                cost=spec.front_cost,
+                domain_label=spec.domain_label,
+                face=spec.front_face,
+                body=spec.front_body,
+                illustration=ill,
+            )
+        else:
+            front_img = render_face(
+                title=spec.title,
+                subtitle=spec.subtitle,
+                domain_label=spec.domain_label,
+                face=spec.front_face,
+                cost=spec.front_cost,
+                body=spec.front_body,
+                illustration=ill,
+                is_reference=spec.is_reference,
+                compact_body=spec.is_reference,
+            )
+
+        if spec.back_template and spec.back_template.exists():
+            back_img = render_face_with_template(
+                template_path=spec.back_template,
+                title=spec.title,
+                cost=spec.back_cost,
+                domain_label=spec.domain_label,
+                face=spec.back_face,
+                body=spec.back_body,
+                illustration=ill,
+            )
+        else:
+            back_img = render_face(
+                title=spec.title,
+                subtitle=spec.subtitle,
+                domain_label=spec.domain_label,
+                face=spec.back_face,
+                cost=spec.back_cost,
+                body=spec.back_body,
+                illustration=ill,
+                is_reference=spec.is_reference,
+                compact_body=spec.is_reference,
+            )
         front_path = INDIVIDUAL_DIR / f"{spec.card_id}_A.png"
         back_path = INDIVIDUAL_DIR / f"{spec.card_id}_B.png"
         front_img.save(front_path)
