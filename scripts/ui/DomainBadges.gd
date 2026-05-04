@@ -21,6 +21,12 @@ var controller_color: Color = Color(0, 0, 0, 0)  # alpha=0 means "no controller"
 var controller_letter: String = ""
 var is_sealed: bool = false
 var is_in_penitence: bool = false
+# Seal owner cue : a player-coloured padlock body + the same R/V letter
+# the controller badge uses, so a colour-blind player can tell who
+# placed the Seal even when it differs from the Domain's controller.
+# Empty letter / default gold = no owner info (legacy callers).
+var sealed_color: Color = Color(0.86, 0.72, 0.30)
+var sealed_letter: String = ""
 
 
 func _init() -> void:
@@ -28,14 +34,18 @@ func _init() -> void:
 	custom_minimum_size = Vector2(0, BADGE_SIZE)
 
 
-func set_state(ctrl_color: Color, ctrl_letter: String, sealed: bool, penitence: bool) -> void:
+func set_state(ctrl_color: Color, ctrl_letter: String, sealed: bool, penitence: bool,
+		seal_color: Color = Color(0.86, 0.72, 0.30), seal_letter: String = "") -> void:
 	if ctrl_color == controller_color and ctrl_letter == controller_letter \
-			and sealed == is_sealed and penitence == is_in_penitence:
+			and sealed == is_sealed and penitence == is_in_penitence \
+			and seal_color == sealed_color and seal_letter == sealed_letter:
 		return
 	controller_color = ctrl_color
 	controller_letter = ctrl_letter
 	is_sealed = sealed
 	is_in_penitence = penitence
+	sealed_color = seal_color
+	sealed_letter = seal_letter
 	# Recompute width so the parent container sizes correctly.
 	var n := 0
 	if controller_color.a > 0.0: n += 1
@@ -88,20 +98,34 @@ func _draw_controller(top_left: Vector2) -> void:
 
 
 func _draw_padlock(top_left: Vector2) -> void:
-	# Body: rounded rectangle in muted gold; shackle: inverted U arc at top.
-	var gold := Color(0.86, 0.72, 0.30)
+	# Body : tinted with the seal owner's player colour when known
+	# (otherwise the legacy muted-gold default). Shackle : inverted U arc
+	# at top in dark ink.
 	var dark := Color(0, 0, 0, 0.85)
 	var body_top: float = top_left.y + BADGE_SIZE * 0.42
 	var body_h: float = BADGE_SIZE * 0.55
 	var body_x: float = top_left.x + BADGE_SIZE * 0.18
 	var body_w: float = BADGE_SIZE * 0.64
 	var body := Rect2(body_x, body_top, body_w, body_h)
-	draw_rect(body, gold, true)
+	draw_rect(body, sealed_color, true)
 	draw_rect(body, dark, false, 1.5)
 	# Shackle (the curved metal loop on top) — drawn as an arc.
 	var shackle_center := Vector2(top_left.x + BADGE_SIZE * 0.5, body_top)
 	var shackle_radius: float = BADGE_SIZE * 0.26
 	draw_arc(shackle_center, shackle_radius, PI, TAU, 16, dark, 2.0, true)
+	# Owner letter (R / V) inside the body — non-colour cue so
+	# colour-blind players can still tell apart Red and Violet seals.
+	if sealed_letter != "":
+		var font := ThemeDB.fallback_font
+		if font == null:
+			return
+		var fs: int = int(BADGE_SIZE * 0.36)
+		var letter_size := font.get_string_size(sealed_letter, HORIZONTAL_ALIGNMENT_CENTER, -1, fs)
+		var cx: float = body_x + body_w * 0.5
+		var cy: float = body_top + body_h * 0.5
+		var pos := Vector2(cx - letter_size.x * 0.5, cy + float(fs) * 0.30)
+		draw_string_outline(font, pos, sealed_letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 2, Color(0, 0, 0, 0.9))
+		draw_string(font, pos, sealed_letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1))
 
 
 func _draw_cross(top_left: Vector2) -> void:

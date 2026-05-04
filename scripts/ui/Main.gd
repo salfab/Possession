@@ -756,8 +756,20 @@ func _refresh_overlays() -> void:
 		if ctrl != GameEnums.PlayerId.NONE:
 			ctrl_color = GameEnums.player_color_light(ctrl)
 			ctrl_letter = GameEnums.player_name(ctrl).substr(0, 1)
+		# Seal owner can differ from controller (a Seal placed earlier may
+		# survive a domination flip). Pass the owner's colour + initial so
+		# the badge can paint the padlock in the right hue and stamp R / V
+		# inside it for colour-blind discrimination.
+		var seal_color := Color(0.86, 0.72, 0.30)
+		var seal_letter := ""
+		if state.is_sealed(d_id):
+			var so: int = state.domain(d_id).seal_owner
+			if so != GameEnums.PlayerId.NONE:
+				seal_color = GameEnums.player_color_light(so)
+				seal_letter = GameEnums.player_name(so).substr(0, 1)
 		(_domain_badges[d_id] as DomainBadges).set_state(
-			ctrl_color, ctrl_letter, state.is_sealed(d_id), state.is_in_penitence(d_id))
+			ctrl_color, ctrl_letter, state.is_sealed(d_id), state.is_in_penitence(d_id),
+			seal_color, seal_letter)
 	# Ascendant only (per-player Corruption pool now shown inside each
 	# coloured player panel).
 	_ascendant_label.text = "Asc %+d" % state.ascendant

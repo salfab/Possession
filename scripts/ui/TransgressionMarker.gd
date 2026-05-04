@@ -43,6 +43,22 @@ func _draw() -> void:
 		draw_circle(c, r, marker_color)
 		draw_arc(c, r, 0.0, TAU, 32, Color(0, 0, 0, 0.85), 2.0, true)
 
+	# Accessibility glyph (S = Scandale, I = Infamie) drawn on top in
+	# white with a black halo. Means a colour-blind player can still tell
+	# the two states apart even when the owner-colour is identical, and
+	# also gives a non-visual cue to a screen-grayscale device.
+	var ch: String = "I" if is_infamy else "S"
+	var font: Font = ThemeDB.fallback_font
+	if font == null:
+		return
+	var fs: int = int(maxf(10.0, r * 1.05))
+	# Baseline positioning : draw_string takes the baseline y, so push
+	# down by ~35 % of the font size from the geometric centre to put
+	# the cap-height roughly on the marker centre.
+	var pos := Vector2(0, c.y + float(fs) * 0.35)
+	draw_string_outline(font, pos, ch, HORIZONTAL_ALIGNMENT_CENTER, size.x, fs, 3, Color(0, 0, 0, 0.9))
+	draw_string(font, pos, ch, HORIZONTAL_ALIGNMENT_CENTER, size.x, fs, Color(1, 1, 1, 0.95))
+
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
