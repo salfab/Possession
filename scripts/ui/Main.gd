@@ -708,6 +708,11 @@ func _build_liturgy_banners() -> void:
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		panel.gui_input.connect(_on_liturgy_banner_input.bind(st))
 		panel.clip_contents = true
+		# Tooltip — desktop hover hint that the banner is tappable.
+		# Mobile users discover via the (now-systematic) outline below.
+		panel.tooltip_text = (I18n.t("ui.tooltip.exorcism_banner")
+			if st == GameEnums.StationId.EXORCISME
+			else I18n.t("ui.tooltip.liturgy_banner"))
 
 		# Background : either the painted banner image (when shipped) or a
 		# stylebox placeholder. _refresh_liturgy_banners decides each frame
@@ -728,23 +733,27 @@ func _build_liturgy_banners() -> void:
 		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(fallback)
 
-		# Station VI gets a discreet red-violet outline so its banner reads
-		# as a distinct slot in the column without screaming for attention —
-		# a thin (2 px), muted wine-plum that complements the parchment
-		# artwork rather than standing on top of it.
+		# Outline systématique sur chaque banner — discreet sepia for the
+		# five Liturgies, slightly more saturated red-violet for the
+		# Exorcism so Station VI still reads as the endgame outlier of the
+		# column. Painted as a transparent-fill Panel so the underlying
+		# banner artwork stays visible ; a hairline edge that shouts
+		# « tappable » to a mobile user without a hover state.
+		var border := Panel.new()
+		border.name = "Border"
+		border.anchor_right = 1.0
+		border.anchor_bottom = 1.0
+		border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var bsb := StyleBoxFlat.new()
+		bsb.bg_color = Color(0, 0, 0, 0)
 		if st == GameEnums.StationId.EXORCISME:
-			var border := Panel.new()
-			border.name = "Border"
-			border.anchor_right = 1.0
-			border.anchor_bottom = 1.0
-			border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var bsb := StyleBoxFlat.new()
-			bsb.bg_color = Color(0, 0, 0, 0)
 			bsb.border_color = Color(0.32, 0.18, 0.24, 0.85)
-			bsb.set_border_width_all(2)
-			bsb.set_corner_radius_all(3)
-			border.add_theme_stylebox_override("panel", bsb)
-			panel.add_child(border)
+		else:
+			bsb.border_color = Color(0.28, 0.20, 0.10, 0.55)
+		bsb.set_border_width_all(2)
+		bsb.set_corner_radius_all(3)
+		border.add_theme_stylebox_override("panel", bsb)
+		panel.add_child(border)
 
 		# Label sits on top of both, anchored to the right cartouche : 90 %
 		# of the banner's height (5 % top + 5 % bottom margin), 70 % of its

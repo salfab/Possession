@@ -136,6 +136,10 @@ const STRINGS := {
 	                                    "en": "Tap to see the targeting rule"},
 	"ui.tooltip.tap_for_effect_detail":{"fr": "Toucher pour voir le détail de l'effet",
 	                                   "en": "Tap to see the detailed effect"},
+	"ui.tooltip.liturgy_banner":   {"fr": "Toucher pour voir la carte de cette Liturgie",
+	                                "en": "Tap to view this Liturgy card"},
+	"ui.tooltip.exorcism_banner":  {"fr": "Toucher pour voir la carte de l'Exorcisme final",
+	                                "en": "Tap to view the final Exorcism card"},
 
 	# UI — labels / hints
 	"ui.tooltip.click_to_zoom":     {"fr": "Cliquer pour agrandir",   "en": "Click to enlarge"},
