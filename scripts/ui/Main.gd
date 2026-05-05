@@ -66,6 +66,7 @@ var pending_kwargs: Dictionary = {}
 # Created in _build_overlays
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
+var _domain_name_labels: Dictionary = {}   # domain_id -> Label (board overlay)
 var _debug_hotspots: bool = false   # cyan outline overlay for calibration
 
 # Per-zone half-extents in normalised board coordinates. Initialised in
@@ -353,6 +354,37 @@ func _build_overlays() -> void:
 		btn.gui_input.connect(_on_hotspot_calibration_input.bind(did))
 		_zoom_layer.add_child(btn)
 		_hotspots[d_id] = btn
+
+		# Domain name caption — sits just above the niche so the player knows
+		# which Domain is which. The new board.jpg ships without baked-in
+		# Domain labels, so we render them as Godot Labels overlaid on the
+		# painted artwork. IM Fell SC for the calligraphic feel ; cream
+		# colour with a heavy black outline for legibility against the
+		# painted background ; mouse_filter=IGNORE so taps still reach the
+		# hotspot Button underneath. Anchors are RELATIVE to the parent
+		# Button — the label spans the upper half of the zone and extends
+		# slightly above it. This means the label automatically follows the
+		# zone if the user drags / resizes it via the calibration tool.
+		var name_label := Label.new()
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_label.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		name_label.add_theme_font_override("font", Card.FONT_TITLE)
+		name_label.add_theme_font_size_override("font_size", 28)
+		name_label.add_theme_color_override("font_color", Color(0.95, 0.88, 0.65))
+		name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		name_label.add_theme_constant_override("outline_size", 6)
+		name_label.anchor_left = 0.0
+		name_label.anchor_right = 1.0
+		name_label.anchor_top = -0.55
+		name_label.anchor_bottom = 0.05
+		name_label.offset_left = 0
+		name_label.offset_right = 0
+		name_label.offset_top = 0
+		name_label.offset_bottom = 0
+		btn.add_child(name_label)
+		_domain_name_labels[d_id] = name_label
 
 		# Two-row layout for the bottom strip of each Domain hotspot :
 		#   Row A (top, ~6 % of board height) : transgression markers
@@ -3422,6 +3454,13 @@ func _on_btn_toggle_lang() -> void:
 # Dynamic widgets (created on dialog popup or panel refresh) re-localise
 # automatically when they're recreated.
 func _relocalize() -> void:
+	# Domain caption labels overlaid on the board — re-read GameEnums.DOMAIN_NAMES
+	# (which itself goes through I18n) so a FR / EN toggle updates "Faith"
+	# back to "Foi" etc. without rebuilding the overlay.
+	for d_id in _domain_name_labels.keys():
+		var lbl: Label = _domain_name_labels[d_id]
+		if is_instance_valid(lbl):
+			lbl.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
 	# FAB label + tooltip — items inside the popup are recreated on each
 	# open so they pick up the current locale automatically.
 	if _fab != null:
