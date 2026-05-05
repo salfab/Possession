@@ -22,6 +22,13 @@ const DOMAIN_POS := {
 }
 const DOMAIN_HALF := Vector2(0.080, 0.085)
 
+# Per-zone half-extents override map. Empty by default — every Domain
+# falls back to DOMAIN_HALF above. Populate this when a Domain needs
+# its own size on a new board (e.g. Volonté drawn larger). The in-game
+# calibration mode dumps a fully-populated version of this map on
+# toggle-off so the user can paste it back here.
+const DOMAIN_HALF_OVERRIDES := {}
+
 # Liturgy banners — one per Station I-V plus the Exorcism, on the right edge
 # of the board. Width spans from Désir's right border (0.710 + 0.080 = 0.790)
 # to the board edge, keeping the source image's 2.667:1 aspect ratio
@@ -37,6 +44,10 @@ const LITURGY_BANNER_POS := {
 	GameEnums.StationId.EXORCISME:  Vector2(0.880, 0.735),
 }
 const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
+# Same per-zone override pattern as DOMAIN_HALF_OVERRIDES — empty by
+# default, dumped fully populated by the calibration tool when the user
+# resizes individual banner slots.
+const LITURGY_BANNER_HALF_OVERRIDES := {}
 
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
@@ -56,6 +67,14 @@ var pending_kwargs: Dictionary = {}
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
 var _debug_hotspots: bool = false   # cyan outline overlay for calibration
+
+# Per-zone half-extents in normalised board coordinates. Initialised in
+# _build_overlays from DOMAIN_HALF / LITURGY_BANNER_HALF (the global default)
+# and DOMAIN_HALF_OVERRIDES / LITURGY_BANNER_HALF_OVERRIDES (per-zone tweaks).
+# Mutated at runtime by the calibration tool when the user drags the corner
+# handles to resize a zone, then dumped on toggle-off.
+var _domain_half: Dictionary = {}
+var _banner_half: Dictionary = {}
 var _domain_badges: Dictionary = {} # domain_id -> DomainBadges (drawn controller/sealed/penitence indicators)
 var _domain_dots: Dictionary = {}   # domain_id -> CorruptionDots
 var _liturgy_banners: Dictionary = {}       # station_id -> PanelContainer (placeholder)
@@ -300,17 +319,27 @@ func _build_overlays() -> void:
 		_zoom_layer.add_child(board_image)
 		stage.move_child(_zoom_layer, 0)
 
+	# Initialise the per-zone half-extents dicts. Each zone falls back to
+	# the global DOMAIN_HALF / LITURGY_BANNER_HALF unless an entry sits in
+	# the corresponding _OVERRIDES const (for hand-tuned zones, e.g. a
+	# bigger Volonté niche).
+	for d_id in DOMAIN_POS.keys():
+		_domain_half[d_id] = DOMAIN_HALF_OVERRIDES.get(d_id, DOMAIN_HALF)
+	for st in LITURGY_BANNER_POS.keys():
+		_banner_half[st] = LITURGY_BANNER_HALF_OVERRIDES.get(st, LITURGY_BANNER_HALF)
+
 	# Hotspots and per-domain overlay labels — inside the ZoomLayer so they
 	# stay aligned with the image when zooming/panning.
 	for d_id in DOMAIN_POS.keys():
 		var pos: Vector2 = DOMAIN_POS[d_id]
+		var dh: Vector2 = _domain_half[d_id]
 		var btn := Button.new()
 		btn.flat = true
 		btn.text = ""
-		btn.anchor_left = pos.x - DOMAIN_HALF.x
-		btn.anchor_right = pos.x + DOMAIN_HALF.x
-		btn.anchor_top = pos.y - DOMAIN_HALF.y
-		btn.anchor_bottom = pos.y + DOMAIN_HALF.y
+		btn.anchor_left = pos.x - dh.x
+		btn.anchor_right = pos.x + dh.x
+		btn.anchor_top = pos.y - dh.y
+		btn.anchor_bottom = pos.y + dh.y
 		btn.offset_left = 0
 		btn.offset_right = 0
 		btn.offset_top = 0
@@ -334,10 +363,10 @@ func _build_overlays() -> void:
 		# Both anchored as children of _zoom_layer so they zoom with the board.
 
 		var chip_row := HFlowContainer.new()
-		chip_row.anchor_left = pos.x - DOMAIN_HALF.x
-		chip_row.anchor_right = pos.x + DOMAIN_HALF.x
-		chip_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.10
-		chip_row.anchor_bottom = pos.y + DOMAIN_HALF.y - 0.04
+		chip_row.anchor_left = pos.x - dh.x
+		chip_row.anchor_right = pos.x + dh.x
+		chip_row.anchor_top = pos.y + dh.y - 0.10
+		chip_row.anchor_bottom = pos.y + dh.y - 0.04
 		chip_row.offset_left = 0
 		chip_row.offset_right = 0
 		chip_row.offset_top = 0
@@ -357,10 +386,10 @@ func _build_overlays() -> void:
 		_domain_dots[d_id] = dots
 
 		var badges_row := HBoxContainer.new()
-		badges_row.anchor_left = pos.x - DOMAIN_HALF.x
-		badges_row.anchor_right = pos.x + DOMAIN_HALF.x
-		badges_row.anchor_top = pos.y + DOMAIN_HALF.y - 0.04
-		badges_row.anchor_bottom = pos.y + DOMAIN_HALF.y
+		badges_row.anchor_left = pos.x - dh.x
+		badges_row.anchor_right = pos.x + dh.x
+		badges_row.anchor_top = pos.y + dh.y - 0.04
+		badges_row.anchor_bottom = pos.y + dh.y
 		badges_row.offset_left = 0
 		badges_row.offset_right = 0
 		badges_row.offset_top = 0
@@ -1021,13 +1050,14 @@ func _on_domain_marker_clicked(_tid: String, _name_str: String, _is_infamy: bool
 func _build_liturgy_banners() -> void:
 	for st in LITURGY_BANNER_POS:
 		var pos: Vector2 = LITURGY_BANNER_POS[st]
+		var bh: Vector2 = _banner_half[st]
 		# Outer Control hosts the image (TextureRect filling the panel) + the
 		# explanatory text Label overlaid on the cartouche area to the right.
 		var panel := Control.new()
-		panel.anchor_left = pos.x - LITURGY_BANNER_HALF.x
-		panel.anchor_right = pos.x + LITURGY_BANNER_HALF.x
-		panel.anchor_top = pos.y - LITURGY_BANNER_HALF.y
-		panel.anchor_bottom = pos.y + LITURGY_BANNER_HALF.y
+		panel.anchor_left = pos.x - bh.x
+		panel.anchor_right = pos.x + bh.x
+		panel.anchor_top = pos.y - bh.y
+		panel.anchor_bottom = pos.y + bh.y
 		panel.offset_left = 0
 		panel.offset_top = 0
 		panel.offset_right = 0
@@ -1200,6 +1230,14 @@ var _banner_last_touch_ms: int = -1
 
 
 func _on_liturgy_banner_input(event: InputEvent, station: int) -> void:
+	# Calibration mode short-circuit : when the user is in FAB → Hotspots,
+	# any drag on a banner panel becomes a move-the-zone gesture rather
+	# than a tap-opens-dialog gesture. The body-drag helper consumes the
+	# event when relevant ; we still let the rest of the handler run for
+	# the click flow when calibration is off.
+	if _debug_hotspots:
+		_on_zone_body_drag(event, _zone_kind_banner(), station)
+		return
 	var pressed_release: bool = false
 	if event is InputEventMouseButton:
 		if _banner_last_touch_ms >= 0 and \
@@ -1777,47 +1815,173 @@ func _on_btn_glossary() -> void:
 	_popup_dialog_fullscreen(_glossary_dialog)
 
 
-# Debug toggle — paints each domain hotspot with a translucent cyan
-# stylebox AND makes them draggable so the click areas can be
-# re-calibrated against the board artwork directly in-game. On toggle-off
-# the new positions are dumped as a paste-ready DOMAIN_POS block.
+# ─── CALIBRATION MODE ─────────────────────────────────────────────────────────
+#
+# Toggleable from the FAB → Hotspots menu. Paints every "zone" on the live
+# board with a translucent cyan overlay, lets the user drag the body to move
+# the centre AND drag four corner handles to resize symmetrically (centre
+# preserved). Each zone shows its name + (cx, cy) + (half_x × half_y) on a
+# floating label so the values being calibrated are always visible.
+#
+# Two zone kinds participate :
+#   - "domain" : the five Domain hotspots (Ambition / Désir / Foi / Peur /
+#     Volonté). Identifier = GameEnums.DomainId enum value.
+#   - "banner" : the six Liturgy banner panels (Stations I-V + Exorcisme).
+#     Identifier = GameEnums.StationId enum value.
+#
+# Toggling off dumps a fully-populated, paste-ready block with the four
+# constants — DOMAIN_POS, DOMAIN_HALF_OVERRIDES, LITURGY_BANNER_POS,
+# LITURGY_BANNER_HALF_OVERRIDES — into an OS.alert and into the journal.
+# Reload the game with the pasted values for a permanent calibration.
+
+# (kind, id) array key → Label showing the zone's name + position + size.
+var _calibration_labels: Dictionary = {}
+# (kind, id) array key → Array[Button] of 4 corner resize handles.
+var _calibration_handles: Dictionary = {}
+
+const _CAL_HANDLE_SIZE := 24
+const _CAL_CORNER_TL := 0
+const _CAL_CORNER_TR := 1
+const _CAL_CORNER_BL := 2
+const _CAL_CORNER_BR := 3
+const _CAL_MIN_HALF := 0.005   # smallest sensible half-extent in normalised coords
+
+
 func _on_btn_toggle_hotspots() -> void:
 	_debug_hotspots = not _debug_hotspots
-	for d_id in _hotspots:
-		var btn: Button = _hotspots[d_id]
-		btn.flat = not _debug_hotspots
+	for zk in _all_calibration_zones():
+		var kind: String = zk[0]
+		var id: int = zk[1]
+		var node: Control = _zone_node(kind, id)
+		if node == null:
+			continue
 		if _debug_hotspots:
-			var sb := StyleBoxFlat.new()
-			sb.bg_color = Color(0.2, 1.0, 1.0, 0.25)
-			sb.border_color = Color(0.0, 1.0, 1.0, 1.0)
-			sb.set_border_width_all(2)
-			btn.add_theme_stylebox_override("normal",  sb)
-			btn.add_theme_stylebox_override("hover",   sb)
-			btn.add_theme_stylebox_override("pressed", sb)
-			btn.add_theme_stylebox_override("focus",   sb)
-			_ensure_calibration_label(d_id)
+			_apply_zone_overlay(node)
+			_ensure_calibration_label(kind, id)
+			_build_corner_handles(kind, id)
 		else:
-			btn.remove_theme_stylebox_override("normal")
-			btn.remove_theme_stylebox_override("hover")
-			btn.remove_theme_stylebox_override("pressed")
-			btn.remove_theme_stylebox_override("focus")
-			_remove_calibration_label(d_id)
+			_remove_zone_overlay(node)
+			_remove_calibration_label(kind, id)
+			_destroy_corner_handles(kind, id)
 	if not _debug_hotspots:
-		# Just exited calibration : dump current positions in a paste-
-		# ready GDScript block so the user can replace DOMAIN_POS in
-		# Main.gd with the new layout.
-		_dump_domain_pos_for_paste()
+		_dump_calibration_for_paste()
 
 
-# Domain id → small Label showing "Foi (0.510, 0.460)" so the user can
-# read off the position they're dragging towards. Built per session,
-# torn down with the calibration toggle.
-var _calibration_labels: Dictionary = {}
+# ─── Zone abstraction ─────────────────────────────────────────────────────────
+
+func _zone_key(kind: String, id: int) -> Array:
+	return [kind, id]
 
 
-func _ensure_calibration_label(d_id: int) -> void:
-	if _calibration_labels.has(d_id):
-		_refresh_calibration_label(d_id)
+func _zone_node(kind: String, id: int) -> Control:
+	if kind == "domain":
+		return _hotspots.get(id)
+	if kind == "banner":
+		return _liturgy_banners.get(id)
+	return null
+
+
+func _zone_name(kind: String, id: int) -> String:
+	if kind == "domain":
+		return String(GameEnums.DOMAIN_NAMES.get(id, "?"))
+	if kind == "banner":
+		var st_name: String = String(GameEnums.STATION_NAMES.get(id, "?"))
+		return "Bandeau %s" % st_name
+	return "?"
+
+
+func _all_calibration_zones() -> Array:
+	# Order : 5 Domains then 6 Banners. Mirrors the dump order so labels
+	# read from top to bottom in the same sequence in the OS.alert.
+	var out: Array = []
+	for d_id in DOMAIN_POS.keys():
+		out.append([_zone_kind_domain(), d_id])
+	for st in LITURGY_BANNER_POS.keys():
+		out.append([_zone_kind_banner(), st])
+	return out
+
+
+func _zone_kind_domain() -> String:
+	return "domain"
+
+
+func _zone_kind_banner() -> String:
+	return "banner"
+
+
+# Read the zone's *current* centre from the live overlay node — so that
+# mid-calibration drags are reflected immediately rather than reading a
+# stale const.
+func _zone_pos(kind: String, id: int) -> Vector2:
+	var n: Control = _zone_node(kind, id)
+	if n == null:
+		return Vector2.ZERO
+	return Vector2((n.anchor_left + n.anchor_right) * 0.5,
+		(n.anchor_top + n.anchor_bottom) * 0.5)
+
+
+func _zone_half(kind: String, id: int) -> Vector2:
+	var n: Control = _zone_node(kind, id)
+	if n == null:
+		return Vector2.ZERO
+	return Vector2((n.anchor_right - n.anchor_left) * 0.5,
+		(n.anchor_bottom - n.anchor_top) * 0.5)
+
+
+# ─── Cyan overlay on each zone ────────────────────────────────────────────────
+
+func _apply_zone_overlay(node: Control) -> void:
+	if node is Button:
+		var btn: Button = node
+		btn.flat = false
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.2, 1.0, 1.0, 0.25)
+		sb.border_color = Color(0.0, 1.0, 1.0, 1.0)
+		sb.set_border_width_all(2)
+		btn.add_theme_stylebox_override("normal",  sb)
+		btn.add_theme_stylebox_override("hover",   sb)
+		btn.add_theme_stylebox_override("pressed", sb)
+		btn.add_theme_stylebox_override("focus",   sb)
+		return
+	# Banner panels are Controls with TextureRect / Label children — drop a
+	# transparent Panel child on top to draw the cyan border + tint without
+	# disturbing the existing children.
+	var existing := node.get_node_or_null("CalibrationOverlay")
+	if existing != null:
+		return
+	var overlay := Panel.new()
+	overlay.name = "CalibrationOverlay"
+	overlay.anchor_right = 1.0
+	overlay.anchor_bottom = 1.0
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.2, 1.0, 1.0, 0.25)
+	sb.border_color = Color(0.0, 1.0, 1.0, 1.0)
+	sb.set_border_width_all(2)
+	overlay.add_theme_stylebox_override("panel", sb)
+	node.add_child(overlay)
+
+
+func _remove_zone_overlay(node: Control) -> void:
+	if node is Button:
+		var btn: Button = node
+		btn.flat = true
+		btn.remove_theme_stylebox_override("normal")
+		btn.remove_theme_stylebox_override("hover")
+		btn.remove_theme_stylebox_override("pressed")
+		btn.remove_theme_stylebox_override("focus")
+		return
+	var existing := node.get_node_or_null("CalibrationOverlay")
+	if existing != null and is_instance_valid(existing):
+		existing.queue_free()
+
+
+# ─── Floating zone label (name + pos + size) ──────────────────────────────────
+
+func _ensure_calibration_label(kind: String, id: int) -> void:
+	var key: Array = _zone_key(kind, id)
+	if _calibration_labels.has(key):
+		_refresh_calibration_label(kind, id)
 		return
 	var lbl := Label.new()
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1826,38 +1990,154 @@ func _ensure_calibration_label(d_id: int) -> void:
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	lbl.add_theme_constant_override("outline_size", 4)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_zoom_layer.add_child(lbl)
-	_calibration_labels[d_id] = lbl
-	_refresh_calibration_label(d_id)
+	_calibration_labels[key] = lbl
+	_refresh_calibration_label(kind, id)
 
 
-func _remove_calibration_label(d_id: int) -> void:
-	var lbl: Label = _calibration_labels.get(d_id)
+func _remove_calibration_label(kind: String, id: int) -> void:
+	var key: Array = _zone_key(kind, id)
+	var lbl: Label = _calibration_labels.get(key)
 	if lbl != null and is_instance_valid(lbl):
 		lbl.queue_free()
-	_calibration_labels.erase(d_id)
+	_calibration_labels.erase(key)
 
 
-func _refresh_calibration_label(d_id: int) -> void:
-	var lbl: Label = _calibration_labels.get(d_id)
+func _refresh_calibration_label(kind: String, id: int) -> void:
+	var key: Array = _zone_key(kind, id)
+	var lbl: Label = _calibration_labels.get(key)
 	if lbl == null:
 		return
-	var btn: Button = _hotspots[d_id]
-	# Centre of the (current, possibly-dragged) hotspot.
-	var cx: float = (btn.anchor_left + btn.anchor_right) * 0.5
-	var cy: float = (btn.anchor_top + btn.anchor_bottom) * 0.5
-	var dname: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
-	lbl.text = "%s\n(%.3f, %.3f)" % [dname, cx, cy]
-	lbl.anchor_left = cx - 0.06
-	lbl.anchor_right = cx + 0.06
-	lbl.anchor_top = btn.anchor_top - 0.04
-	lbl.anchor_bottom = btn.anchor_top - 0.005
+	var pos: Vector2 = _zone_pos(kind, id)
+	var half: Vector2 = _zone_half(kind, id)
+	var name_str: String = _zone_name(kind, id)
+	lbl.text = "%s\n(%.3f, %.3f)\n%.3f × %.3f" % [name_str, pos.x, pos.y, half.x, half.y]
+	# Centre the label inside the zone.
+	lbl.anchor_left = pos.x - half.x
+	lbl.anchor_right = pos.x + half.x
+	lbl.anchor_top = pos.y - half.y
+	lbl.anchor_bottom = pos.y + half.y
+	lbl.offset_left = 0
+	lbl.offset_right = 0
+	lbl.offset_top = 0
+	lbl.offset_bottom = 0
 
 
-# gui_input on every domain hotspot — drag-to-move when calibration is
-# on, no-op otherwise (the regular pressed signal opens the action
-# popup, gated by _on_domain_clicked's _debug_hotspots early-return).
+# ─── Corner resize handles ────────────────────────────────────────────────────
+
+func _build_corner_handles(kind: String, id: int) -> void:
+	var key: Array = _zone_key(kind, id)
+	if _calibration_handles.has(key):
+		return
+	var handles: Array = []
+	for corner in [_CAL_CORNER_TL, _CAL_CORNER_TR, _CAL_CORNER_BL, _CAL_CORNER_BR]:
+		var handle := Button.new()
+		handle.text = ""
+		handle.custom_minimum_size = Vector2(_CAL_HANDLE_SIZE, _CAL_HANDLE_SIZE)
+		handle.mouse_filter = Control.MOUSE_FILTER_STOP
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(1.0, 0.85, 0.0, 0.95)
+		sb.border_color = Color(0.4, 0.30, 0.0, 1.0)
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(_CAL_HANDLE_SIZE / 2)
+		handle.add_theme_stylebox_override("normal",  sb)
+		handle.add_theme_stylebox_override("hover",   sb)
+		handle.add_theme_stylebox_override("pressed", sb)
+		handle.add_theme_stylebox_override("focus",   sb)
+		_position_corner_handle(handle, kind, id, corner)
+		handle.gui_input.connect(_on_corner_handle_input.bind(kind, id, corner))
+		_zoom_layer.add_child(handle)
+		handles.append(handle)
+	_calibration_handles[key] = handles
+
+
+func _position_corner_handle(handle: Button, kind: String, id: int, corner: int) -> void:
+	var pos: Vector2 = _zone_pos(kind, id)
+	var half: Vector2 = _zone_half(kind, id)
+	var ax: float = pos.x - half.x
+	var ay: float = pos.y - half.y
+	if corner == _CAL_CORNER_TR or corner == _CAL_CORNER_BR:
+		ax = pos.x + half.x
+	if corner == _CAL_CORNER_BL or corner == _CAL_CORNER_BR:
+		ay = pos.y + half.y
+	handle.anchor_left = ax
+	handle.anchor_right = ax
+	handle.anchor_top = ay
+	handle.anchor_bottom = ay
+	handle.offset_left = -_CAL_HANDLE_SIZE / 2.0
+	handle.offset_top = -_CAL_HANDLE_SIZE / 2.0
+	handle.offset_right = _CAL_HANDLE_SIZE / 2.0
+	handle.offset_bottom = _CAL_HANDLE_SIZE / 2.0
+
+
+func _refresh_corner_handles(kind: String, id: int) -> void:
+	var key: Array = _zone_key(kind, id)
+	var handles: Array = _calibration_handles.get(key, [])
+	for i in range(handles.size()):
+		var h: Button = handles[i]
+		if is_instance_valid(h):
+			_position_corner_handle(h, kind, id, i)
+
+
+func _destroy_corner_handles(kind: String, id: int) -> void:
+	var key: Array = _zone_key(kind, id)
+	var handles: Array = _calibration_handles.get(key, [])
+	for h in handles:
+		if is_instance_valid(h):
+			h.queue_free()
+	_calibration_handles.erase(key)
+
+
+# ─── Drag handlers ────────────────────────────────────────────────────────────
+
+# Generic body-drag handler. Consumed by both Domain hotspot buttons (via
+# _on_hotspot_calibration_input below, kept for backwards-compat with the
+# existing bound connection in _build_overlays) and by liturgy banner panels
+# (called early in _on_liturgy_banner_input).
+func _on_zone_body_drag(event: InputEvent, kind: String, id: int) -> bool:
+	# Returns true if the event was consumed as a calibration drag.
+	if not _debug_hotspots:
+		return false
+	var delta: Vector2 = Vector2.ZERO
+	if event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		if (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+			return false
+		delta = mm.relative
+	elif event is InputEventScreenDrag:
+		var sd: InputEventScreenDrag = event
+		delta = sd.relative
+	else:
+		return false
+	if delta == Vector2.ZERO:
+		return false
+	var screen_size: Vector2 = _zoom_layer.size * _zoom_layer.scale
+	if screen_size.x <= 0 or screen_size.y <= 0:
+		return false
+	var dx: float = delta.x / screen_size.x
+	var dy: float = delta.y / screen_size.y
+	var node: Control = _zone_node(kind, id)
+	if node == null:
+		return false
+	node.anchor_left += dx
+	node.anchor_right += dx
+	node.anchor_top += dy
+	node.anchor_bottom += dy
+	_refresh_corner_handles(kind, id)
+	_refresh_calibration_label(kind, id)
+	return true
+
+
+# Connected on every Domain hotspot Button at build time. Kept as the
+# entry point so the existing `bind(did)` connection still works.
 func _on_hotspot_calibration_input(event: InputEvent, d_id: int) -> void:
+	_on_zone_body_drag(event, _zone_kind_domain(), d_id)
+
+
+# Symmetric corner resize. Dragging a corner outward grows the zone ;
+# dragging inward shrinks it. Centre is preserved.
+func _on_corner_handle_input(event: InputEvent, kind: String, id: int, corner: int) -> void:
 	if not _debug_hotspots:
 		return
 	var delta: Vector2 = Vector2.ZERO
@@ -1873,45 +2153,82 @@ func _on_hotspot_calibration_input(event: InputEvent, d_id: int) -> void:
 		return
 	if delta == Vector2.ZERO:
 		return
-	# Drag deltas come in screen-pixel space ; the zoom layer can be
-	# scaled, so convert through its scaled rect to get a fractional
-	# anchor delta that lands the hotspot exactly under the finger /
-	# cursor regardless of current zoom.
 	var screen_size: Vector2 = _zoom_layer.size * _zoom_layer.scale
 	if screen_size.x <= 0 or screen_size.y <= 0:
 		return
 	var dx: float = delta.x / screen_size.x
 	var dy: float = delta.y / screen_size.y
-	var btn: Button = _hotspots[d_id]
-	btn.anchor_left += dx
-	btn.anchor_right += dx
-	btn.anchor_top += dy
-	btn.anchor_bottom += dy
-	_refresh_calibration_label(d_id)
+	# half_x grows when the corner moves outward in x, shrinks otherwise.
+	# Same logic in y, signs depend on which corner is being dragged.
+	var half_dx: float = dx
+	var half_dy: float = dy
+	if corner == _CAL_CORNER_TL or corner == _CAL_CORNER_BL:
+		half_dx = -dx
+	if corner == _CAL_CORNER_TL or corner == _CAL_CORNER_TR:
+		half_dy = -dy
+	var node: Control = _zone_node(kind, id)
+	if node == null:
+		return
+	var pos: Vector2 = _zone_pos(kind, id)
+	var half: Vector2 = _zone_half(kind, id)
+	half.x = max(_CAL_MIN_HALF, half.x + half_dx)
+	half.y = max(_CAL_MIN_HALF, half.y + half_dy)
+	node.anchor_left   = pos.x - half.x
+	node.anchor_right  = pos.x + half.x
+	node.anchor_top    = pos.y - half.y
+	node.anchor_bottom = pos.y + half.y
+	# Persist into the per-zone half map so the dump reads the new value.
+	if kind == _zone_kind_domain():
+		_domain_half[id] = half
+	else:
+		_banner_half[id] = half
+	_refresh_corner_handles(kind, id)
+	_refresh_calibration_label(kind, id)
 
 
-# Pretty-print the current hotspot centres in a GDScript block so the
-# user can copy-paste it over DOMAIN_POS in Main.gd. Output lands in an
-# OS.alert (so it sits on top of the running game) AND in the journal,
-# in case the alert is dismissed before the SHA can be screenshotted.
-func _dump_domain_pos_for_paste() -> void:
-	var lines: PackedStringArray = PackedStringArray(["const DOMAIN_POS := {"])
+# ─── Paste-ready dump on toggle-off ───────────────────────────────────────────
+
+func _dump_calibration_for_paste() -> void:
+	# Snapshot current state from the live overlay nodes (drag may have moved
+	# them) plus the per-zone half maps (resize updates them on each delta).
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("const DOMAIN_POS := {")
 	for d_id in DOMAIN_POS.keys():
-		var btn: Button = _hotspots[d_id]
-		var cx: float = (btn.anchor_left + btn.anchor_right) * 0.5
-		var cy: float = (btn.anchor_top + btn.anchor_bottom) * 0.5
+		var pos: Vector2 = _zone_pos(_zone_kind_domain(), d_id)
 		lines.append("\tGameEnums.DomainId.%s: Vector2(%.3f, %.3f)," %
-			[_domain_id_to_enum_name(d_id), cx, cy])
+			[_domain_id_to_enum_name(d_id), pos.x, pos.y])
 	lines.append("}")
+	lines.append("")
+	lines.append("const DOMAIN_HALF_OVERRIDES := {")
+	for d_id in DOMAIN_POS.keys():
+		var half: Vector2 = _zone_half(_zone_kind_domain(), d_id)
+		lines.append("\tGameEnums.DomainId.%s: Vector2(%.3f, %.3f)," %
+			[_domain_id_to_enum_name(d_id), half.x, half.y])
+	lines.append("}")
+	lines.append("")
+	lines.append("const LITURGY_BANNER_POS := {")
+	for st in LITURGY_BANNER_POS.keys():
+		var pos2: Vector2 = _zone_pos(_zone_kind_banner(), st)
+		lines.append("\tGameEnums.StationId.%s: Vector2(%.3f, %.3f)," %
+			[_station_id_to_enum_name(st), pos2.x, pos2.y])
+	lines.append("}")
+	lines.append("")
+	lines.append("const LITURGY_BANNER_HALF_OVERRIDES := {")
+	for st in LITURGY_BANNER_POS.keys():
+		var half2: Vector2 = _zone_half(_zone_kind_banner(), st)
+		lines.append("\tGameEnums.StationId.%s: Vector2(%.3f, %.3f)," %
+			[_station_id_to_enum_name(st), half2.x, half2.y])
+	lines.append("}")
+
 	var block: String = ""
 	for ln in lines:
 		block += ln + "\n"
 	if state != null:
-		state.add_log("[Calibration] Nouvelles positions :")
+		state.add_log("[Calibration] Nouvelles valeurs :")
 		for ln in lines:
 			state.add_log(ln)
 		_refresh_log()
-	OS.alert(block, "Calibration des hotspots — coller dans Main.gd")
+	OS.alert(block, "Calibration — coller dans Main.gd")
 
 
 # Map DomainId int → constant name. Used to emit the
@@ -1924,6 +2241,19 @@ func _domain_id_to_enum_name(d_id: int) -> String:
 		GameEnums.DomainId.FOI:      return "FOI"
 		GameEnums.DomainId.PEUR:     return "PEUR"
 		GameEnums.DomainId.VOLONTE:  return "VOLONTE"
+	return "UNKNOWN"
+
+
+# Same idea for StationId — used in the LITURGY_BANNER_POS /
+# LITURGY_BANNER_HALF_OVERRIDES dump so the keys stay readable.
+func _station_id_to_enum_name(st: int) -> String:
+	match st:
+		GameEnums.StationId.MURMURES:   return "MURMURES"
+		GameEnums.StationId.TENTATION:  return "TENTATION"
+		GameEnums.StationId.CHUTE:      return "CHUTE"
+		GameEnums.StationId.CONFESSION: return "CONFESSION"
+		GameEnums.StationId.OFFICE:     return "OFFICE"
+		GameEnums.StationId.EXORCISME:  return "EXORCISME"
 	return "UNKNOWN"
 
 
