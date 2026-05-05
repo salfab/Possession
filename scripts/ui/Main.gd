@@ -39,14 +39,20 @@ const DOMAIN_HALF_OVERRIDES := {
 # painted niches ; the user reposition each caption to wherever the
 # new artwork has space (typically just above or below the niche).
 const DOMAIN_NAME_POS := {
-	GameEnums.DomainId.AMBITION: Vector2(0.270, 0.328),
-	GameEnums.DomainId.FOI:      Vector2(0.686, 0.313),
-	GameEnums.DomainId.VOLONTE:  Vector2(0.481, 0.199),
-	GameEnums.DomainId.DESIR:    Vector2(0.289, 0.655),
-	GameEnums.DomainId.PEUR:     Vector2(0.685, 0.654),
+	GameEnums.DomainId.AMBITION: Vector2(0.277, 0.497),
+	GameEnums.DomainId.FOI:      Vector2(0.683, 0.497),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.479, 0.370),
+	GameEnums.DomainId.DESIR:    Vector2(0.282, 0.801),
+	GameEnums.DomainId.PEUR:     Vector2(0.690, 0.815),
 }
 const DOMAIN_NAME_HALF := Vector2(0.060, 0.020)
-const DOMAIN_NAME_HALF_OVERRIDES := {}
+const DOMAIN_NAME_HALF_OVERRIDES := {
+	GameEnums.DomainId.AMBITION: Vector2(0.062, 0.021),
+	GameEnums.DomainId.FOI:      Vector2(0.066, 0.020),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.072, 0.019),
+	GameEnums.DomainId.DESIR:    Vector2(0.066, 0.019),
+	GameEnums.DomainId.PEUR:     Vector2(0.066, 0.021),
+}
 
 # Liturgy banners — one per Station I-V plus the Exorcism, on the right edge
 # of the board. Width spans from Désir's right border (0.710 + 0.080 = 0.790)
