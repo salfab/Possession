@@ -10,6 +10,21 @@ config/description="Hotseat 2-player prototype of the Possession board game (V1g
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://icon.svg"
+; Custom boot splash — assets/splash.png is the painted "Possession" image
+; with the two demonic figures flanking the kneeling Pope. fullsize=true
+; tells Godot to scale the image so it fills the longer axis of the
+; viewport while preserving aspect, which on iPad lands the demons at
+; their full visual prominence rather than a tiny native-pixel rectangle
+; in the middle of a black screen. use_filter=true → bilinear smoothing
+; on the upscale (1672 px source × ~1.6× on a 12.9" iPad Pro). bg_color
+; matches the manifest background_color (#08040c) so the iOS PWA launch
+; transition into the Godot splash is seamless ; the splash itself is
+; bordered by near-black pixels so the join is invisible.
+boot_splash/show_image=true
+boot_splash/image="res://assets/splash.png"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
+boot_splash/bg_color=Color(0.031, 0.016, 0.047, 1)
 
 [autoload]
 
