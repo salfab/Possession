@@ -14,20 +14,39 @@ const SAVE_PATH := "user://save_game.json"
 # If the alignment is still off, toggle the "Hot" debug button in the
 # bottom bar to see the hit areas overlaid in cyan.
 const DOMAIN_POS := {
-	GameEnums.DomainId.AMBITION: Vector2(0.510, 0.243),
-	GameEnums.DomainId.FOI:      Vector2(0.324, 0.407),
-	GameEnums.DomainId.VOLONTE:  Vector2(0.509, 0.479),
-	GameEnums.DomainId.DESIR:    Vector2(0.700, 0.412),
-	GameEnums.DomainId.PEUR:     Vector2(0.507, 0.703),
+	GameEnums.DomainId.AMBITION: Vector2(0.270, 0.328),
+	GameEnums.DomainId.FOI:      Vector2(0.686, 0.313),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.481, 0.199),
+	GameEnums.DomainId.DESIR:    Vector2(0.289, 0.655),
+	GameEnums.DomainId.PEUR:     Vector2(0.685, 0.654),
 }
 const DOMAIN_HALF := Vector2(0.080, 0.085)
 
-# Per-zone half-extents override map. Empty by default — every Domain
-# falls back to DOMAIN_HALF above. Populate this when a Domain needs
-# its own size on a new board (e.g. Volonté drawn larger). The in-game
-# calibration mode dumps a fully-populated version of this map on
-# toggle-off so the user can paste it back here.
-const DOMAIN_HALF_OVERRIDES := {}
+# Per-zone half-extents override map. Populated from the in-game
+# calibration mode (FAB → Hotspots) — Volonté is sized noticeably larger
+# than the others to match its visual prominence on the new board.
+const DOMAIN_HALF_OVERRIDES := {
+	GameEnums.DomainId.AMBITION: Vector2(0.061, 0.132),
+	GameEnums.DomainId.FOI:      Vector2(0.059, 0.127),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.078, 0.140),
+	GameEnums.DomainId.DESIR:    Vector2(0.065, 0.115),
+	GameEnums.DomainId.PEUR:     Vector2(0.049, 0.118),
+}
+
+# Domain name caption — independent zone with its own position + size,
+# fully calibratable from FAB → Hotspots. Defaults: same centre as the
+# Domain hotspot so on a fresh board the captions land on top of the
+# painted niches ; the user reposition each caption to wherever the
+# new artwork has space (typically just above or below the niche).
+const DOMAIN_NAME_POS := {
+	GameEnums.DomainId.AMBITION: Vector2(0.270, 0.328),
+	GameEnums.DomainId.FOI:      Vector2(0.686, 0.313),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.481, 0.199),
+	GameEnums.DomainId.DESIR:    Vector2(0.289, 0.655),
+	GameEnums.DomainId.PEUR:     Vector2(0.685, 0.654),
+}
+const DOMAIN_NAME_HALF := Vector2(0.060, 0.020)
+const DOMAIN_NAME_HALF_OVERRIDES := {}
 
 # Liturgy banners — one per Station I-V plus the Exorcism, on the right edge
 # of the board. Width spans from Désir's right border (0.710 + 0.080 = 0.790)
@@ -36,12 +55,12 @@ const DOMAIN_HALF_OVERRIDES := {}
 # liturgy view with an Entraver button (Station VI opens the endgame card —
 # the Exorcism has no in_integro/impedita variant and can't be entravé).
 const LITURGY_BANNER_POS := {
-	GameEnums.StationId.MURMURES:   Vector2(0.880, 0.135),
-	GameEnums.StationId.TENTATION:  Vector2(0.880, 0.255),
-	GameEnums.StationId.CHUTE:      Vector2(0.880, 0.375),
-	GameEnums.StationId.CONFESSION: Vector2(0.880, 0.495),
-	GameEnums.StationId.OFFICE:     Vector2(0.880, 0.615),
-	GameEnums.StationId.EXORCISME:  Vector2(0.880, 0.735),
+	GameEnums.StationId.MURMURES:   Vector2(0.895, 0.114),
+	GameEnums.StationId.TENTATION:  Vector2(0.892, 0.241),
+	GameEnums.StationId.CHUTE:      Vector2(0.895, 0.366),
+	GameEnums.StationId.CONFESSION: Vector2(0.893, 0.491),
+	GameEnums.StationId.OFFICE:     Vector2(0.895, 0.619),
+	GameEnums.StationId.EXORCISME:  Vector2(0.895, 0.747),
 }
 const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
 # Same per-zone override pattern as DOMAIN_HALF_OVERRIDES — empty by
@@ -76,6 +95,7 @@ var _debug_hotspots: bool = false   # cyan outline overlay for calibration
 # handles to resize a zone, then dumped on toggle-off.
 var _domain_half: Dictionary = {}
 var _banner_half: Dictionary = {}
+var _domain_name_half: Dictionary = {}
 var _domain_badges: Dictionary = {} # domain_id -> DomainBadges (drawn controller/sealed/penitence indicators)
 var _domain_dots: Dictionary = {}   # domain_id -> CorruptionDots
 var _liturgy_banners: Dictionary = {}       # station_id -> PanelContainer (placeholder)
@@ -328,6 +348,8 @@ func _build_overlays() -> void:
 		_domain_half[d_id] = DOMAIN_HALF_OVERRIDES.get(d_id, DOMAIN_HALF)
 	for st in LITURGY_BANNER_POS.keys():
 		_banner_half[st] = LITURGY_BANNER_HALF_OVERRIDES.get(st, LITURGY_BANNER_HALF)
+	for d_id in DOMAIN_NAME_POS.keys():
+		_domain_name_half[d_id] = DOMAIN_NAME_HALF_OVERRIDES.get(d_id, DOMAIN_NAME_HALF)
 
 	# Hotspots and per-domain overlay labels — inside the ZoomLayer so they
 	# stay aligned with the image when zooming/panning.
@@ -355,36 +377,10 @@ func _build_overlays() -> void:
 		_zoom_layer.add_child(btn)
 		_hotspots[d_id] = btn
 
-		# Domain name caption — sits just above the niche so the player knows
-		# which Domain is which. The new board.jpg ships without baked-in
-		# Domain labels, so we render them as Godot Labels overlaid on the
-		# painted artwork. IM Fell SC for the calligraphic feel ; cream
-		# colour with a heavy black outline for legibility against the
-		# painted background ; mouse_filter=IGNORE so taps still reach the
-		# hotspot Button underneath. Anchors are RELATIVE to the parent
-		# Button — the label spans the upper half of the zone and extends
-		# slightly above it. This means the label automatically follows the
-		# zone if the user drags / resizes it via the calibration tool.
-		var name_label := Label.new()
-		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		name_label.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
-		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		name_label.add_theme_font_override("font", Card.FONT_TITLE)
-		name_label.add_theme_font_size_override("font_size", 28)
-		name_label.add_theme_color_override("font_color", Color(0.95, 0.88, 0.65))
-		name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
-		name_label.add_theme_constant_override("outline_size", 6)
-		name_label.anchor_left = 0.0
-		name_label.anchor_right = 1.0
-		name_label.anchor_top = -0.55
-		name_label.anchor_bottom = 0.05
-		name_label.offset_left = 0
-		name_label.offset_right = 0
-		name_label.offset_top = 0
-		name_label.offset_bottom = 0
-		btn.add_child(name_label)
-		_domain_name_labels[d_id] = name_label
+		# Domain name caption — INDEPENDENT zone (own DOMAIN_NAME_POS +
+		# DOMAIN_NAME_HALF, fully calibratable from FAB → Hotspots, dumped
+		# alongside the Domain hotspot positions). Built outside the per-
+		# Domain loop body — see _build_domain_name_labels() right after.
 
 		# Two-row layout for the bottom strip of each Domain hotspot :
 		#   Row A (top, ~6 % of board height) : transgression markers
@@ -434,6 +430,10 @@ func _build_overlays() -> void:
 		var badges := DomainBadges.new()
 		badges_row.add_child(badges)
 		_domain_badges[d_id] = badges
+
+	# Domain name caption labels — own POS / HALF, calibratable as
+	# independent zones via FAB → Hotspots.
+	_build_domain_name_labels()
 
 	# Liturgy banners on the right edge — one per Station I-V, click → opens
 	# the fullscreen liturgical card with an Entraver button.
@@ -1078,6 +1078,38 @@ func _on_domain_marker_clicked(_tid: String, _name_str: String, _is_infamy: bool
 
 
 # ─── Liturgy banners (right edge of the board) ────────────────────────────────
+
+func _build_domain_name_labels() -> void:
+	# Each Domain caption is a standalone Label parented to _zoom_layer
+	# with its own anchored bounding box driven by DOMAIN_NAME_POS +
+	# _domain_name_half. Default mouse_filter=IGNORE so taps pass through
+	# to the painted board ; the calibration tool flips it to STOP when
+	# the user enters Hotspots mode so the Label can capture drag events.
+	for d_id in DOMAIN_NAME_POS.keys():
+		var npos: Vector2 = DOMAIN_NAME_POS[d_id]
+		var nh: Vector2 = _domain_name_half[d_id]
+		var name_label := Label.new()
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_label.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		name_label.add_theme_font_override("font", Card.FONT_TITLE)
+		name_label.add_theme_font_size_override("font_size", 28)
+		name_label.add_theme_color_override("font_color", Color(0.95, 0.88, 0.65))
+		name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		name_label.add_theme_constant_override("outline_size", 6)
+		name_label.anchor_left = npos.x - nh.x
+		name_label.anchor_right = npos.x + nh.x
+		name_label.anchor_top = npos.y - nh.y
+		name_label.anchor_bottom = npos.y + nh.y
+		name_label.offset_left = 0
+		name_label.offset_right = 0
+		name_label.offset_top = 0
+		name_label.offset_bottom = 0
+		name_label.gui_input.connect(_on_zone_body_drag.bind(_zone_kind_domain_name(), d_id))
+		_zoom_layer.add_child(name_label)
+		_domain_name_labels[d_id] = name_label
+
 
 func _build_liturgy_banners() -> void:
 	for st in LITURGY_BANNER_POS:
@@ -1910,6 +1942,8 @@ func _zone_node(kind: String, id: int) -> Control:
 		return _hotspots.get(id)
 	if kind == "banner":
 		return _liturgy_banners.get(id)
+	if kind == "domain_name":
+		return _domain_name_labels.get(id)
 	return null
 
 
@@ -1919,15 +1953,20 @@ func _zone_name(kind: String, id: int) -> String:
 	if kind == "banner":
 		var st_name: String = String(GameEnums.STATION_NAMES.get(id, "?"))
 		return "Bandeau %s" % st_name
+	if kind == "domain_name":
+		return "Nom %s" % String(GameEnums.DOMAIN_NAMES.get(id, "?"))
 	return "?"
 
 
 func _all_calibration_zones() -> Array:
-	# Order : 5 Domains then 6 Banners. Mirrors the dump order so labels
-	# read from top to bottom in the same sequence in the OS.alert.
+	# Order : 5 Domains, then 5 Domain-name captions, then 6 Banners.
+	# Mirrors the dump order so labels read top-to-bottom in the same
+	# sequence in the OS.alert.
 	var out: Array = []
 	for d_id in DOMAIN_POS.keys():
 		out.append([_zone_kind_domain(), d_id])
+	for d_id in DOMAIN_NAME_POS.keys():
+		out.append([_zone_kind_domain_name(), d_id])
 	for st in LITURGY_BANNER_POS.keys():
 		out.append([_zone_kind_banner(), st])
 	return out
@@ -1939,6 +1978,10 @@ func _zone_kind_domain() -> String:
 
 func _zone_kind_banner() -> String:
 	return "banner"
+
+
+func _zone_kind_domain_name() -> String:
+	return "domain_name"
 
 
 # Read the zone's *current* centre from the live overlay node — so that
@@ -1975,9 +2018,13 @@ func _apply_zone_overlay(node: Control) -> void:
 		btn.add_theme_stylebox_override("pressed", sb)
 		btn.add_theme_stylebox_override("focus",   sb)
 		return
-	# Banner panels are Controls with TextureRect / Label children — drop a
-	# transparent Panel child on top to draw the cyan border + tint without
-	# disturbing the existing children.
+	# Non-Button zones (banners + domain-name captions) — switch mouse_filter
+	# to STOP so drag events reach the gui_input handler, stash the previous
+	# value as meta to restore on exit. Then drop a transparent Panel child
+	# on top to draw the cyan border + tint.
+	if not node.has_meta("calibration_prev_mouse_filter"):
+		node.set_meta("calibration_prev_mouse_filter", node.mouse_filter)
+	node.mouse_filter = Control.MOUSE_FILTER_STOP
 	var existing := node.get_node_or_null("CalibrationOverlay")
 	if existing != null:
 		return
@@ -2003,6 +2050,13 @@ func _remove_zone_overlay(node: Control) -> void:
 		btn.remove_theme_stylebox_override("pressed")
 		btn.remove_theme_stylebox_override("focus")
 		return
+	# Restore the original mouse_filter (banners default to STOP, domain
+	# names default to IGNORE). Without this the domain-name labels would
+	# stay tappable after exiting calibration and start absorbing taps that
+	# should reach the painted board.
+	if node.has_meta("calibration_prev_mouse_filter"):
+		node.mouse_filter = node.get_meta("calibration_prev_mouse_filter")
+		node.remove_meta("calibration_prev_mouse_filter")
 	var existing := node.get_node_or_null("CalibrationOverlay")
 	if existing != null and is_instance_valid(existing):
 		existing.queue_free()
@@ -2212,6 +2266,8 @@ func _on_corner_handle_input(event: InputEvent, kind: String, id: int, corner: i
 	# Persist into the per-zone half map so the dump reads the new value.
 	if kind == _zone_kind_domain():
 		_domain_half[id] = half
+	elif kind == _zone_kind_domain_name():
+		_domain_name_half[id] = half
 	else:
 		_banner_half[id] = half
 	_refresh_corner_handles(kind, id)
@@ -2223,6 +2279,10 @@ func _on_corner_handle_input(event: InputEvent, kind: String, id: int, corner: i
 func _dump_calibration_for_paste() -> void:
 	# Snapshot current state from the live overlay nodes (drag may have moved
 	# them) plus the per-zone half maps (resize updates them on each delta).
+	# Six blocks total :
+	#   DOMAIN_POS / DOMAIN_HALF_OVERRIDES (5 entries each)
+	#   DOMAIN_NAME_POS / DOMAIN_NAME_HALF_OVERRIDES (5 entries each)
+	#   LITURGY_BANNER_POS / LITURGY_BANNER_HALF_OVERRIDES (6 entries each)
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append("const DOMAIN_POS := {")
 	for d_id in DOMAIN_POS.keys():
@@ -2236,6 +2296,20 @@ func _dump_calibration_for_paste() -> void:
 		var half: Vector2 = _zone_half(_zone_kind_domain(), d_id)
 		lines.append("\tGameEnums.DomainId.%s: Vector2(%.3f, %.3f)," %
 			[_domain_id_to_enum_name(d_id), half.x, half.y])
+	lines.append("}")
+	lines.append("")
+	lines.append("const DOMAIN_NAME_POS := {")
+	for d_id in DOMAIN_NAME_POS.keys():
+		var pos_n: Vector2 = _zone_pos(_zone_kind_domain_name(), d_id)
+		lines.append("\tGameEnums.DomainId.%s: Vector2(%.3f, %.3f)," %
+			[_domain_id_to_enum_name(d_id), pos_n.x, pos_n.y])
+	lines.append("}")
+	lines.append("")
+	lines.append("const DOMAIN_NAME_HALF_OVERRIDES := {")
+	for d_id in DOMAIN_NAME_POS.keys():
+		var half_n: Vector2 = _zone_half(_zone_kind_domain_name(), d_id)
+		lines.append("\tGameEnums.DomainId.%s: Vector2(%.3f, %.3f)," %
+			[_domain_id_to_enum_name(d_id), half_n.x, half_n.y])
 	lines.append("}")
 	lines.append("")
 	lines.append("const LITURGY_BANNER_POS := {")
@@ -2255,12 +2329,22 @@ func _dump_calibration_for_paste() -> void:
 	var block: String = ""
 	for ln in lines:
 		block += ln + "\n"
+	# print() goes to stdout, which on the HTML5 export lands in the
+	# browser DevTools console. From there it's a clean copy-paste with
+	# correct tabs / Vector2 syntax / closing braces — much more reliable
+	# than trying to copy out of the OS.alert (which on Safari can
+	# truncate / mangle special characters). Bracket the block with two
+	# clear sentinels so it's easy to find in a busy console log.
+	print("\n========== POSSESSION CALIBRATION DUMP — BEGIN ==========")
+	print(block)
+	print("========== POSSESSION CALIBRATION DUMP — END ============\n")
 	if state != null:
 		state.add_log("[Calibration] Nouvelles valeurs :")
 		for ln in lines:
 			state.add_log(ln)
 		_refresh_log()
-	OS.alert(block, "Calibration — coller dans Main.gd")
+	OS.alert(block + "\n(Bloc également imprimé dans la console DevTools du navigateur — F12 → Console.)",
+		"Calibration — coller dans Main.gd")
 
 
 # Map DomainId int → constant name. Used to emit the
