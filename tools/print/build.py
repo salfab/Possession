@@ -45,7 +45,14 @@ ILLUSTRATIONS_DIR = ASSETS / "cards" / "illustrations"
 TEMPLATES_DIR = ASSETS / "cards" / "templates"
 SPECIAL_DIR = ASSETS / "cards" / "special"
 BANNERS_DIR = ASSETS / "cards" / "liturgy_banners"
-BOARD_PATH = ASSETS / "board.jpg"
+# For print, prefer the original PNG source over the JPG ingame export :
+# JPG was recompressed to ~500 KB for runtime download size, the PNG keeps
+# the full painterly detail for the A3 board PDF. Falls back to the JPG
+# if the PNG source isn't on disk (a contributor without the high-res
+# asset can still build a print kit, just with mild JPG artefacts).
+_BOARD_PRINT_SOURCE = REPO_ROOT / "tools" / "sources" / "board" / "possession board 3.png"
+_BOARD_RUNTIME = ASSETS / "board.jpg"
+BOARD_PATH = _BOARD_PRINT_SOURCE if _BOARD_PRINT_SOURCE.exists() else _BOARD_RUNTIME
 I18N_GD = REPO_ROOT / "scripts" / "data" / "I18n.gd"
 OUT_DIR = REPO_ROOT / "print"
 INDIVIDUAL_DIR = OUT_DIR / "cards_individual"
