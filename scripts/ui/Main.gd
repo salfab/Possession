@@ -42,7 +42,7 @@ const DOMAIN_NAME_POS := {
 	GameEnums.DomainId.AMBITION: Vector2(0.277, 0.497),
 	GameEnums.DomainId.FOI:      Vector2(0.683, 0.497),
 	GameEnums.DomainId.VOLONTE:  Vector2(0.479, 0.370),
-	GameEnums.DomainId.DESIR:    Vector2(0.282, 0.801),
+	GameEnums.DomainId.DESIR:    Vector2(0.281, 0.798),
 	GameEnums.DomainId.PEUR:     Vector2(0.690, 0.815),
 }
 const DOMAIN_NAME_HALF := Vector2(0.060, 0.020)
@@ -50,7 +50,7 @@ const DOMAIN_NAME_HALF_OVERRIDES := {
 	GameEnums.DomainId.AMBITION: Vector2(0.062, 0.021),
 	GameEnums.DomainId.FOI:      Vector2(0.066, 0.020),
 	GameEnums.DomainId.VOLONTE:  Vector2(0.072, 0.019),
-	GameEnums.DomainId.DESIR:    Vector2(0.066, 0.019),
+	GameEnums.DomainId.DESIR:    Vector2(0.061, 0.019),
 	GameEnums.DomainId.PEUR:     Vector2(0.066, 0.021),
 }
 
@@ -2342,15 +2342,26 @@ func _dump_calibration_for_paste() -> void:
 	# truncate / mangle special characters). Bracket the block with two
 	# clear sentinels so it's easy to find in a busy console log.
 	#
-	# IMPORTANT : single print() call. Splitting into three (begin / body
-	# / end) made Chrome's DevTools log three separate entries each with
-	# its own "Possession/:216 " source prefix, breaking the round-trip
-	# copy-paste. One print = one console.log entry, prefix only at the
-	# top of the block.
+	# IMPORTANT : ONE console.log entry, not one per line. Godot's
+	# print() goes through emscripten's stdout pipe, which on web splits
+	# the string on every newline and emits a separate console.log for
+	# each — Chrome then re-stamps the "Possession/:216" source prefix
+	# on every line and the round-trip copy-paste picks up the prefixes.
+	# Bypass print() and invoke window.console.log directly via the
+	# JavaScript bridge : a single string in, a single entry out, prefix
+	# only on the first visible line of the entry. Falls back to print()
+	# on desktop / when JavaScriptBridge isn't available (editor runs).
 	var full_dump: String = "\n========== POSSESSION CALIBRATION DUMP — BEGIN ==========\n" \
 		+ block \
 		+ "========== POSSESSION CALIBRATION DUMP — END ============\n"
-	print(full_dump)
+	if OS.has_feature("web"):
+		var console_obj: Variant = JavaScriptBridge.get_interface("console")
+		if console_obj != null:
+			console_obj.log(full_dump)
+		else:
+			print(full_dump)
+	else:
+		print(full_dump)
 	if state != null:
 		state.add_log("[Calibration] Nouvelles valeurs :")
 		for ln in lines:
