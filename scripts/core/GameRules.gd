@@ -18,11 +18,15 @@ static func transgression_scandal_cost(state: GameState, player: int, def_id: St
 			cost = max(1, cost - 1)
 	return cost
 
-static func entrave_cost(state: GameState, player: int, target_station: int) -> int:
-	var base := 1 if target_station == state.current_station else 2
-	if state.trafic_discount_pending.get(player, false):
-		base = max(1, base - 1)
-	return base
+# V1h : Entrave is positional, not reserve-based. The cost is always
+# "remove 1 of your Corruptions from a controlled, linked Domain on the
+# board" — there is no scaling with target_station distance and the
+# active demon's available_corruption pool isn't touched. Kept the helper
+# so legacy UI / log paths still resolve a number, but the value is now
+# fixed at 1 (the Domain board cost) and the trafic discount no longer
+# applies (the V1h cost cannot be reduced — there's no reserve to discount).
+static func entrave_cost(_state: GameState, _player: int, _target_station: int) -> int:
+	return 1
 
 # --- Action legality --------------------------------------------------------
 
@@ -124,6 +128,60 @@ static func fissurer_total_cost(state: GameState, player: int, d_id: int) -> int
 			cost += 1  # Tribut de Volonté
 	return cost
 
+# V1h : returns the list of Domain ids "linked" to a Liturgical Response.
+# Used by the Entrave action — to Hinder a Response, the active demon
+# must remove 1 of his Corruptions from one of these linked Domains
+# that he ALSO controls. Mirrors the rules card per Station :
+#   I (Signe de croix)        : every Domain.
+#   II (Examen de conscience) : Ambition + Désir.
+#   III (Contrition)          : the currently-transgressed Domains.
+#   IV (Confession)           : the origin Domains of the active demon's
+#                               own placed Transgressions.
+#   V (Communion)             : Foi + Volonté.
+#   VI (Exorcisme final)      : none — the Exorcism cannot be Hindered.
+static func linked_domains_for_response(state: GameState, station: int, player: int) -> Array:
+	match station:
+		GameEnums.StationId.MURMURES:
+			return DomainData.DOMAINS.duplicate()
+		GameEnums.StationId.TENTATION:
+			return [GameEnums.DomainId.AMBITION, GameEnums.DomainId.DESIR]
+		GameEnums.StationId.CHUTE:
+			var transgressed: Array = []
+			for d_id in DomainData.DOMAINS:
+				if state.is_transgressed(d_id):
+					transgressed.append(d_id)
+			return transgressed
+		GameEnums.StationId.CONFESSION:
+			var origins: Dictionary = {}
+			for d_id in DomainData.DOMAINS:
+				var d := state.domain(d_id)
+				for ti in d.scandals + d.infamies:
+					if ti.owner == player:
+						origins[ti.origin_domain] = true
+			return origins.keys()
+		GameEnums.StationId.OFFICE:
+			return [GameEnums.DomainId.FOI, GameEnums.DomainId.VOLONTE]
+		GameEnums.StationId.EXORCISME:
+			return []
+	return []
+
+
+# V1h : returns the subset of linked Domains the active demon could
+# legally pay 1 Corruption from to Hinder this Response — linked AND
+# controlled by the player AND containing at least 1 of the player's
+# Corruptions. Empty list means Entrave is illegal regardless of the
+# target Station distance.
+static func entrave_payment_options(state: GameState, player: int, target_station: int) -> Array:
+	var out: Array = []
+	for d_id in linked_domains_for_response(state, target_station, player):
+		if state.controller_of(d_id) != player:
+			continue
+		if state.corruption_in(d_id, player) < 1:
+			continue
+		out.append(d_id)
+	return out
+
+
 static func can_entraver(state: GameState, player: int, target_station: int) -> bool:
 	if target_station == GameEnums.StationId.EXORCISME:
 		return false  # Exorcism cannot be entraved.
@@ -135,8 +193,9 @@ static func can_entraver(state: GameState, player: int, target_station: int) -> 
 	for pe in state.pending_entraves:
 		if pe.target_station == target_station:
 			return false
-	var cost := entrave_cost(state, player, target_station)
-	if state.available_corruption[player] < cost:
+	# V1h : need at least one linked Domain controlled by the player with
+	# 1+ of his Corruptions on it, instead of the old reserve-based check.
+	if entrave_payment_options(state, player, target_station).is_empty():
 		return false
 	return true
 
@@ -153,9 +212,8 @@ static func why_cannot_entraver(state: GameState, player: int, target_station: i
 	for pe in state.pending_entraves:
 		if pe.target_station == target_station:
 			return I18n.t("err.entrave_already")
-	var cost := entrave_cost(state, player, target_station)
-	if state.available_corruption[player] < cost:
-		return I18n.t("err.not_enough_corruption", [cost])
+	if entrave_payment_options(state, player, target_station).is_empty():
+		return I18n.t("err.entrave_no_linked_payment")
 	return ""
 
 static func is_response_entraved(state: GameState, station: int) -> bool:

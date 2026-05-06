@@ -169,8 +169,21 @@ const STRINGS := {
 	"ui.transgression.btn.provoke_in":  {"fr": "Provoquer (%s)",          "en": "Provoke (%s)"},
 	"ui.transgression.btn.amplify":     {"fr": "Amplifier",              "en": "Amplify"},
 	"ui.btn.entraver":                  {"fr": "Entraver",               "en": "Hinder"},
-	"ui.btn.entraver_cost":             {"fr": "Entraver  (-%d Corruption%s)",
-	                                     "en": "Hinder  (-%d Corruption%s)"},
+	# V1h positional cost — "%s" is the source Domain name, the action
+	# always removes exactly 1 of the active demon's Corruptions from
+	# that Domain on the board (no reserve cost). Used when only one
+	# linked Domain is a legal payment source.
+	"ui.btn.entraver_cost":             {"fr": "Entraver (-1 Corr. en %s)",
+	                                     "en": "Hinder (-1 Corr. on %s)"},
+	# When multiple linked Domains are legal payment sources — the UI
+	# pops a picker after the click, no specific Domain in the label.
+	"ui.btn.entraver_cost_generic":     {"fr": "Entraver (-1 Corruption)",
+	                                     "en": "Hinder (-1 Corruption)"},
+	"ui.btn.entraver.tooltip":          {"fr": "Retirer 1 de vos Corruptions d'un Domaine lié que vous contrôlez. La Réponse devient Impedita.",
+	                                     "en": "Remove 1 of your Corruptions from a linked Domain you control. The Response becomes Impedita."},
+	"ui.dialog.title.entrave_pick":     {"fr": "Entraver — choisir le Domaine", "en": "Hinder — choose the Domain"},
+	"ui.dialog.entrave_pick_prompt":    {"fr": "Retirer 1 de vos Corruptions de :",
+	                                     "en": "Remove 1 of your Corruptions from:"},
 	"ui.liturgy.banner.in_integro":    {"fr": "%s\nIn Integro",          "en": "%s\nIn Integro"},
 	"ui.liturgy.banner.impedita":      {"fr": "%s\nImpedita",            "en": "%s\nImpedita"},
 
@@ -339,6 +352,8 @@ const STRINGS := {
 	                                    "en": "This Station has already passed."},
 	"err.entrave_too_far":             {"fr": "Cette Station est trop éloignée (max +2).",
 	                                    "en": "This Station is too far ahead (max +2)."},
+	"err.entrave_no_linked_payment":   {"fr": "Aucun Domaine lié contrôlé avec une Corruption à dépenser.",
+	                                    "en": "No controlled linked Domain with a Corruption to spend."},
 	"err.entrave_already":             {"fr": "Cette Réponse est déjà entravée.",
 	                                    "en": "This Response is already hindered."},
 	"err.need_net_domination":         {"fr": "Domination nette ≥2 requise",         "en": "Net Domination ≥2 required"},

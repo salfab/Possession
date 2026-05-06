@@ -129,19 +129,40 @@ static func fissurer(state: GameState, player: int, d_id: int) -> Dictionary:
 
 # --- Entraver ---------------------------------------------------------------
 
-static func entraver(state: GameState, player: int, target_station: int) -> Dictionary:
+# V1h : Entrave is positional. The active demon picks a Domain that is
+# (1) linked to the targeted Liturgical Response, (2) controlled by him,
+# (3) containing at least 1 of his Corruptions ; and removes 1 Corruption
+# from that Domain on the board. The reserve is untouched. Sacrificing
+# this Corruption may cost the demon control of the Domain — that's
+# allowed, V1h spec §2.
+#
+# payment_domain = -1 means "let the resolver auto-pick from the legal
+# options" (used when there's only one valid Domain, or as a fallback).
+static func entraver(state: GameState, player: int, target_station: int, payment_domain: int = -1) -> Dictionary:
 	if not GameRules.can_entraver(state, player, target_station):
 		return fail("Entrave illégale.")
-	var cost := GameRules.entrave_cost(state, player, target_station)
-	state.add_corruption_pool(player, -cost)
+	var options: Array = GameRules.entrave_payment_options(state, player, target_station)
+	if payment_domain < 0:
+		# Auto-pick the first legal Domain when the caller didn't
+		# specify one (e.g. tests or one-Domain situations).
+		payment_domain = options[0]
+	if not options.has(payment_domain):
+		return fail("Domaine choisi invalide pour cette Entrave.")
+	# Remove 1 of the player's Corruptions from the chosen Domain.
+	state.set_corruption_in(payment_domain, player,
+		state.corruption_in(payment_domain, player) - 1)
+	# Trafic-de-charges discount (Scandale effect) is now a no-op for V1h
+	# Entrave — the cost is fixed at 1 board Corruption regardless. Clear
+	# the pending flag so it doesn't sit forever (the player can spend it
+	# on whatever the next Trafic-coupled action becomes in a future patch).
 	if state.trafic_discount_pending.get(player, false):
 		state.trafic_discount_pending[player] = false
 	var pe := GameState.PendingEntrave.new()
 	pe.caster = player
 	pe.target_station = target_station
 	state.pending_entraves.append(pe)
-	state.add_log("%s entrave la Réponse de la Station %s (coût %d)." %
-		[GameEnums.player_name(player), GameEnums.STATION_NAMES[target_station], cost])
+	state.add_log("%s entrave la Réponse de la Station %s (-1 Corruption en %s)." %
+		[GameEnums.player_name(player), GameEnums.STATION_NAMES[target_station], GameEnums.DOMAIN_NAMES[payment_domain]])
 	return ok("Entrave posée.")
 
 # --- Passer -----------------------------------------------------------------

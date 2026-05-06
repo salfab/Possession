@@ -126,7 +126,11 @@ const VOLONTE_PROXIMITY_PRIORITY := [
 	DomainId.AMBITION,
 ]
 
-const STARTING_CORRUPTION := 8
+# V1h : starting reserve dropped from 8 to 5 to tighten the early-game
+# tempo. The Entrave action also no longer pays from the reserve
+# (it's positional now — see GameRules.linked_domains_for_response),
+# so 5 is enough for the typical Investir / Provoquer opening lines.
+const STARTING_CORRUPTION := 5
 
 
 func opponent(p: int) -> int:

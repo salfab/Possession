@@ -3150,11 +3150,18 @@ func _update_fullscreen_entraver_button() -> void:
 		_fullscreen_card_entraver_btn.visible = false
 		return
 	_fullscreen_card_entraver_btn.visible = true
-	var cost: int = GameRules.entrave_cost(state, p, st)
-	var cs: String = "s" if cost > 1 else ""
-	_fullscreen_card_entraver_btn.text = I18n.t("ui.btn.entraver_cost", [cost, cs])
+	# V1h : the button label depends on how many legal payment Domains
+	# the active demon has. One option → name it ; multiple → generic
+	# label, the picker dialog will let them choose ; zero is impossible
+	# here because `legal == true` already guarantees the option set.
+	var options: Array = GameRules.entrave_payment_options(state, p, st)
+	if options.size() == 1:
+		var dom_str: String = String(GameEnums.DOMAIN_NAMES.get(options[0], "?"))
+		_fullscreen_card_entraver_btn.text = I18n.t("ui.btn.entraver_cost", [dom_str])
+	else:
+		_fullscreen_card_entraver_btn.text = I18n.t("ui.btn.entraver_cost_generic")
 	_fullscreen_card_entraver_btn.disabled = not legal
-	_fullscreen_card_entraver_btn.tooltip_text = why
+	_fullscreen_card_entraver_btn.tooltip_text = why if not legal else I18n.t("ui.btn.entraver.tooltip")
 
 
 func _on_fullscreen_card_entraver_pressed() -> void:
@@ -3163,7 +3170,19 @@ func _on_fullscreen_card_entraver_pressed() -> void:
 	var st: int = int(_fullscreen_card_binding.get("station", -1))
 	if st < 0:
 		return
-	var result := manager.perform_action(GameEnums.ActionId.ENTRAVER, {"station": st})
+	var p: int = state.active_player
+	var options: Array = GameRules.entrave_payment_options(state, p, st)
+	if options.is_empty():
+		return
+	if options.size() == 1:
+		_do_entraver(st, options[0])
+	else:
+		_show_entrave_payment_picker(st, options)
+
+
+func _do_entraver(station: int, payment_domain: int) -> void:
+	var result := manager.perform_action(GameEnums.ActionId.ENTRAVER,
+		{"station": station, "payment_domain": payment_domain})
 	_handle_action_result(result)
 	if result.get("ok", false):
 		# Reflect the new state on the binding, the banner, and the
@@ -3171,9 +3190,35 @@ func _on_fullscreen_card_entraver_pressed() -> void:
 		_fullscreen_card_binding["impedita"] = true
 		var t_dom: int = int(_fullscreen_card_binding.get("target_domain", -1))
 		var t_pl: int = int(_fullscreen_card_binding.get("target_player", -1))
-		_fullscreen_card_node.flip_to_liturgy(st, true, t_dom, t_pl)
+		_fullscreen_card_node.flip_to_liturgy(station, true, t_dom, t_pl)
 		_update_fullscreen_flip_button()
 	_refresh_all()
+
+
+# V1h : when several linked Domains qualify as payment sources, ask the
+# user which one to drain. Each option becomes a button in the dialog ;
+# clicking commits the Entrave with that payment_domain. Cancel closes
+# the dialog without acting.
+func _show_entrave_payment_picker(station: int, options: Array) -> void:
+	var dlg := AcceptDialog.new()
+	dlg.exclusive = true
+	dlg.title = I18n.t("ui.dialog.title.entrave_pick")
+	dlg.dialog_text = I18n.t("ui.dialog.entrave_pick_prompt")
+	dlg.ok_button_text = I18n.t("ui.dialog.close")
+	add_child(dlg)
+	_apply_canvas_scale_to_subwindow(dlg)
+	for d_id in options:
+		var dom_str: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
+		var btn := dlg.add_button(dom_str, true, "pick_%d" % int(d_id))
+		var captured_d: int = int(d_id)
+		var captured_dlg := dlg
+		var captured_st := station
+		btn.pressed.connect(func():
+			captured_dlg.hide()
+			captured_dlg.queue_free()
+			_do_entraver(captured_st, captured_d)
+		)
+	dlg.popup_centered()
 
 
 # Tap or swipe anywhere on the fullscreen card area flips it. We treat any

@@ -28,6 +28,12 @@ func run_all() -> Dictionary:
 	_test_station_six()
 	_test_simonie_infamy()
 	_test_confession_pending_decision()
+	# V1h additions
+	_test_starting_corruption()
+	_test_puiser()
+	_test_free_exploit_per_player()
+	_test_linked_domains()
+	_test_anchor_unchanged()
 	return {
 		"pass": pass_count, "fail": fail_count,
 		"total": pass_count + fail_count, "lines": results,
@@ -285,24 +291,196 @@ func _test_transgressions() -> void:
 # Entrave
 # ---------------------------------------------------------------------------
 func _test_entrave() -> void:
+	# V1h : Entrave is positional. The active demon removes 1 of his
+	# Corruptions from a linked, controlled Domain on the board ; the
+	# reserve is untouched.
 	var s := _new_state()
 	s.current_station = GameEnums.StationId.MURMURES
 	s.available_corruption[GameEnums.PlayerId.RED] = 5
-	# Entraver la Réponse actuelle coûte 1
-	_assert(GameRules.entrave_cost(s, GameEnums.PlayerId.RED, GameEnums.StationId.MURMURES) == 1,
-		"Entrave actuelle coûte 1")
-	# Entraver dans 2 prochaines Stations coûte 2
-	_assert(GameRules.entrave_cost(s, GameEnums.PlayerId.RED, GameEnums.StationId.TENTATION) == 2,
-		"Entrave future coûte 2")
-	# Pose
-	var r := ActionResolver.entraver(s, GameEnums.PlayerId.RED, GameEnums.StationId.MURMURES)
+	# No Domain corruption yet → no linked controlled Domain → illegal
+	_assert(not GameRules.can_entraver(s, GameEnums.PlayerId.RED, GameEnums.StationId.MURMURES),
+		"V1h : pas de Domaine lié contrôlé -> Entrave illégale")
+	# Set Foi controlled by Red with 2 Corruptions on the board.
+	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.RED, 2)
+	_assert(s.controller_of(GameEnums.DomainId.FOI) == GameEnums.PlayerId.RED,
+		"Setup : Rouge contrôle Foi 2/0")
+	_assert(GameRules.can_entraver(s, GameEnums.PlayerId.RED, GameEnums.StationId.MURMURES),
+		"V1h : Domaine lié + contrôlé + 1+ Corr. -> Entrave légale")
+	# Pose : reserve untouched, board Corruption decremented.
+	var reserve_before: int = s.available_corruption[GameEnums.PlayerId.RED]
+	var r := ActionResolver.entraver(s, GameEnums.PlayerId.RED,
+		GameEnums.StationId.MURMURES, GameEnums.DomainId.FOI)
 	_assert(r["ok"], "Entrave actuelle OK")
+	_assert(s.available_corruption[GameEnums.PlayerId.RED] == reserve_before,
+		"V1h : la Réserve n'est pas dépensée")
+	_assert(s.corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.RED) == 1,
+		"V1h : 1 Corruption retirée du Domaine payé")
 	# Deuxième Entrave sur la même Station -> illégale
 	_assert(not GameRules.can_entraver(s, GameEnums.PlayerId.BLUE, GameEnums.StationId.MURMURES),
 		"Pas de double Entrave sur une Réponse")
 	# L'Exorcisme final ne peut pas être Entravé
 	_assert(not GameRules.can_entraver(s, GameEnums.PlayerId.RED, GameEnums.StationId.EXORCISME),
 		"L'Exorcisme final ne peut être Entravé")
+	# Entrave qui fait perdre le contrôle : Red 1, Blue 1 sur Ambition,
+	# Red contrôle parce qu'il a égalité ? Non — controller_of sur égalité
+	# renvoie NONE. Setup différent : Red 2, Blue 1 → Red contrôle. Après
+	# Entrave Red 1, Blue 1 → personne ne contrôle plus, autorisé.
+	var s2 := _new_state()
+	s2.current_station = GameEnums.StationId.TENTATION
+	s2.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 2)
+	s2.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.BLUE, 1)
+	_assert(s2.controller_of(GameEnums.DomainId.AMBITION) == GameEnums.PlayerId.RED,
+		"Setup : Rouge contrôle Ambition 2/1")
+	var r2 := ActionResolver.entraver(s2, GameEnums.PlayerId.RED,
+		GameEnums.StationId.TENTATION, GameEnums.DomainId.AMBITION)
+	_assert(r2["ok"], "Entrave Tentation via Ambition OK")
+	_assert(s2.controller_of(GameEnums.DomainId.AMBITION) != GameEnums.PlayerId.RED,
+		"V1h : sacrifier la Corruption peut faire perdre le contrôle")
+
+
+# V1h : starting Corruption pool dropped from 8 to 5.
+func _test_starting_corruption() -> void:
+	var s := _new_state()
+	_assert(GameEnums.STARTING_CORRUPTION == 5,
+		"V1h : STARTING_CORRUPTION == 5")
+	_assert(s.available_corruption[GameEnums.PlayerId.RED] == 5,
+		"Nouvelle partie : Rouge à 5 Corruptions")
+	_assert(s.available_corruption[GameEnums.PlayerId.BLUE] == 5,
+		"Nouvelle partie : Violet à 5 Corruptions")
+
+
+# V1h : Puiser dans l'Ombre — last-resort, only when reserve is exactly 0.
+func _test_puiser() -> void:
+	var s := _new_state()
+	s.available_corruption[GameEnums.PlayerId.RED] = 0
+	_assert(GameRules.can_puiser(s, GameEnums.PlayerId.RED),
+		"Puiser légal à 0 Corruption")
+	s.available_corruption[GameEnums.PlayerId.RED] = 1
+	_assert(not GameRules.can_puiser(s, GameEnums.PlayerId.RED),
+		"Puiser illégal à 1+ Corruption")
+	# Effet exact : +1 Corruption, aucun Domaine modifié, aucun Ascendant.
+	var s2 := _new_state()
+	s2.available_corruption[GameEnums.PlayerId.RED] = 0
+	var ascendant_before := s2.ascendant
+	# Snapshot board state for every Domain.
+	var board_before: Dictionary = {}
+	for d_id in DomainData.DOMAINS:
+		board_before[d_id] = [
+			s2.corruption_in(d_id, GameEnums.PlayerId.RED),
+			s2.corruption_in(d_id, GameEnums.PlayerId.BLUE),
+			s2.domain(d_id).seal_owner,
+		]
+	var r := ActionResolver.puiser(s2, GameEnums.PlayerId.RED)
+	_assert(r["ok"], "Puiser exécutée")
+	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == 1,
+		"Puiser : exactement +1 Corruption")
+	_assert(s2.ascendant == ascendant_before,
+		"Puiser : Ascendant inchangé")
+	for d_id in DomainData.DOMAINS:
+		var arr: Array = board_before[d_id]
+		_assert(s2.corruption_in(d_id, GameEnums.PlayerId.RED) == arr[0],
+			"Puiser : %s Rouge inchangé" % GameEnums.DOMAIN_NAMES[d_id])
+		_assert(s2.corruption_in(d_id, GameEnums.PlayerId.BLUE) == arr[1],
+			"Puiser : %s Violet inchangé" % GameEnums.DOMAIN_NAMES[d_id])
+		_assert(s2.domain(d_id).seal_owner == arr[2],
+			"Puiser : %s Sceau inchangé" % GameEnums.DOMAIN_NAMES[d_id])
+
+
+# V1h §6 : free start-of-station Exploit counts as a normal exploit for
+# the demon who took it ; same demon can't re-exploit the same Domain
+# in the Station, but the OTHER demon can if he later takes control.
+func _test_free_exploit_per_player() -> void:
+	var s := _new_state()
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 2)
+	# Free exploit by Red.
+	var r := ActionResolver.exploiter(s, GameEnums.PlayerId.RED,
+		GameEnums.DomainId.AMBITION, true)
+	_assert(r["ok"], "Free exploit OK")
+	_assert(s.domain(GameEnums.DomainId.AMBITION).exploited_by_red_this_station,
+		"Free exploit marque le Domaine comme exploité pour le démon actif")
+	_assert(not GameRules.can_exploiter(s, GameEnums.PlayerId.RED,
+		GameEnums.DomainId.AMBITION),
+		"Le même démon ne peut pas ré-exploiter ce Domaine cette Station")
+	# Other demon takes control (3 vs 0 → Blue dominant) and can still exploit.
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 0)
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.BLUE, 3)
+	_assert(s.controller_of(GameEnums.DomainId.AMBITION) == GameEnums.PlayerId.BLUE,
+		"Setup : Violet contrôle après inversion")
+	_assert(GameRules.can_exploiter(s, GameEnums.PlayerId.BLUE,
+		GameEnums.DomainId.AMBITION),
+		"L'autre démon peut exploiter plus tard s'il prend le contrôle")
+
+
+# V1h §3 : linked Domains for each Liturgical Response.
+func _test_linked_domains() -> void:
+	var s := _new_state()
+	# I — Signe de croix : tous les Domaines.
+	var i_links: Array = GameRules.linked_domains_for_response(s,
+		GameEnums.StationId.MURMURES, GameEnums.PlayerId.RED)
+	_assert(i_links.size() == DomainData.DOMAINS.size(),
+		"Liens I : tous les Domaines")
+	# II — Examen : Ambition + Désir.
+	var ii_links: Array = GameRules.linked_domains_for_response(s,
+		GameEnums.StationId.TENTATION, GameEnums.PlayerId.RED)
+	_assert(ii_links.size() == 2 \
+			and ii_links.has(GameEnums.DomainId.AMBITION) \
+			and ii_links.has(GameEnums.DomainId.DESIR),
+		"Liens II : Ambition + Désir")
+	# III — Contrition : seuls les Domaines transgressés.
+	var ti := GameState.TransgressionInstance.new()
+	ti.def_id = TransgressionData.T_NEPOTISME
+	ti.owner = GameEnums.PlayerId.RED
+	ti.face = GameEnums.TransgressionFace.SCANDALE
+	ti.origin_domain = GameEnums.DomainId.AMBITION
+	s.domain(GameEnums.DomainId.AMBITION).scandals.append(ti)
+	var iii_links: Array = GameRules.linked_domains_for_response(s,
+		GameEnums.StationId.CHUTE, GameEnums.PlayerId.RED)
+	_assert(iii_links == [GameEnums.DomainId.AMBITION],
+		"Liens III : Domaines transgressés (Ambition seulement)")
+	# IV — Confession : Domaines d'origine des Transgressions du joueur actif.
+	# Ti at AMBITION belongs to RED → IV for RED returns [AMBITION].
+	var iv_red: Array = GameRules.linked_domains_for_response(s,
+		GameEnums.StationId.CONFESSION, GameEnums.PlayerId.RED)
+	_assert(iv_red == [GameEnums.DomainId.AMBITION],
+		"Liens IV : origines des Transgressions de Rouge")
+	# IV for BLUE: empty since BLUE has no placed Transgressions.
+	var iv_blue: Array = GameRules.linked_domains_for_response(s,
+		GameEnums.StationId.CONFESSION, GameEnums.PlayerId.BLUE)
+	_assert(iv_blue.is_empty(),
+		"Liens IV : Violet sans Transgression -> aucun Domaine")
+	# V — Communion : Foi + Volonté.
+	var v_links: Array = GameRules.linked_domains_for_response(s,
+		GameEnums.StationId.OFFICE, GameEnums.PlayerId.RED)
+	_assert(v_links.size() == 2 \
+			and v_links.has(GameEnums.DomainId.FOI) \
+			and v_links.has(GameEnums.DomainId.VOLONTE),
+		"Liens V : Foi + Volonté")
+	# VI — Exorcisme : aucun (impossible à Entraver).
+	var vi_links: Array = GameRules.linked_domains_for_response(s,
+		GameEnums.StationId.EXORCISME, GameEnums.PlayerId.RED)
+	_assert(vi_links.is_empty(),
+		"Liens VI : aucun Domaine (Exorcisme inentravable)")
+
+
+# V1h §7 : Anchor unchanged. 2+ sealed Domains OR Will sealed AND transgressed.
+func _test_anchor_unchanged() -> void:
+	# 2 Sceaux : Ancrage rempli.
+	var s := _new_state()
+	s.domain(GameEnums.DomainId.AMBITION).seal_owner = GameEnums.PlayerId.RED
+	s.domain(GameEnums.DomainId.FOI).seal_owner = GameEnums.PlayerId.BLUE
+	var r := EndGameResolver.check_rupture(s)
+	_assert(r.ancrage, "Ancrage : 2 Domaines scellés -> rempli")
+	# Volonté scellée + transgressée : Ancrage rempli même avec 1 seul Sceau.
+	var s2 := _new_state()
+	s2.domain(GameEnums.DomainId.VOLONTE).seal_owner = GameEnums.PlayerId.RED
+	var ti2 := GameState.TransgressionInstance.new()
+	ti2.def_id = TransgressionData.T_PACTE
+	ti2.owner = GameEnums.PlayerId.BLUE
+	ti2.face = GameEnums.TransgressionFace.SCANDALE
+	ti2.origin_domain = GameEnums.DomainId.VOLONTE
+	s2.domain(GameEnums.DomainId.VOLONTE).scandals.append(ti2)
+	var r2 := EndGameResolver.check_rupture(s2)
+	_assert(r2.ancrage, "Ancrage : Volonté scellée + transgressée -> rempli")
 
 
 # ---------------------------------------------------------------------------

@@ -48,7 +48,9 @@ func perform_action(action: int, kwargs: Dictionary = {}) -> Dictionary:
 		GameEnums.ActionId.FISSURER:
 			result = ActionResolver.fissurer(state, p, kwargs.get("domain", -1))
 		GameEnums.ActionId.ENTRAVER:
-			result = ActionResolver.entraver(state, p, kwargs.get("station", -1))
+			result = ActionResolver.entraver(state, p,
+				kwargs.get("station", -1),
+				kwargs.get("payment_domain", -1))
 		GameEnums.ActionId.PASSER:
 			result = ActionResolver.passer(state, p)
 		GameEnums.ActionId.PUISER:
