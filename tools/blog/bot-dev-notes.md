@@ -78,12 +78,16 @@ bien. On a besoin de statistiques."
   - Correction clé : `GameState.to_dict()` stockait les Dictionnaires par référence → le clone
     partageait `available_corruption` avec l'original → toutes les évaluations corrompaient l'état réel
   - Eval redesignée : composante Rupture explicite + infamies > scandales → AMPLIFIER vaut la peine
-- [x] Premier benchmark MCTSBot vs HeuristicBot : 0% R / 0% B / 100% Église sur 10 parties
-  - L'Église gagne ~92% des parties même avec deux bots raisonnables
-  - 10 parties insuffisant pour discriminer — à augmenter (mais lent : 200 ms × 10 = 2 s)
-  - Assertion `wins_red >= wins_blue` passe trivialement (0 ≥ 0)
-- [ ] Augmenter le benchmark MCTS à 50 parties pour avoir une estimation stable
-- [ ] Combien d'itérations MCTS en 200 ms sur iPad ?
+- [x] Tuning MCTS — trois leviers combinés :
+  - `ROLLOUT_STATIONS 3→1` : 34→71 itérations/200 ms (×2) — rollouts plus courts = plus nombreux
+  - **Eval-prior** : chaque bras démarre avec 1 visite virtuelle scored par Eval → plus d'exploration aveugle
+  - `C_UCT √2→0.7` : avec ~70 itérations et ~10 bras, √2 sur-explore ; 0.7 exploite plus vite
+- [x] Benchmark MCTSBot(R) vs HeuristicBot(B) sur 30 parties : Rouge 33% / Violet 13% / Église 53%
+  - Baseline HeuristicBot vs Random : Rouge 4% / Violet 0% / Église 96%
+  - L'Église perd sa domination : 96% → 53% quand MCTSBot joue
+  - MCTSBot gagne 33% des parties contre un HeuristicBot — 8× plus que le greedy seul
+- [x] 71 itérations MCTS en 200 ms sur Linux Docker (iPad probablement similaire sur M-series)
+- [ ] Mesurer les itérations réelles sur iPad (M-series vs Docker Linux x86)
 - [ ] Anecdote : un truc que le bot a "découvert" qu'on n'avait pas anticipé
 
 ## Péripétie technique (bon matériel pour l'article)

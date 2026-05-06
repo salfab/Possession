@@ -5,10 +5,11 @@ extends BotBase
 # Rollouts use RandomBot up to ROLLOUT_STATIONS station-transitions deep,
 # then score with Eval. Pure GDScript, no threads, fully synchronous.
 
-const C_UCT: float = 1.41421356    # sqrt(2) — standard UCT exploration constant
-const ROLLOUT_STATIONS: int = 3    # max station-transitions per rollout
+const C_UCT: float = 0.7            # reduced from sqrt(2): low-budget exploitation bias
+const ROLLOUT_STATIONS: int = 1    # 1 station → ~2× more iterations than 3; enough look-ahead
 
 var budget_ms: int = 200
+var last_iterations: int = 0       # rollouts completed in last pick_action call
 var _rollout_bot := RandomBot.new()
 
 
@@ -22,12 +23,16 @@ func pick_action(state: GameState, player: int) -> Dictionary:
 	var n := actions.size()
 	var visits: Array = []
 	var totals: Array = []
-	for _i in n:
-		visits.append(0)
-		totals.append(0.0)
+
+	# Eval-prior initialisation: seed each arm with 1 virtual visit so UCB starts informed.
+	# Costs n clones upfront but eliminates blind exploration of obviously bad actions.
+	for i in n:
+		var prior := _eval_after_action(state, player, actions[i])
+		visits.append(1)
+		totals.append(prior)
 
 	var start_ms := Time.get_ticks_msec()
-	var total_visits := 0
+	var total_visits := n   # n virtual visits already done
 
 	while Time.get_ticks_msec() - start_ms < budget_ms:
 		var sel := _select_ucb1(visits, totals, n, total_visits)
@@ -35,6 +40,8 @@ func pick_action(state: GameState, player: int) -> Dictionary:
 		visits[sel] += 1
 		totals[sel] += value
 		total_visits += 1
+
+	last_iterations = total_visits
 
 	# Most-visited arm is the most reliable choice.
 	# Tie-break by mean value; fall back to Eval if budget elapsed before first rollout.
@@ -69,6 +76,19 @@ func _best_arm(visits: Array, totals: Array, n: int) -> int:
 			best_mean = mean
 			best = i
 	return best
+
+
+func _eval_after_action(state: GameState, player: int, action: Dictionary) -> float:
+	var s := GameState.new()
+	s.from_dict(state.to_dict())
+	var tm := TurnManager.new(s, false)
+	var initiative: int = GameEnums.STATION_INITIATIVE[s.current_station]
+	if s.active_player != initiative:
+		tm._pulse_actions_done[initiative] = true
+	var result := tm.perform_action(action["action_id"], action.get("kwargs", {}))
+	if not result.get("ok", false):
+		return Eval.score(s, player)
+	return Eval.score(s, player)
 
 
 func _simulate(state: GameState, player: int, action: Dictionary) -> float:
