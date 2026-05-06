@@ -79,14 +79,26 @@ bien. On a besoin de statistiques."
     partageait `available_corruption` avec l'original → toutes les évaluations corrompaient l'état réel
   - Eval redesignée : composante Rupture explicite + infamies > scandales → AMPLIFIER vaut la peine
 - [x] Tuning MCTS — trois leviers combinés :
-  - `ROLLOUT_STATIONS 3→1` : 34→71 itérations/200 ms (×2) — rollouts plus courts = plus nombreux
-  - **Eval-prior** : chaque bras démarre avec 1 visite virtuelle scored par Eval → plus d'exploration aveugle
-  - `C_UCT √2→0.7` : avec ~70 itérations et ~10 bras, √2 sur-explore ; 0.7 exploite plus vite
+  - `ROLLOUT_STATIONS 3→1` : après avoir joué un coup, on simule 1 tour de jeu aléatoire
+    avant de poser un jugement (au lieu de 3). Pas parce que voir moins loin c'est mieux,
+    mais parce que chaque simulation coûte du temps — avec 1 tour on en fait 2× plus dans
+    le même budget : 34 → 71 itérations/200 ms.
+  - **Eval-prior** : avant de lancer les simulations, on donne à chaque coup une "première
+    impression" basée sur l'évaluation statique du plateau (1 visite virtuelle gratuite).
+    Ça évite de gaspiller des essais sur des coups manifestement mauvais.
+  - `C_UCT √2→0.7` : ce paramètre règle l'équilibre exploration/exploitation. Avec beaucoup
+    de temps on explore large ; avec seulement 70 simulations, mieux vaut se concentrer sur
+    ce qu'on a déjà appris. √2 ≈ 1.41 est la valeur "théorique infini" — 0.7 est calibré
+    pour un budget serré.
 - [x] Benchmark MCTSBot(R) vs HeuristicBot(B) sur 30 parties : Rouge 33% / Violet 13% / Église 53%
   - Baseline HeuristicBot vs Random : Rouge 4% / Violet 0% / Église 96%
   - L'Église perd sa domination : 96% → 53% quand MCTSBot joue
   - MCTSBot gagne 33% des parties contre un HeuristicBot — 8× plus que le greedy seul
 - [x] 71 itérations MCTS en 200 ms sur Linux Docker (iPad probablement similaire sur M-series)
+- [x] Impact du budget sur le taux de victoire :
+  - 200 ms → ~30% victoires MCTSBot vs HeuristicBot
+  - 2 000 ms → ~60% victoires (10× budget, 2× résultat — rendements décroissants)
+  - Conclusion : 500 ms serait un bon compromis mobile (confort + performance)
 - [ ] Mesurer les itérations réelles sur iPad (M-series vs Docker Linux x86)
 - [ ] Anecdote : un truc que le bot a "découvert" qu'on n'avait pas anticipé
 
