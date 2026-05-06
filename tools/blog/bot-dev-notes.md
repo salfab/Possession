@@ -1,0 +1,90 @@
+# Notes — article "Donner un cerveau aux démons"
+
+## Ton voulu
+Nonchalant, marrant, pas prise de tête, humble — mais qui assume ses accomplissements
+funky sans fausse modestie. Le narrateur ne se prend pas au sérieux mais ce qu'il
+fait est quand même bien cool. Penser : "tiens, j'ai fait un truc sympa, laisse-moi
+te raconter" plutôt que "voici ma thèse de doctorat sur les algorithmes de recherche
+arborescente".
+
+Fil conducteur personnel à tisser dans l'article :
+- École d'ingénieur → quelques algos d'IA vus en cours, il y a longtemps
+- Seul souvenir solide : **MiniMax** (et pourquoi il ne passe pas à l'échelle)
+- Monte Carlo vu dans un contexte inattendu : **estimation de user stories en Scrum**
+  (avec une Scrum Master formidable à la Vaudoise — Monte Carlo pour remplacer les
+  story points, l'idée que l'incertitude se *simule* plutôt que s'estime)
+- Réseau de neurones : le grand mystère à élucider… peut-être dans un second article
+
+---
+
+## Moment 1 — Pourquoi pas MiniMax ?
+
+Possession : ~30 coups légaux par pulsation, 46 demi-coups de profondeur totale.
+MiniMax profondeur 4 = 30⁴ ≈ 800 000 nœuds. Même avec alpha-bêta, trop lent sur
+mobile. Le jeu est trop buissonnant pour une recherche exhaustive.
+
+**Angle article** : "J'ai sorti MiniMax de ma mémoire d'ingénieur — et j'ai réalisé
+pourquoi il ne fonctionnerait pas ici."
+
+---
+
+## Moment 2 — Monte Carlo, ou comment jouer 500 parties dans sa tête
+
+MCTS ne calcule pas tout : il *sample* des trajectoires aléatoires/heuristiques,
+accumule des stats win/loss, et concentre les itérations sur les branches prometteuses
+(formule UCT). Budget-time plutôt que profondeur fixe → "anytime", parfait mobile.
+
+Connexion Scrum : dans les deux cas, on remplace une *estimation ponctuelle fragile*
+par une *distribution de résultats simulés*. L'incertitude n'est plus niée, elle est
+modélisée.
+
+**Angle article** : le moment "ah mais c'est exactement la même idée que ce qu'on
+faisait avec les user stories !"
+
+---
+
+## Moment 3 — L'architecture en couches
+
+```
+ActionEnumerator   → liste les coups légaux (20-50 par pulsation)
+Eval               → score [-1, +1] d'un état (heuristique 5 composantes)
+HeuristicBot       → greedy 1-ply : clone + évalue chaque coup, prend le meilleur
+RandomBot          → sample uniforme (sert de plancher de test)
+MCTSBot            → le vrai cerveau (à venir)
+```
+
+Chaque couche est testable indépendamment. `ActionEnumerator` seul permet déjà
+de vérifier que les règles sont correctement encodées.
+
+---
+
+## Moment 4 — Tester sans UI
+
+Godot 4 en mode `--headless` : le moteur charge le projet (autoloads, règles)
+sans ouvrir de fenêtre. `BotTestRunner.run_all()` joue 100 parties
+RandomBot vs RandomBot en pur GDScript — environ 30 secondes via Docker.
+
+**Angle article** : "On n'a pas besoin d'une interface pour savoir si un bot joue
+bien. On a besoin de statistiques."
+
+---
+
+## À compléter
+
+- [ ] Résultats des 100 parties RandomBot (taux victoire rouge/bleu, durée moyenne)
+- [ ] Premier benchmark HeuristicBot vs RandomBot (cible : ≥ 90 % victoires)
+- [ ] Premier benchmark MCTSBot vs HeuristicBot (cible : ≥ 70 %)
+- [ ] Combien d'itérations MCTS en 200 ms sur iPad ?
+- [ ] Anecdote : un truc que le bot a "découvert" qu'on n'avait pas anticipé
+
+---
+
+## Idée de structure article
+
+1. Le jeu et le défi ("les règles sont solides, reste à donner un cerveau aux démons")
+2. MiniMax : pourquoi c'est insuffisant ici
+3. La connexion Scrum / Monte Carlo (le moment de reconnaissance)
+4. Comment MCTS fonctionne — les 4 étapes
+5. L'architecture technique (sans noyer le lecteur)
+6. Les résultats : est-ce que ça joue bien ?
+7. Ce qu'on n'a pas fait (NN) — et pourquoi c'est OK

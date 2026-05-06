@@ -14,6 +14,7 @@ var _pending_advance_to_station: int = -1   # set when waiting for Confession de
 # Set after the liturgical response of a station resolves; the UI must
 # acknowledge before the game advances to the next station.
 var pending_liturgy: Dictionary = {}
+var _bot_running: bool = false
 
 func _init(s: GameState, fresh_game: bool = true) -> void:
 	state = s
@@ -68,6 +69,7 @@ func _advance_after_action() -> void:
 	var other := GameEnums.opponent(state.active_player)
 	if not _pulse_actions_done[other]:
 		state.active_player = other
+		_check_bot_turn()
 		return
 	# Both acted -> end of pulse
 	_end_pulse()
@@ -98,6 +100,7 @@ func _end_station() -> void:
 func acknowledge_liturgy() -> void:
 	pending_liturgy = {}
 	_try_advance_after_liturgy()
+	_check_bot_turn()
 
 
 func _try_advance_after_liturgy() -> void:
@@ -195,6 +198,7 @@ func resolve_decision(picks: Dictionary) -> Dictionary:
 	# If the queue is empty and we were waiting to advance the station, try.
 	# (Will no-op if the liturgy dialog hasn't been acknowledged yet.)
 	_try_advance_after_liturgy()
+	_check_bot_turn()
 	return ActionResolver.ok("Décision résolue.")
 
 
@@ -237,3 +241,52 @@ func _drain_pending_decisions() -> void:
 				resolve_decision(pick)
 		else:
 			break
+
+
+func _check_bot_turn() -> void:
+	if _bot_running:
+		return
+	_bot_running = true
+	while true:
+		if state.has_pending_decisions():
+			var dec: GameState.PendingDecision = state.pending_decisions[0]
+			if not state.bot_for_player.has(dec.player):
+				break
+			_drain_one_for_bot(dec)
+			continue
+		if state.game_over or not pending_liturgy.is_empty():
+			break
+		if not active_player_must_act():
+			break
+		if not state.bot_for_player.has(state.active_player):
+			break
+		var bot: BotBase = state.bot_for_player[state.active_player]
+		var decision := bot.pick_action(state, state.active_player)
+		var result := perform_action(decision["action_id"], decision.get("kwargs", {}))
+		if not result.get("ok", false):
+			break
+	_bot_running = false
+
+
+func _drain_one_for_bot(dec: GameState.PendingDecision) -> void:
+	if dec.kind == "free_exploit":
+		var opts: Array = dec.data.get("options", [])
+		if opts.is_empty():
+			resolve_decision({"skip": true})
+		else:
+			resolve_decision({"domain": opts[0]})
+	elif dec.kind == "confession":
+		var avail := LiturgyResolver.available_confession_kinds(state, dec)
+		if avail.is_empty():
+			state.pending_decisions.pop_front()
+			_try_advance_after_liturgy()
+		else:
+			var pick := {"kind": avail[0]}
+			if avail[0] != "lose2":
+				for d_id in DomainData.DOMAINS:
+					if state.controller_of(d_id) == dec.player and (avail[0] == "penitence" or state.domain(d_id).seal_owner == dec.player):
+						pick["domain"] = d_id
+						break
+			resolve_decision(pick)
+	else:
+		state.pending_decisions.pop_front()

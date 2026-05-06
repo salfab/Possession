@@ -151,6 +151,7 @@ var log: Array = []
 var game_over: bool = false
 var winner: int = GameEnums.PlayerId.NONE
 var winner_reason: String = ""
+var bot_for_player: Dictionary = {}
 
 
 func _init() -> void:
