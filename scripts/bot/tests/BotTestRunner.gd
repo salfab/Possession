@@ -19,6 +19,7 @@ func run_all() -> Dictionary:
 	_benchmark_heuristic_vs_random()
 	_test_mcts_picks_action()
 	_benchmark_mcts_vs_heuristic()
+	_benchmark_mcts_vs_mcts()
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
 
@@ -195,3 +196,39 @@ func _benchmark_mcts_vs_heuristic() -> void:
 	# MCTSBot should win at least as many demon-wins as HeuristicBot.
 	_assert(wins_red >= wins_blue, "Benchmark : MCTSBot gagne au moins autant que Heuristic",
 		"Rouge=%d Violet=%d" % [wins_red, wins_blue])
+
+
+func _benchmark_mcts_vs_mcts() -> void:
+	var n := 20
+	var wins_red := 0
+	var wins_blue := 0
+	var draws := 0
+	var errors := 0
+	var max_liturgy := 20
+	for _i in range(n):
+		var s := GameState.new()
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED]  = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty():
+				tm.acknowledge_liturgy()
+			else:
+				break
+			turns += 1
+		if not s.game_over:
+			errors += 1
+		elif s.winner == GameEnums.PlayerId.RED:
+			wins_red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE:
+			wins_blue += 1
+		else:
+			draws += 1
+	results.append("  [bench] MCTSBot(R) vs MCTSBot(B) sur %d parties :" % n)
+	results.append("          Rouge %d/%d (%.0f%%)  Violet %d/%d (%.0f%%)  Église %d/%d (%.0f%%)" % [
+		wins_red, n, 100.0 * wins_red / n,
+		wins_blue, n, 100.0 * wins_blue / n,
+		draws, n, 100.0 * draws / n])
+	_assert(errors == 0, "Benchmark MCTS symétrique : 0 partie non terminée")
