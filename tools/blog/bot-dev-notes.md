@@ -115,7 +115,7 @@ si le premier domaine contrôlé était déjà en pénitence. 135/135 maintenant
 
 ---
 
-## Idée de structure article
+## Idée de structure article 1 — "Donner un cerveau aux démons"
 
 1. Le jeu et le défi ("les règles sont solides, reste à donner un cerveau aux démons")
 2. MiniMax : pourquoi c'est insuffisant ici
@@ -126,3 +126,20 @@ si le premier domaine contrôlé était déjà en pénitence. 135/135 maintenant
 7. Ce qu'on n'a pas fait (NN) — et pourquoi c'est OK pour l'instant
    (Note : faisable — soit via ONNX + GDExtension, soit poids JSON + forward pass GDScript pur ;
     mais MCTS suffit pour ce jeu et le NN serait un article entier à lui seul)
+
+---
+
+## Idée de structure article 2 — "Laisser les démons tester le jeu"
+
+Thématique : le bot comme outil de design, pas seulement comme adversaire.
+
+Angle : on veut ajouter des "modificateurs de liturgie" pour la rejouabilité
+(tirés au setup, pas d'aléatoire en cours de partie — puzzle stratégique différent
+à chaque partie). Comment savoir si un modificateur est équilibré ?
+→ On fait jouer MCTSBot vs MCTSBot 100 parties avec le modificateur actif
+→ On vérifie symétrie Rouge/Violet et plage Église raisonnable (30-70%)
+→ Anecdote potentielle : un modificateur "anodin" que le bot a cassé en 50 parties
+
+Fil conducteur : les studios AAA font ça avec des milliers de bots.
+Ici on le fait en ~4 minutes de Docker sur un jeu indie solo.
+Le bot qu'on a construit pour jouer devient un outil de QA gratuit.
