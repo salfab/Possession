@@ -16,6 +16,7 @@ func run_all() -> Dictionary:
 	_test_eval_approx_zero_sum()
 	_test_heuristic_bot_picks_action()
 	_test_random_bot_100_games()
+	_benchmark_heuristic_vs_random()
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
 
@@ -104,3 +105,41 @@ func _test_random_bot_100_games() -> void:
 			errors += 1
 	_assert(errors == 0, "100 parties RandomBot vs RandomBot sans erreur",
 		"erreurs : %d" % errors)
+
+
+func _benchmark_heuristic_vs_random() -> void:
+	var n := 100
+	var wins_red := 0
+	var wins_blue := 0
+	var draws := 0
+	var errors := 0
+	var max_liturgy := 20
+	for _i in range(n):
+		var s := GameState.new()
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED]  = HeuristicBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = RandomBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty():
+				tm.acknowledge_liturgy()
+			else:
+				break
+			turns += 1
+		if not s.game_over:
+			errors += 1
+		elif s.winner == GameEnums.PlayerId.RED:
+			wins_red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE:
+			wins_blue += 1
+		else:
+			draws += 1
+	var win_pct: float = 100.0 * wins_red / n
+	results.append("  [bench] HeuristicBot(R) vs RandomBot(B) sur %d parties :" % n)
+	results.append("          Rouge %d%%  Violet %d%%  Nul %d%%  Erreurs %d" % [
+		wins_red, wins_blue, draws, errors])
+	_assert(errors == 0, "Benchmark : 0 partie non terminée")
+	# Church wins ~90% in random play; when a demon wins, HeuristicBot should dominate.
+	_assert(wins_red > wins_blue, "Benchmark : HeuristicBot gagne plus que Random",
+		"Rouge=%d Violet=%d" % [wins_red, wins_blue])

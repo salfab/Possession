@@ -71,11 +71,28 @@ bien. On a besoin de statistiques."
 
 ## À compléter
 
-- [ ] Résultats des 100 parties RandomBot (taux victoire rouge/bleu, durée moyenne)
-- [ ] Premier benchmark HeuristicBot vs RandomBot (cible : ≥ 90 % victoires)
+- [x] 100 parties RandomBot vs RandomBot : toutes terminent (0 erreur)
+- [x] Premier benchmark HeuristicBot vs RandomBot : HeuristicBot 10 %, RandomBot 0 %, Église 90 %
+  - HeuristicBot gagne 100 % des matchups où un démon l'emporte
+  - L'Église gagne 90 % des parties — normal : la Rupture est exigeante et le 1-ply ne planifie pas
+  - Correction clé : `GameState.to_dict()` stockait les Dictionnaires par référence → le clone
+    partageait `available_corruption` avec l'original → toutes les évaluations corrompaient l'état réel
+  - Eval redesignée : composante Rupture explicite + infamies > scandales → AMPLIFIER vaut la peine
+- [ ] Premier benchmark MCTSBot vs HeuristicBot (cible : ≥ 70 %)
 - [ ] Premier benchmark MCTSBot vs HeuristicBot (cible : ≥ 70 %)
 - [ ] Combien d'itérations MCTS en 200 ms sur iPad ?
 - [ ] Anecdote : un truc que le bot a "découvert" qu'on n'avait pas anticipé
+
+## Péripétie technique (bon matériel pour l'article)
+
+L'infra de test headless Godot est un labyrinthe : `preload()` au niveau
+const dans un autoload → pas de chargeur image en mode headless → erreur
+de compilation en cascade qui empêche TOUS les singletons de s'enregistrer
+→ les tests ne tournent pas du tout, et CI "passait" en silence (faux positif
+via tee qui avale le code de sortie de Godot). Fix : CardImages charge ses
+textures paresseusement dans `_ready()`, guard `DisplayServer.get_name()`.
+Bonus bug : drain auto des décisions de confession avait une boucle infinie
+si le premier domaine contrôlé était déjà en pénitence. 135/135 maintenant.
 
 ---
 

@@ -97,16 +97,16 @@ class PendingDecision extends RefCounted:
 
 	func to_dict() -> Dictionary:
 		return {
-			"kind": kind, "player": player, "data": data,
-			"picks_remaining": picks_remaining, "picks_done": picks_done,
+			"kind": kind, "player": player, "data": data.duplicate(true),
+			"picks_remaining": picks_remaining, "picks_done": picks_done.duplicate(),
 		}
 
 	func from_dict(d: Dictionary) -> void:
 		kind = d.get("kind", "")
 		player = d.get("player", GameEnums.PlayerId.NONE)
-		data = d.get("data", {})
+		data = d.get("data", {}).duplicate(true)
 		picks_remaining = d.get("picks_remaining", 1)
-		picks_done = d.get("picks_done", [])
+		picks_done = d.get("picks_done", []).duplicate()
 
 
 # --- GameState fields -------------------------------------------------------
@@ -296,21 +296,21 @@ func to_dict() -> Dictionary:
 		d_ser[d_id] = domains[d_id].to_dict()
 	return {
 		"domains": d_ser,
-		"available_corruption": available_corruption,
+		"available_corruption": available_corruption.duplicate(),
 		"ascendant": ascendant,
 		"current_station": current_station,
 		"current_pulse": current_pulse,
 		"active_player": active_player,
 		"pending_entraves": pending_entraves.map(func(p): return p.to_dict()),
 		"pending_decisions": pending_decisions.map(func(p): return p.to_dict()),
-		"transgressions_provoked_this_station": transgressions_provoked_this_station,
-		"trafic_discount_pending": trafic_discount_pending,
-		"nepotisme_used_this_station": nepotisme_used_this_station,
-		"trafic_infamy_used_this_station": trafic_infamy_used_this_station,
-		"favori_used_this_station": favori_used_this_station,
-		"paranoia_used_this_station": paranoia_used_this_station,
+		"transgressions_provoked_this_station": transgressions_provoked_this_station.duplicate(),
+		"trafic_discount_pending": trafic_discount_pending.duplicate(),
+		"nepotisme_used_this_station": nepotisme_used_this_station.duplicate(),
+		"trafic_infamy_used_this_station": trafic_infamy_used_this_station.duplicate(),
+		"favori_used_this_station": favori_used_this_station.duplicate(),
+		"paranoia_used_this_station": paranoia_used_this_station.duplicate(),
 		"foi_next_response_impedita": foi_next_response_impedita,
-		"log": log,
+		"log": log.duplicate(),
 		"game_over": game_over,
 		"winner": winner,
 		"winner_reason": winner_reason,
