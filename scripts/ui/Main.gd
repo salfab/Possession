@@ -2341,9 +2341,16 @@ func _dump_calibration_for_paste() -> void:
 	# than trying to copy out of the OS.alert (which on Safari can
 	# truncate / mangle special characters). Bracket the block with two
 	# clear sentinels so it's easy to find in a busy console log.
-	print("\n========== POSSESSION CALIBRATION DUMP — BEGIN ==========")
-	print(block)
-	print("========== POSSESSION CALIBRATION DUMP — END ============\n")
+	#
+	# IMPORTANT : single print() call. Splitting into three (begin / body
+	# / end) made Chrome's DevTools log three separate entries each with
+	# its own "Possession/:216 " source prefix, breaking the round-trip
+	# copy-paste. One print = one console.log entry, prefix only at the
+	# top of the block.
+	var full_dump: String = "\n========== POSSESSION CALIBRATION DUMP — BEGIN ==========\n" \
+		+ block \
+		+ "========== POSSESSION CALIBRATION DUMP — END ============\n"
+	print(full_dump)
 	if state != null:
 		state.add_log("[Calibration] Nouvelles valeurs :")
 		for ln in lines:
