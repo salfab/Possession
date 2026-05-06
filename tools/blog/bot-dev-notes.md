@@ -78,8 +78,11 @@ bien. On a besoin de statistiques."
   - Correction clé : `GameState.to_dict()` stockait les Dictionnaires par référence → le clone
     partageait `available_corruption` avec l'original → toutes les évaluations corrompaient l'état réel
   - Eval redesignée : composante Rupture explicite + infamies > scandales → AMPLIFIER vaut la peine
-- [ ] Premier benchmark MCTSBot vs HeuristicBot (cible : ≥ 70 %)
-- [ ] Premier benchmark MCTSBot vs HeuristicBot (cible : ≥ 70 %)
+- [x] Premier benchmark MCTSBot vs HeuristicBot : 0% R / 0% B / 100% Église sur 10 parties
+  - L'Église gagne ~92% des parties même avec deux bots raisonnables
+  - 10 parties insuffisant pour discriminer — à augmenter (mais lent : 200 ms × 10 = 2 s)
+  - Assertion `wins_red >= wins_blue` passe trivialement (0 ≥ 0)
+- [ ] Augmenter le benchmark MCTS à 50 parties pour avoir une estimation stable
 - [ ] Combien d'itérations MCTS en 200 ms sur iPad ?
 - [ ] Anecdote : un truc que le bot a "découvert" qu'on n'avait pas anticipé
 
@@ -104,4 +107,6 @@ si le premier domaine contrôlé était déjà en pénitence. 135/135 maintenant
 4. Comment MCTS fonctionne — les 4 étapes
 5. L'architecture technique (sans noyer le lecteur)
 6. Les résultats : est-ce que ça joue bien ?
-7. Ce qu'on n'a pas fait (NN) — et pourquoi c'est OK
+7. Ce qu'on n'a pas fait (NN) — et pourquoi c'est OK pour l'instant
+   (Note : faisable — soit via ONNX + GDExtension, soit poids JSON + forward pass GDScript pur ;
+    mais MCTS suffit pour ce jeu et le NN serait un article entier à lui seul)
