@@ -3206,7 +3206,6 @@ func _show_entrave_payment_picker(station: int, options: Array) -> void:
 	dlg.dialog_text = I18n.t("ui.dialog.entrave_pick_prompt")
 	dlg.ok_button_text = I18n.t("ui.dialog.close")
 	add_child(dlg)
-	_apply_canvas_scale_to_subwindow(dlg)
 	for d_id in options:
 		var dom_str: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
 		var btn := dlg.add_button(dom_str, true, "pick_%d" % int(d_id))
