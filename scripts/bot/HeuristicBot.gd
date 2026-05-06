@@ -5,7 +5,7 @@ func pick_action(state: GameState, player: int) -> Dictionary:
 	var actions := ActionEnumerator.list(state, player)
 	if actions.is_empty():
 		return {"action_id": GameEnums.ActionId.PASSER, "kwargs": {}}
-	var best_action := actions[0]
+	var best_action: Dictionary = actions[0]
 	var best_score := -999.0
 	for action in actions:
 		var clone := _apply_action(state, player, action)

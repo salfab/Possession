@@ -5,19 +5,22 @@ extends SceneTree
 #
 # Exits with code 0 if every test passes, 1 otherwise.
 # Output is suitable for CI logs (one PASS/FAIL line per test, then a summary).
+#
+# Uses load() instead of class_name references so this script compiles without
+# requiring a pre-generated global_script_class_cache (no --editor --import step needed).
 
 
 func _initialize() -> void:
-	var rules := RulesTestRunner.new()
-	var r1 := rules.run_all()
+	var rules = load("res://scripts/core/RulesTestRunner.gd").new()
+	var r1: Dictionary = rules.run_all()
 	for line in r1["lines"]:
 		print(String(line))
 	print("--- Rules : %d/%d PASS ---" % [r1["pass"], r1["total"]])
 
 	print("")
 
-	var bots := BotTestRunner.new()
-	var r2 := bots.run_all()
+	var bots = load("res://scripts/bot/tests/BotTestRunner.gd").new()
+	var r2: Dictionary = bots.run_all()
 	for line in r2["lines"]:
 		print(String(line))
 	print("--- Bot   : %d/%d PASS ---" % [r2["pass"], r2["total"]])

@@ -41,13 +41,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run rules engine tests
+      - name: Import project (generates GDScript class cache)
         run: |
           set -e
-          godot --headless --path . --script res://scripts/cli/run_tests.gd | tee tests.log
-          # Defensive: fail the job if the summary line shows any FAIL.
+          # --editor --quit registers all class_name declarations in .godot/
+          # so that subsequent --script runs can resolve them.
+          # CardImages uses lazy loading (no preload()) so the editor exits cleanly.
+          godot --headless --editor --path . --quit
+
+      - name: Run rules engine tests
+        run: |
+          set -eo pipefail
+          godot --headless --path . --script res://scripts/cli/run_tests.gd 2>&1 | tee tests.log
+          # Require at least one PASS line to confirm tests actually ran.
+          grep -q "PASS" tests.log || { echo "::error::No test output — tests did not run."; exit 1; }
+          # Fail if the summary line shows any FAIL.
           if grep -E "=== [0-9]+/[0-9]+ PASS, ([1-9][0-9]*) FAIL ===" tests.log > /dev/null; then
-            echo "::error::Some rules tests failed."
+            echo "::error::Some tests failed."
             exit 1
           fi
 

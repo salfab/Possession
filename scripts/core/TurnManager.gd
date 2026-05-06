@@ -234,10 +234,7 @@ func _drain_pending_decisions() -> void:
 			else:
 				var pick := {"kind": avail[0]}
 				if avail[0] != "lose2":
-					for d_id in DomainData.DOMAINS:
-						if state.controller_of(d_id) == dec.player and (avail[0] == "penitence" or state.domain(d_id).seal_owner == dec.player):
-							pick["domain"] = d_id
-							break
+					pick["domain"] = _find_confession_domain(dec.player, avail[0])
 				resolve_decision(pick)
 		else:
 			break
@@ -283,10 +280,18 @@ func _drain_one_for_bot(dec: GameState.PendingDecision) -> void:
 		else:
 			var pick := {"kind": avail[0]}
 			if avail[0] != "lose2":
-				for d_id in DomainData.DOMAINS:
-					if state.controller_of(d_id) == dec.player and (avail[0] == "penitence" or state.domain(d_id).seal_owner == dec.player):
-						pick["domain"] = d_id
-						break
+				pick["domain"] = _find_confession_domain(dec.player, avail[0])
 			resolve_decision(pick)
 	else:
 		state.pending_decisions.pop_front()
+
+
+func _find_confession_domain(player: int, kind: String) -> int:
+	for d_id in DomainData.DOMAINS:
+		if state.controller_of(d_id) != player:
+			continue
+		if kind == "penitence" and not state.is_in_penitence(d_id):
+			return d_id
+		if kind == "fissure" and state.is_sealed(d_id) and state.domain(d_id).seal_owner == player:
+			return d_id
+	return -1
