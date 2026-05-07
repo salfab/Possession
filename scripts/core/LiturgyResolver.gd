@@ -238,12 +238,14 @@ static func _contrition(state: GameState, impedita: bool) -> void:
 			state.add_log("Fissure liturgique In Integro : Sceau retiré.")
 		ActionResolver.break_domination(state, target)
 		var until: int = min(state.current_station + 1, GameEnums.StationId.OFFICE)
-		d.penitence_until_station = max(d.penitence_until_station, until)
-		state.add_log("Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
+		if not _is_shielded_from_penitence(state, target):
+			d.penitence_until_station = max(d.penitence_until_station, until)
+			state.add_log("Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
 	else:
 		var until: int = min(state.current_station + 1, GameEnums.StationId.OFFICE)
-		d.penitence_until_station = max(d.penitence_until_station, until)
-		state.add_log("Impedita : Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
+		if not _is_shielded_from_penitence(state, target):
+			d.penitence_until_station = max(d.penitence_until_station, until)
+			state.add_log("Impedita : Pénitence jusqu'à la Station %s." % GameEnums.STATION_NAMES[until])
 
 
 # --- IV — Confession --------------------------------------------------------
@@ -330,7 +332,8 @@ static func apply_confession_pick(state: GameState, dec: GameState.PendingDecisi
 				return {"ok": false, "message": "Pénitence : Domaine invalide."}
 			var until: int = min(state.current_station + 1, GameEnums.StationId.OFFICE)
 			var d := state.domain(domain_id)
-			d.penitence_until_station = max(d.penitence_until_station, until)
+			if not _is_shielded_from_penitence(state, domain_id):
+				d.penitence_until_station = max(d.penitence_until_station, until)
 			state.add_log("Pénitence : %s mis en Pénitence." % GameEnums.DOMAIN_NAMES[domain_id])
 		"fissure":
 			var d2 := state.domain(domain_id)
@@ -420,6 +423,19 @@ static func _emprise_dict(state: GameState, lst: Array) -> Dictionary:
 	for x in lst:
 		d[x] = _total_emprise(state, x)
 	return d
+
+
+# --- Reliques menteuses infamy: shield a domain from penitence --------------
+# Returns true when penitence should be blocked (and logs the interception).
+static func _is_shielded_from_penitence(state: GameState, d_id: int) -> bool:
+	var owner: int = state.transgression_owner(TransgressionData.T_RELIQUES)
+	if owner == GameEnums.PlayerId.NONE:
+		return false
+	var ti: GameState.TransgressionInstance = state.find_transgression_instance(owner, TransgressionData.T_RELIQUES, GameEnums.TransgressionFace.INFAMIE)
+	if ti == null or ti.origin_domain != d_id:
+		return false
+	state.add_log("Reliques menteuses : Pénitence annulée sur %s." % GameEnums.DOMAIN_NAMES[d_id])
+	return true
 
 
 # --- Simonie infamy: force Impedita on a Foi-targeting response -------------

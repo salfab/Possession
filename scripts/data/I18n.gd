@@ -285,6 +285,67 @@ const STRINGS := {
 	"transgression.abdication_interieure.infamy":{"fr": "À l'Exorcisme final, si Volonté est scellée par vous, +1 Ascendant supplémentaire.",
 	                                             "en": "At the Final Exorcism, if Will is sealed by you, +1 extra Ascendant."},
 
+	# ── Codex des Transgressions — cartes 11-20 ─────────────────────────────
+	"transgression.intrigue_consistoire.name":   {"fr": "Intrigue de consistoire", "en": "Consistory Intrigue"},
+	"transgression.intrigue_consistoire.scandal":{"fr": "Choisissez un Domaine que vous contrôlez sans Domination nette et non scellé. Jusqu'à fin de Station, vous pouvez le Sceller sans Domination nette. Si aucune cible : +1 Corruption.",
+	                                              "en": "Choose a Domain you control without Net Domination, not Sealed. Until end of Station, you may Seal it without Net Domination. No valid target: +1 Corruption."},
+	"transgression.intrigue_consistoire.infamy": {"fr": "Une fois par Station, quand vous Scellez, vous pouvez ignorer l'interdiction permanente de Scellement (Communion). N'ignore jamais la Pénitence.",
+	                                              "en": "Once per Station, when you Seal, you may ignore the permanent Seal prohibition (Communion). Never ignores Penitence."},
+
+	"transgression.bulle_vendue.name":           {"fr": "Bulle vendue",          "en": "Sold Bull"},
+	"transgression.bulle_vendue.scandal":        {"fr": "Retirez l'interdiction permanente de Scellement (Communion) d'un Domaine que vous contrôlez. Si aucune cible : +1 Corruption.",
+	                                              "en": "Remove the permanent Seal prohibition (Communion) from a Domain you control. No target: +1 Corruption."},
+	"transgression.bulle_vendue.infamy":         {"fr": "Une fois par Station, lorsqu'une Réponse liturgique interdit le Scellement d'un Domaine que vous contrôlez, vous pouvez ignorer cette interdiction en perdant 1 Ascendant.",
+	                                              "en": "Once per Station, when a Liturgical Response would forbid Sealing a Domain you control, you may ignore it by losing 1 Ascendancy."},
+
+	"transgression.mascarade_velours.name":      {"fr": "Mascarade de velours",   "en": "Velvet Masquerade"},
+	"transgression.mascarade_velours.scandal":   {"fr": "Déplacez 1 de vos Corruptions depuis un Domaine vers un autre Domaine non scellé par l'autre démon.",
+	                                              "en": "Move 1 of your Corruptions from one Domain to another not Sealed by the other demon."},
+	"transgression.mascarade_velours.infamy":    {"fr": "Une fois par Station, quand une Réponse liturgique cible Désir, vous pouvez déplacer 1 de vos Corruptions depuis Désir vers un Domaine non scellé par l'autre démon, avant résolution.",
+	                                              "en": "Once per Station, when a Liturgical Response targets Desire, you may move 1 of your Corruptions from Desire to a Domain not Sealed by the other demon, before resolution."},
+
+	"transgression.appetit_heretique.name":      {"fr": "Appétit hérétique",      "en": "Heretical Appetite"},
+	"transgression.appetit_heretique.scandal":   {"fr": "La prochaine Transgression que vous provoquez cette Station peut être jouée depuis un Domaine que vous ne contrôlez pas, si vous contrôlez Désir, avez ≥1 Corruption dans le Domaine requis, et ce Domaine n'est pas scellé par l'adversaire. Si non utilisé avant fin de Station : +1 Corruption.",
+	                                              "en": "Your next Transgression this Station may be played from a Domain you don't control, if you control Desire, have ≥1 Corruption in the required Domain, and it isn't Sealed by the opponent. If unused at end of Station: +1 Corruption."},
+	"transgression.appetit_heretique.infamy":    {"fr": "Une fois par Station, tant que vous contrôlez Désir, vous pouvez provoquer une Transgression depuis un Domaine que vous ne contrôlez pas, si vous y avez ≥1 Corruption (non scellé par l'adversaire).",
+	                                              "en": "Once per Station, while controlling Desire, you may provoke a Transgression from a Domain you don't control if you have ≥1 Corruption there (not Sealed by the opponent)."},
+
+	"transgression.dogme_renverse.name":         {"fr": "Dogme renversé",         "en": "Overturned Dogma"},
+	"transgression.dogme_renverse.scandal":      {"fr": "Choisissez cette Station ou la prochaine. Si sa Réponse liturgique se résout In Integro, gagnez 2 Corruptions disponibles après résolution. Si Impedita, effet perdu.",
+	                                              "en": "Choose this Station or the next. If its Liturgical Response resolves In Integro, gain 2 available Corruptions after resolution. If Impedita, effect lost."},
+	"transgression.dogme_renverse.infamy":       {"fr": "Une fois par Station, après une Réponse liturgique In Integro, si vous contrôlez Foi, gagnez 1 Corruption disponible.",
+	                                              "en": "Once per Station, after an In Integro Liturgical Response, if you control Faith, gain 1 available Corruption."},
+
+	"transgression.reliques_menteuses.name":     {"fr": "Reliques menteuses",      "en": "False Relics"},
+	"transgression.reliques_menteuses.scandal":  {"fr": "Choisissez un Domaine que vous contrôlez. Jusqu'à fin de la prochaine Station, la première Pénitence qu'il subirait est ignorée (les autres effets s'appliquent).",
+	                                              "en": "Choose a Domain you control. Until end of the next Station, the first Penitence it would suffer is ignored (other effects still apply)."},
+	"transgression.reliques_menteuses.infamy":   {"fr": "Une fois par Station, quand vous exploitez Foi, retirez une Pénitence ou une interdiction permanente de Scellement d'un Domaine que vous contrôlez. Sinon, Foi produit +1 Corruption.",
+	                                              "en": "Once per Station, when you exploit Faith, remove a Penitence or permanent Seal prohibition from a Domain you control. Otherwise, Faith produces +1 Corruption."},
+
+	"transgression.denonciation_anonyme.name":   {"fr": "Dénonciation anonyme",   "en": "Anonymous Denunciation"},
+	"transgression.denonciation_anonyme.scandal":{"fr": "Choisissez un Domaine contrôlé par l'autre démon où vous avez ≥1 Corruption. Jusqu'à fin de Station, l'autre démon ne peut pas l'Exploiter. S'il l'a déjà Exploité, il perd 1 Corruption disponible. Si aucune cible : aucun effet.",
+	                                              "en": "Choose a Domain controlled by the other demon where you have ≥1 Corruption. Until end of Station, the other demon cannot Exploit it. If already Exploited, the other demon loses 1 available Corruption. No valid target: no effect."},
+	"transgression.denonciation_anonyme.infamy": {"fr": "Une fois par Station, quand vous investissez dans un Domaine contrôlé par l'autre démon, vous pouvez lui interdire d'Exploiter ce Domaine jusqu'à fin de Station.",
+	                                              "en": "Once per Station, when you Invest in a Domain controlled by the other demon, you may forbid the other demon from Exploiting it until end of Station."},
+
+	"transgression.panique_contagieuse.name":    {"fr": "Panique contagieuse",     "en": "Contagious Panic"},
+	"transgression.panique_contagieuse.scandal": {"fr": "Choisissez un Domaine contesté. Chaque démon y ayant ≥1 Corruption y retire 1 Corruption et la déplace vers Peur, si Peur n'est pas scellée par son adversaire. Si aucun Domaine contesté : placez 1 de vos Corruptions disponibles sur Peur si possible.",
+	                                              "en": "Choose a contested Domain. Each demon with ≥1 Corruption there removes 1 and moves it to Fear, if Fear isn't Sealed by their opponent. No contested Domain: place 1 of your available Corruptions on Fear if possible."},
+	"transgression.panique_contagieuse.infamy":  {"fr": "Une fois par Station, quand un Domaine devient contesté, vous pouvez déplacer 1 de vos Corruptions entre Peur et ce Domaine (dans un sens ou l'autre). Destination interdite si scellée par l'adversaire.",
+	                                              "en": "Once per Station, when a Domain becomes contested, you may move 1 of your Corruptions between Fear and that Domain (either direction). Destination forbidden if Sealed by the opponent."},
+
+	"transgression.obeissance_pervertie.name":   {"fr": "Obéissance pervertie",   "en": "Perverted Obedience"},
+	"transgression.obeissance_pervertie.scandal":{"fr": "À la prochaine Pulsation, vous agissez en premier, quelle que soit l'Initiative. L'Initiative officielle reste inchangée. Si aucune Pulsation ne reste cette Station, effet reporté à la première Pulsation de la prochaine Station.",
+	                                              "en": "On the next Pulse, you act first regardless of Initiative. Official Initiative is unchanged. If no Pulse remains this Station, carry to the first Pulse of the next Station."},
+	"transgression.obeissance_pervertie.infamy": {"fr": "Une fois par Station, au début de la première Pulsation, si vous contrôlez Volonté, vous agissez en premier (Initiative officielle inchangée).",
+	                                              "en": "Once per Station, at the start of the first Pulse, if you control Will, you act first (official Initiative unchanged)."},
+
+	"transgression.renoncement_noir.name":       {"fr": "Renoncement noir",        "en": "Dark Renunciation"},
+	"transgression.renoncement_noir.scandal":    {"fr": "Retirez 1 de vos Corruptions d'un Domaine que vous contrôlez, puis gagnez 3 Corruptions disponibles. Si aucune cible : +1 Corruption.",
+	                                              "en": "Remove 1 of your Corruptions from a Domain you control, then gain 3 available Corruptions. No target: +1 Corruption."},
+	"transgression.renoncement_noir.infamy":     {"fr": "Une fois par Station, quand vous sacrifiez 1 Corruption d'un Domaine pour Entraver une Réponse liturgique, gagnez 1 Corruption disponible après l'Entrave.",
+	                                              "en": "Once per Station, when you sacrifice 1 Corruption from a Domain to Hinder a Liturgical Response, gain 1 available Corruption after the Hinder."},
+
 	# Liturgical responses
 	"liturgy.signe_de_croix.name":     {"fr": "Signe de croix",        "en": "Sign of the Cross"},
 	"liturgy.signe_de_croix.in_integro":{"fr": "Brise la Domination dans le Domaine ciblé. Sinon, chaque démon y perd 1 Corruption disponible.",

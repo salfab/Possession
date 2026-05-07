@@ -21,6 +21,7 @@ func run_all() -> Dictionary:
 	_benchmark_mcts_vs_heuristic()
 	_benchmark_mcts_vs_mcts()
 	_test_missel_baseline_unchanged()
+	_test_codex_games_complete()
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
 
@@ -31,6 +32,7 @@ func run_balance(n_per_modifier: int = 20) -> Dictionary:
 	results.append("=== Balance Missel Corrompu (%d parties/modificateur) ===" % n_per_modifier)
 	_benchmark_mcts_budget(2000, 10)
 	_benchmark_missel_all(n_per_modifier)
+	_benchmark_codex_vs_baseline(n_per_modifier)
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
 
@@ -384,3 +386,107 @@ func _benchmark_missel_all(n: int = 20) -> void:
 	results.append("  [missel] === Modificateurs ===")
 	for mod_id in MisselData.MODIFIERS.keys():
 		_benchmark_missel_modifier(mod_id, n)
+
+
+# ---------------------------------------------------------------------------
+# Codex des Transgressions — smoke test (run_all)
+# ---------------------------------------------------------------------------
+func _test_codex_games_complete() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1337
+	var errors := 0
+	var max_liturgy := 20
+	for _i in range(5):
+		var s := GameState.new()
+		CodexSetup.setup(s, rng)
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED] = HeuristicBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = HeuristicBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty():
+				tm.acknowledge_liturgy()
+			else:
+				break
+			turns += 1
+		if not s.game_over:
+			errors += 1
+	_assert(errors == 0, "Codex : 5 parties HeuristicBot vs HeuristicBot se terminent toutes")
+
+
+# ---------------------------------------------------------------------------
+# Codex des Transgressions — Monte Carlo comparison (run_balance)
+# ---------------------------------------------------------------------------
+func _benchmark_codex_vs_baseline(n: int = 20) -> void:
+	results.append("=== Balance Codex des Transgressions (%d parties) ===" % n)
+
+	# --- Baseline V1h ---
+	var b_red := 0; var b_blue := 0; var b_draws := 0; var b_err := 0
+	var max_liturgy := 20
+	for _i in range(n):
+		var s := GameState.new()
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty(): tm.acknowledge_liturgy()
+			else: break
+			turns += 1
+		if not s.game_over: b_err += 1
+		elif s.winner == GameEnums.PlayerId.RED: b_red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE: b_blue += 1
+		else: b_draws += 1
+	results.append("  [V1h baseline] Rouge %d  Violet %d  Église %d  (/%d)" % [b_red, b_blue, b_draws, n])
+
+	# --- 10 random Codex configurations ---
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0xC0DE1
+	var c_red := 0; var c_blue := 0; var c_draws := 0; var c_err := 0
+	var c_infamy_counts: Dictionary = {}
+	var c_pope_wins := 0
+	var c_fiat_wins := 0
+	var c_rupture_wins := 0
+	for tid in TransgressionData.ALL_IDS_EXTENDED:
+		c_infamy_counts[tid] = 0
+	for _i in range(n):
+		var s := GameState.new()
+		CodexSetup.setup(s, rng)
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty(): tm.acknowledge_liturgy()
+			else: break
+			turns += 1
+		if not s.game_over:
+			c_err += 1
+			continue
+		if s.winner == GameEnums.PlayerId.RED: c_red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE: c_blue += 1
+		else: c_draws += 1
+		var reason: String = s.winner_reason
+		if "pape" in reason.to_lower() or "exorcism" in reason.to_lower():
+			c_pope_wins += 1
+		elif "fiat" in reason.to_lower():
+			c_fiat_wins += 1
+		elif "rupture" in reason.to_lower():
+			c_rupture_wins += 1
+		# Count infamies per card
+		for d_id in DomainData.DOMAINS:
+			for ti in s.domain(d_id).infamies:
+				if c_infamy_counts.has(ti.def_id):
+					c_infamy_counts[ti.def_id] += 1
+	var c_asym: int = absi(c_red - c_blue)
+	results.append("  [Codex] Rouge %d  Violet %d  Église %d  Erreurs %d  (/%d)" % [c_red, c_blue, c_draws, c_err, n])
+	results.append("  [Codex] Fin : Pape sauvé %d  Fiat %d  Rupture %d" % [c_pope_wins, c_fiat_wins, c_rupture_wins])
+	results.append("  [Codex] Infamies placées par carte :")
+	for tid in TransgressionData.ALL_IDS_EXTENDED:
+		if c_infamy_counts.get(tid, 0) > 0:
+			results.append("    %s : %d" % [tid, c_infamy_counts[tid]])
+	_assert(c_err == 0, "Codex benchmark : 0 partie non terminée", "erreurs=%d" % c_err)
+	_assert(c_asym <= n, "Codex benchmark : asymétrie Rouge/Violet raisonnable", "R=%d V=%d" % [c_red, c_blue])

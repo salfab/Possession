@@ -41,7 +41,11 @@ func perform_action(action: int, kwargs: Dictionary = {}) -> Dictionary:
 		GameEnums.ActionId.EXPLOITER:
 			result = ActionResolver.exploiter(state, p, kwargs.get("domain", -1))
 		GameEnums.ActionId.PROVOQUER:
-			result = ActionResolver.provoquer(state, p, kwargs.get("def_id", ""), kwargs.get("origin", -1))
+			var extra_kwargs: Dictionary = {}
+			for key in ["target_domain", "from_domain", "to_domain", "target_station"]:
+				if kwargs.has(key):
+					extra_kwargs[key] = kwargs[key]
+			result = ActionResolver.provoquer(state, p, kwargs.get("def_id", ""), kwargs.get("origin", -1), extra_kwargs)
 		GameEnums.ActionId.AMPLIFIER:
 			result = ActionResolver.amplifier(state, p, kwargs.get("def_id", ""))
 		GameEnums.ActionId.SCELLER:
@@ -82,7 +86,7 @@ func _end_pulse() -> void:
 	_pulse_actions_done[GameEnums.PlayerId.BLUE] = false
 	if state.current_pulse < GameEnums.STATION_PULSES[state.current_station]:
 		state.current_pulse += 1
-		state.active_player = GameEnums.STATION_INITIATIVE[state.current_station]
+		state.active_player = _pick_initiative()
 	else:
 		_end_station()
 
@@ -98,7 +102,19 @@ func _end_station() -> void:
 
 
 func acknowledge_liturgy() -> void:
+	var was_entraved: bool = pending_liturgy.get("impedita", false)
 	pending_liturgy = {}
+	# Bulle vendue infamy: +1 Corruption after each non-entraved liturgy.
+	# Dogme renversé infamy: +1 Corruption after each liturgy.
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.BLUE]:
+		var bulle_ti: GameState.TransgressionInstance = state.find_transgression_instance(p, TransgressionData.T_BULLE, GameEnums.TransgressionFace.INFAMIE)
+		if bulle_ti != null and not was_entraved:
+			state.add_corruption_pool(p, 1)
+			state.add_log("Infamie Bulle vendue : %s gagne +1 Corruption (Réponse non entravée)." % GameEnums.player_name(p))
+		var dogme_ti: GameState.TransgressionInstance = state.find_transgression_instance(p, TransgressionData.T_DOGME, GameEnums.TransgressionFace.INFAMIE)
+		if dogme_ti != null:
+			state.add_corruption_pool(p, 1)
+			state.add_log("Infamie Dogme renversé : %s gagne +1 Corruption." % GameEnums.player_name(p))
 	_try_advance_after_liturgy()
 	_check_bot_turn()
 
@@ -118,8 +134,8 @@ func _try_advance_after_liturgy() -> void:
 func _advance_to_station(s: int) -> void:
 	state.current_station = s
 	state.current_pulse = 1
-	state.active_player = GameEnums.STATION_INITIATIVE[s]
 	_begin_station(s, false)
+	state.active_player = _pick_initiative()
 
 
 func _begin_station(station: int, _initial: bool) -> void:
@@ -141,9 +157,54 @@ func _begin_station(station: int, _initial: bool) -> void:
 	state.favori_used_this_station[GameEnums.PlayerId.BLUE] = false
 	state.paranoia_used_this_station[GameEnums.PlayerId.RED] = false
 	state.paranoia_used_this_station[GameEnums.PlayerId.BLUE] = false
+	# Dénonciation scandale block is station-scoped: reset at station start.
+	state.denonciation_blocked_domain[GameEnums.PlayerId.RED] = -1
+	state.denonciation_blocked_domain[GameEnums.PlayerId.BLUE] = -1
+	# Obéissance: scandale flag resets each station; re-activate for infamy holders.
+	state.obeissance_acts_first[GameEnums.PlayerId.RED] = false
+	state.obeissance_acts_first[GameEnums.PlayerId.BLUE] = false
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.BLUE]:
+		if state.find_transgression_instance(p, TransgressionData.T_OBEISSANCE, GameEnums.TransgressionFace.INFAMIE) != null:
+			state.obeissance_acts_first[p] = true
+	# Mascarade de velours infamy: auto-move 1 corruption at station start.
+	if station != GameEnums.StationId.EXORCISME:
+		_apply_mascarade_effect()
 	# Free exploitation for stations I-V (queued as pending decisions).
 	if station != GameEnums.StationId.EXORCISME:
 		_queue_free_exploitation_decisions()
+
+
+func _pick_initiative() -> int:
+	if state.obeissance_acts_first.get(GameEnums.PlayerId.RED, false):
+		return GameEnums.PlayerId.RED
+	if state.obeissance_acts_first.get(GameEnums.PlayerId.BLUE, false):
+		return GameEnums.PlayerId.BLUE
+	return GameEnums.STATION_INITIATIVE[state.current_station]
+
+
+func _apply_mascarade_effect() -> void:
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.BLUE]:
+		var ti: GameState.TransgressionInstance = state.find_transgression_instance(p, TransgressionData.T_MASCARADE, GameEnums.TransgressionFace.INFAMIE)
+		if ti == null:
+			continue
+		# Auto-move 1 corruption from domain with most to domain with fewest.
+		var best_from: int = -1
+		var best_count: int = 0
+		var best_to: int = -1
+		var worst_count: int = 9999
+		for d_id in DomainData.DOMAINS:
+			var c: int = state.corruption_in(d_id, p)
+			if c > best_count:
+				best_count = c
+				best_from = d_id
+			if c < worst_count:
+				worst_count = c
+				best_to = d_id
+		if best_from >= 0 and best_to >= 0 and best_from != best_to and best_count >= 1:
+			state.set_corruption_in(best_from, p, state.corruption_in(best_from, p) - 1)
+			state.set_corruption_in(best_to, p, state.corruption_in(best_to, p) + 1)
+			state.add_log("Infamie Mascarade de velours : %s déplace 1 Corruption de %s vers %s." %
+				[GameEnums.player_name(p), GameEnums.DOMAIN_NAMES[best_from], GameEnums.DOMAIN_NAMES[best_to]])
 
 
 func _queue_free_exploitation_decisions() -> void:

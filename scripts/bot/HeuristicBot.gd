@@ -27,7 +27,11 @@ func _apply_action(state: GameState, player: int, action: Dictionary) -> GameSta
 		GameEnums.ActionId.EXPLOITER:
 			ActionResolver.exploiter(clone, player, kwargs.get("domain", -1))
 		GameEnums.ActionId.PROVOQUER:
-			ActionResolver.provoquer(clone, player, kwargs.get("def_id", ""), kwargs.get("origin", -1))
+			var extra: Dictionary = {}
+			for key in ["target_domain", "from_domain", "to_domain", "target_station"]:
+				if kwargs.has(key):
+					extra[key] = kwargs[key]
+			ActionResolver.provoquer(clone, player, kwargs.get("def_id", ""), kwargs.get("origin", -1), extra)
 		GameEnums.ActionId.AMPLIFIER:
 			ActionResolver.amplifier(clone, player, kwargs.get("def_id", ""))
 		GameEnums.ActionId.SCELLER:

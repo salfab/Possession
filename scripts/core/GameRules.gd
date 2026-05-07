@@ -45,6 +45,16 @@ static func can_exploiter(state: GameState, player: int, d_id: int) -> bool:
 		return false
 	if player == GameEnums.PlayerId.BLUE and d.exploited_by_blue_this_station:
 		return false
+	# Dénonciation anonyme: scandale blocks a domain for opponent this station;
+	# infamy permanently blocks origin domain.
+	var opp: int = GameEnums.opponent(player)
+	if state.denonciation_blocked_domain.get(opp, -1) == d_id:
+		return false
+	var den_owner: int = state.transgression_owner(TransgressionData.T_DENONCIATION)
+	if den_owner != GameEnums.PlayerId.NONE and den_owner != player:
+		var den_ti: GameState.TransgressionInstance = state.find_transgression_instance(den_owner, TransgressionData.T_DENONCIATION, GameEnums.TransgressionFace.INFAMIE)
+		if den_ti != null and den_ti.origin_domain == d_id:
+			return false
 	return true
 
 static func transgression_origin_options(player: int, def_id: String) -> Array:
@@ -61,14 +71,19 @@ static func can_provoquer(state: GameState, player: int, def_id: String) -> bool
 	var owner := state.transgression_owner(def_id)
 	if owner != GameEnums.PlayerId.NONE:
 		return false
-	# Must control at least one of the required domains.
+	# Must control (or with Appétit infamy: have presence in) at least one required domain.
 	var requirement: Array = def.get("domain_requirement", [])
-	var controls_one := false
+	var appetit_ti: GameState.TransgressionInstance = state.find_transgression_instance(player, TransgressionData.T_APPETIT, GameEnums.TransgressionFace.INFAMIE)
+	var has_appetit_infamy: bool = appetit_ti != null
+	var qualifies := false
 	for d_id in requirement:
 		if state.controller_of(d_id) == player:
-			controls_one = true
+			qualifies = true
 			break
-	if not controls_one:
+		if has_appetit_infamy and state.corruption_in(d_id, player) >= 1:
+			qualifies = true
+			break
+	if not qualifies:
 		return false
 	# Must afford the (possibly discounted) Scandale cost.
 	var cost := transgression_scandal_cost(state, player, def_id)
@@ -102,7 +117,10 @@ static func can_sceller(state: GameState, player: int, d_id: int) -> bool:
 		return false
 	if state.controller_of(d_id) != player:
 		return false
-	if not state.has_net_domination(d_id, player):
+	# Intrigue du Consistoire infamy: can seal origin domain without net domination.
+	var intrigue_ti: GameState.TransgressionInstance = state.find_transgression_instance(player, TransgressionData.T_INTRIGUE, GameEnums.TransgressionFace.INFAMIE)
+	var intrigue_bypass: bool = intrigue_ti != null and intrigue_ti.origin_domain == d_id
+	if not intrigue_bypass and not state.has_net_domination(d_id, player):
 		return false
 	if state.available_corruption[player] < 1:
 		return false
@@ -361,4 +379,10 @@ static func production_of(state: GameState, d_id: int, player: int) -> int:
 			var ti := state.find_transgression_instance(player, TransgressionData.T_FESTIN, GameEnums.TransgressionFace.INFAMIE)
 			if ti != null:
 				base += 1
+	# Panique contagieuse infamy: opponent loses 1 production when exploiting a contested domain.
+	var panique_owner: int = state.transgression_owner(TransgressionData.T_PANIQUE)
+	if panique_owner != GameEnums.PlayerId.NONE and panique_owner != player:
+		var panique_ti: GameState.TransgressionInstance = state.find_transgression_instance(panique_owner, TransgressionData.T_PANIQUE, GameEnums.TransgressionFace.INFAMIE)
+		if panique_ti != null and state.is_contested(d_id):
+			base = max(0, base - 1)
 	return base

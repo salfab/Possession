@@ -101,6 +101,21 @@ bien. On a besoin de statistiques."
   - Conclusion : 500 ms serait un bon compromis mobile (confort + performance)
 - [ ] Mesurer les itérations réelles sur iPad (M-series vs Docker Linux x86)
 - [ ] Anecdote : un truc que le bot a "découvert" qu'on n'avait pas anticipé
+- [x] Codex des Transgressions — variante optionnelle (10 nouvelles cartes, 20 au total)
+  - Architecture : `CodexSetup.setup(state, rng)` choisit 2 cartes par Domaine (5×4→5×2)
+  - Chaque carte Codex accroche un ou deux systèmes du moteur sans toucher V1h :
+    - Intrigue (11) : `can_sceller` bypass net-domination pour le Domaine d'origine
+    - Bulle (12) : `acknowledge_liturgy` → +1 Corr. si non entravée
+    - Mascarade (13) : `_begin_station` → redistribution automatique au début de chaque Station
+    - Appétit (14) : `can_provoquer` → présence suffit (pas besoin de contrôle)
+    - Dogme (15) : scandale place une Entrave gratuite ; infamy → +1 Corr. après chaque liturgie
+    - Reliques (16) : `_contrition` + `apply_confession_pick` → Pénitence bloquée sur l'origine
+    - Dénonciation (17) : `can_exploiter` → blocage Domaine par scandale (station) ou infamy (permanent)
+    - Panique (18) : `production_of` → -1 production adversaire sur Domaine contesté
+    - Obéissance (19) : `_pick_initiative` → override d'initiative ; scandale = station courante, infamy = permanent
+    - Renoncement (20) : `entraver` → propriétaire gagne +1 Corr. à chaque Entrave adverse
+  - 163 tests Rules + 12 nouveaux tests codex = 175/175 PASS (à vérifier après CI)
+  - Benchmark Monte Carlo : V1h baseline vs N configurations codex aléatoires
 
 ## Péripétie technique (bon matériel pour l'article)
 

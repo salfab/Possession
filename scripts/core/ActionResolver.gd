@@ -40,7 +40,7 @@ static func exploiter(state: GameState, player: int, d_id: int, free: bool = fal
 
 # --- Provoquer (Scandale) ---------------------------------------------------
 
-static func provoquer(state: GameState, player: int, def_id: String, origin_choice: int = -1) -> Dictionary:
+static func provoquer(state: GameState, player: int, def_id: String, origin_choice: int = -1, extra: Dictionary = {}) -> Dictionary:
 	if not GameRules.can_provoquer(state, player, def_id):
 		return fail("Transgression illégale.")
 	var def: Dictionary = TransgressionData.get_def(def_id)
@@ -73,7 +73,7 @@ static func provoquer(state: GameState, player: int, def_id: String, origin_choi
 	state.add_log("%s provoque la Transgression « %s » (Scandale) en %s. +1 Ascendant." %
 		[GameEnums.player_name(player), def["name"], GameEnums.DOMAIN_NAMES[origin]])
 	# Per-card scandal effects
-	_apply_scandal_effect(state, player, def_id, origin)
+	_apply_scandal_effect(state, player, def_id, origin, extra)
 	# Ambition/Foi infamy bonus from Trafic-de-charges
 	_check_trafic_infamy_bonus(state, player, def_id, origin)
 	return ok("Transgression provoquée.")
@@ -97,6 +97,10 @@ static func amplifier(state: GameState, player: int, def_id: String) -> Dictiona
 	if def_id == TransgressionData.T_SIMONIE:
 		state.foi_next_response_impedita = true
 		state.add_log("Simonie Infamie : la prochaine Réponse ciblant Foi sera Impedita.")
+	# Obéissance pervertie Infamie : permanent initiative override.
+	if def_id == TransgressionData.T_OBEISSANCE:
+		state.obeissance_acts_first[player] = true
+		state.add_log("Infamie Obéissance pervertie : %s agit en premier pour toutes les Pulsations restantes." % GameEnums.player_name(player))
 	return ok("Transgression amplifiée.")
 
 # --- Sceller / Fissurer -----------------------------------------------------
@@ -163,6 +167,13 @@ static func entraver(state: GameState, player: int, target_station: int, payment
 	state.pending_entraves.append(pe)
 	state.add_log("%s entrave la Réponse de la Station %s (-1 Corruption en %s)." %
 		[GameEnums.player_name(player), GameEnums.STATION_NAMES[target_station], GameEnums.DOMAIN_NAMES[payment_domain]])
+	# Renoncement noir infamy: opponent of the one who placed the Entrave gains +1 Corruption.
+	var ren_owner: int = state.transgression_owner(TransgressionData.T_RENONCEMENT)
+	if ren_owner != GameEnums.PlayerId.NONE and ren_owner != player:
+		var ren_ti: GameState.TransgressionInstance = state.find_transgression_instance(ren_owner, TransgressionData.T_RENONCEMENT, GameEnums.TransgressionFace.INFAMIE)
+		if ren_ti != null:
+			state.add_corruption_pool(ren_owner, 1)
+			state.add_log("Infamie Renoncement noir : %s gagne +1 Corruption." % GameEnums.player_name(ren_owner))
 	return ok("Entrave posée.")
 
 # --- Passer -----------------------------------------------------------------
@@ -206,7 +217,7 @@ static func break_domination(state: GameState, d_id: int) -> void:
 
 # --- Per-card SCANDALE effects ---------------------------------------------
 
-static func _apply_scandal_effect(state: GameState, player: int, def_id: String, origin: int) -> void:
+static func _apply_scandal_effect(state: GameState, player: int, def_id: String, origin: int, extra: Dictionary = {}) -> void:
 	match def_id:
 		TransgressionData.T_NEPOTISME:
 			state.add_corruption_pool(player, 1)
@@ -294,6 +305,94 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 				state.add_log("Effet Scandale Abdication intérieure : 1 Corruption placée sur Volonté.")
 			else:
 				state.add_log("Effet Scandale Abdication intérieure ignoré.")
+		# ── Codex ──────────────────────────────────────────────────────────────
+		TransgressionData.T_INTRIGUE:
+			# Chosen target_domain: opponent loses 1 corruption there; if 0, self +1.
+			var tgt_i: int = extra.get("target_domain", -1)
+			if tgt_i >= 0:
+				var opp_i: int = GameEnums.opponent(player)
+				var opp_has: int = state.corruption_in(tgt_i, opp_i)
+				if opp_has >= 1:
+					state.set_corruption_in(tgt_i, opp_i, opp_has - 1)
+					state.add_log("Effet Scandale Intrigue du Consistoire : %s perd 1 Corruption en %s." % [GameEnums.player_name(opp_i), GameEnums.DOMAIN_NAMES[tgt_i]])
+				else:
+					state.add_corruption_pool(player, 1)
+					state.add_log("Effet Scandale Intrigue du Consistoire : +1 Corruption (adversaire absent en %s)." % GameEnums.DOMAIN_NAMES[tgt_i])
+			else:
+				state.add_corruption_pool(player, 1)
+				state.add_log("Effet Scandale Intrigue du Consistoire : +1 Corruption (aucune cible).")
+		TransgressionData.T_BULLE:
+			state.add_corruption_pool(player, 2)
+			state.add_log("Effet Scandale Bulle vendue : +2 Corruptions.")
+		TransgressionData.T_MASCARADE:
+			# Move 1 corruption from from_domain to to_domain (both must be valid).
+			var fd: int = extra.get("from_domain", -1)
+			var td: int = extra.get("to_domain", -1)
+			if fd >= 0 and td >= 0 and fd != td and state.corruption_in(fd, player) >= 1:
+				state.set_corruption_in(fd, player, state.corruption_in(fd, player) - 1)
+				state.set_corruption_in(td, player, state.corruption_in(td, player) + 1)
+				state.add_log("Effet Scandale Mascarade de velours : 1 Corruption déplacée de %s vers %s." % [GameEnums.DOMAIN_NAMES[fd], GameEnums.DOMAIN_NAMES[td]])
+			else:
+				state.add_corruption_pool(player, 1)
+				state.add_log("Effet Scandale Mascarade de velours : +1 Corruption (déplacement invalide).")
+		TransgressionData.T_APPETIT:
+			state.add_corruption_pool(player, 1)
+			state.add_log("Effet Scandale Appétit hérétique : +1 Corruption.")
+		TransgressionData.T_DOGME:
+			# Free entrave on target_station; fallback +1 Corruption.
+			var ts_d: int = extra.get("target_station", -1)
+			if ts_d >= 0 and ts_d != GameEnums.StationId.EXORCISME and not GameRules.is_response_entraved(state, ts_d):
+				var pe_d := GameState.PendingEntrave.new()
+				pe_d.caster = player
+				pe_d.target_station = ts_d
+				state.pending_entraves.append(pe_d)
+				state.add_log("Effet Scandale Dogme renversé : Entrave gratuite sur Station %s." % GameEnums.STATION_NAMES[ts_d])
+			else:
+				state.add_corruption_pool(player, 1)
+				state.add_log("Effet Scandale Dogme renversé : +1 Corruption (aucune Station à entraver).")
+		TransgressionData.T_RELIQUES:
+			# Remove one penitence from a controlled domain; fallback +1 Corruption.
+			var removed_r := false
+			for d_id_r in DomainData.DOMAINS:
+				if state.controller_of(d_id_r) == player and state.is_in_penitence(d_id_r):
+					state.domain(d_id_r).penitence_until_station = -1
+					state.add_log("Effet Scandale Reliques menteuses : Pénitence retirée de %s." % GameEnums.DOMAIN_NAMES[d_id_r])
+					removed_r = true
+					break
+			if not removed_r:
+				state.add_corruption_pool(player, 1)
+				state.add_log("Effet Scandale Reliques menteuses : +1 Corruption (aucune Pénitence à retirer).")
+		TransgressionData.T_DENONCIATION:
+			# Block opponent from exploiting target_domain this station.
+			var tgt_den: int = extra.get("target_domain", -1)
+			if tgt_den >= 0:
+				state.denonciation_blocked_domain[player] = tgt_den
+				state.add_log("Effet Scandale Dénonciation anonyme : %s ne peut pas exploiter %s cette Station." % [GameEnums.player_name(GameEnums.opponent(player)), GameEnums.DOMAIN_NAMES[tgt_den]])
+			else:
+				state.add_log("Effet Scandale Dénonciation anonyme : aucune cible choisie.")
+		TransgressionData.T_PANIQUE:
+			# Chosen contested domain: opponent loses 1 from pool. Fallback if no contested domain.
+			var tgt_pan: int = extra.get("target_domain", -1)
+			var opp_pan: int = GameEnums.opponent(player)
+			if tgt_pan >= 0 and state.is_contested(tgt_pan):
+				state.add_corruption_pool(opp_pan, -1)
+				state.add_log("Effet Scandale Panique contagieuse : %s perd 1 Corruption disponible (Domaine contesté %s)." % [GameEnums.player_name(opp_pan), GameEnums.DOMAIN_NAMES[tgt_pan]])
+			else:
+				state.add_corruption_pool(opp_pan, -1)
+				state.add_log("Effet Scandale Panique contagieuse : %s perd 1 Corruption disponible." % GameEnums.player_name(opp_pan))
+		TransgressionData.T_OBEISSANCE:
+			state.add_corruption_pool(player, 1)
+			state.obeissance_acts_first[player] = true
+			state.add_log("Effet Scandale Obéissance pervertie : +1 Corruption, initiative cette Station.")
+		TransgressionData.T_RENONCEMENT:
+			# Remove 1 of opponent's corruptions from target_domain.
+			var tgt_ren: int = extra.get("target_domain", -1)
+			var opp_ren: int = GameEnums.opponent(player)
+			if tgt_ren >= 0 and state.corruption_in(tgt_ren, opp_ren) >= 1:
+				state.set_corruption_in(tgt_ren, opp_ren, state.corruption_in(tgt_ren, opp_ren) - 1)
+				state.add_log("Effet Scandale Renoncement noir : %s perd 1 Corruption en %s." % [GameEnums.player_name(opp_ren), GameEnums.DOMAIN_NAMES[tgt_ren]])
+			else:
+				state.add_log("Effet Scandale Renoncement noir : aucune Corruption à retirer.")
 
 static func _check_trafic_infamy_bonus(state: GameState, player: int, def_id: String, origin: int) -> void:
 	# Trafic de charges Infamy: once/Station, when provoking a Transgression linked to

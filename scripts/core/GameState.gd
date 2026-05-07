@@ -153,6 +153,17 @@ var game_over: bool = false
 var winner: int = GameEnums.PlayerId.NONE
 var winner_reason: String = ""
 var bot_for_player: Dictionary = {}
+# --- Codex des Transgressions -------------------------------------------
+var codex_of_transgressions_enabled: bool = false
+var codex_available: Array = []  # String IDs selected for this game (10 when active)
+var denonciation_blocked_domain: Dictionary = {  # owner PlayerId -> blocked DomainId or -1
+	GameEnums.PlayerId.RED: -1,
+	GameEnums.PlayerId.BLUE: -1,
+}
+var obeissance_acts_first: Dictionary = {  # PlayerId -> bool
+	GameEnums.PlayerId.RED: false,
+	GameEnums.PlayerId.BLUE: false,
+}
 
 
 func _init() -> void:
@@ -316,6 +327,10 @@ func to_dict() -> Dictionary:
 		"game_over": game_over,
 		"winner": winner,
 		"winner_reason": winner_reason,
+		"codex_of_transgressions_enabled": codex_of_transgressions_enabled,
+		"codex_available": codex_available.duplicate(),
+		"denonciation_blocked_domain": denonciation_blocked_domain.duplicate(),
+		"obeissance_acts_first": obeissance_acts_first.duplicate(),
 	}
 
 func from_dict(d: Dictionary) -> void:
@@ -351,3 +366,7 @@ func from_dict(d: Dictionary) -> void:
 	game_over = d.get("game_over", false)
 	winner = d.get("winner", GameEnums.PlayerId.NONE)
 	winner_reason = d.get("winner_reason", "")
+	codex_of_transgressions_enabled = d.get("codex_of_transgressions_enabled", false)
+	codex_available = d.get("codex_available", []).duplicate()
+	denonciation_blocked_domain = d.get("denonciation_blocked_domain", denonciation_blocked_domain).duplicate()
+	obeissance_acts_first = d.get("obeissance_acts_first", obeissance_acts_first).duplicate()
