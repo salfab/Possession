@@ -50,6 +50,7 @@ jobs:
           godot --headless --editor --path . --quit
 
       - name: Run rules engine tests
+        shell: bash
         run: |
           set -eo pipefail
           godot --headless --path . --script res://scripts/cli/run_tests.gd 2>&1 | tee tests.log
