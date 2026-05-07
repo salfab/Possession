@@ -21,6 +21,16 @@ func run_all() -> Dictionary:
 	_benchmark_mcts_vs_heuristic()
 	_benchmark_mcts_vs_mcts()
 	_benchmark_mcts_budget(2000, 5)
+	_test_missel_baseline_unchanged()
+	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
+
+
+func run_balance(n_per_modifier: int = 20) -> Dictionary:
+	results.clear()
+	pass_count = 0
+	fail_count = 0
+	results.append("=== Balance Missel Corrompu (%d parties/modificateur) ===" % n_per_modifier)
+	_benchmark_missel_all(n_per_modifier)
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
 
@@ -270,3 +280,107 @@ func _benchmark_mcts_budget(budget: int, n: int) -> void:
 		wins_blue, n, 100.0 * wins_blue / n,
 		draws, n, 100.0 * draws / n])
 	_assert(errors == 0, "Benchmark MCTS %dms : 0 partie non terminée" % budget)
+
+
+# --- Missel Corrompu tests --------------------------------------------------
+
+func _test_missel_baseline_unchanged() -> void:
+	# missel_modifiers vide → ciblage V1h identique (Signe de Croix cible max emprise)
+	var s := GameState.new()
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
+	var target := LiturgyResolver.preview_target_domain(s, GameEnums.StationId.MURMURES)
+	_assert(target == GameEnums.DomainId.AMBITION,
+		"Missel désactivé : Signe de Croix cible Ambition (max emprise)")
+
+	# I-A actif mais tous les domaines sont scellés → fallback V1h
+	s.domain(GameEnums.DomainId.AMBITION).seal_owner = GameEnums.PlayerId.RED
+	s.missel_modifiers[GameEnums.StationId.MURMURES] = "I-A"
+	var target_ia := LiturgyResolver.preview_target_domain(s, GameEnums.StationId.MURMURES)
+	_assert(target_ia == GameEnums.DomainId.AMBITION,
+		"I-A : fallback V1h quand aucun domaine non scellé avec corruption")
+
+	# I-A actif, domaine non scellé avec corruption → cible le non scellé
+	s.domain(GameEnums.DomainId.AMBITION).seal_owner = GameEnums.PlayerId.NONE
+	s.domain(GameEnums.DomainId.DESIR).seal_owner = GameEnums.PlayerId.RED
+	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 5)
+	target_ia = LiturgyResolver.preview_target_domain(s, GameEnums.StationId.MURMURES)
+	_assert(target_ia == GameEnums.DomainId.AMBITION,
+		"I-A : cible le domaine non scellé (Ambition), ignore Désir scellé")
+
+
+func _benchmark_missel_modifier(modifier_id: String, n: int) -> void:
+	var station: int = MisselData.MODIFIERS[modifier_id]["station"]
+	var name_str: String = MisselData.MODIFIERS[modifier_id]["name"]
+	var wins_red := 0
+	var wins_blue := 0
+	var draws := 0
+	var errors := 0
+	var max_liturgy := 20
+	for _i in range(n):
+		var s := GameState.new()
+		s.missel_modifiers[station] = modifier_id
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty():
+				tm.acknowledge_liturgy()
+			else:
+				break
+			turns += 1
+		if not s.game_over:
+			errors += 1
+		elif s.winner == GameEnums.PlayerId.RED:
+			wins_red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE:
+			wins_blue += 1
+		else:
+			draws += 1
+	var asymmetry := abs(wins_red - wins_blue)
+	results.append("  [missel] %s (%s) sur %d parties :" % [modifier_id, name_str, n])
+	results.append("           Rouge %d/%d (%.0f%%)  Violet %d/%d (%.0f%%)  Église %d/%d (%.0f%%)" % [
+		wins_red, n, 100.0 * wins_red / n,
+		wins_blue, n, 100.0 * wins_blue / n,
+		draws, n, 100.0 * draws / n])
+	_assert(errors == 0, "Missel %s : 0 partie non terminée" % modifier_id)
+	_assert(float(draws) / n <= 0.80,
+		"Missel %s : Église < 80%% (modificateur pas trop punitif)" % modifier_id,
+		"Église=%.0f%%" % (100.0 * draws / n))
+	_assert(asymmetry <= n / 2,
+		"Missel %s : asymétrie Rouge/Violet raisonnable" % modifier_id,
+		"R=%d V=%d" % [wins_red, wins_blue])
+
+
+func _benchmark_missel_all(n: int = 20) -> void:
+	results.append("  [missel] === Baseline MCTSBot vs MCTSBot (V1h) ===")
+	var wins_red := 0
+	var wins_blue := 0
+	var draws := 0
+	var errors := 0
+	var max_liturgy := 20
+	for _i in range(n):
+		var s := GameState.new()
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty():
+				tm.acknowledge_liturgy()
+			else:
+				break
+			turns += 1
+		if not s.game_over: errors += 1
+		elif s.winner == GameEnums.PlayerId.RED: wins_red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE: wins_blue += 1
+		else: draws += 1
+	results.append("  [baseline] Rouge %d/%d (%.0f%%)  Violet %d/%d (%.0f%%)  Église %d/%d (%.0f%%)" % [
+		wins_red, n, 100.0 * wins_red / n,
+		wins_blue, n, 100.0 * wins_blue / n,
+		draws, n, 100.0 * draws / n])
+	results.append("  [missel] === Modificateurs ===")
+	for mod_id in MisselData.MODIFIERS.keys():
+		_benchmark_missel_modifier(mod_id, n)

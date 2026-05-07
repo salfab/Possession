@@ -147,6 +147,7 @@ var paranoia_used_this_station: Dictionary = {
 	GameEnums.PlayerId.BLUE: false,
 }
 var foi_next_response_impedita: bool = false  # Simonie infamy effect
+var missel_modifiers: Dictionary = {}  # StationId -> String modifier_id; empty = V1h strict
 var log: Array = []
 var game_over: bool = false
 var winner: int = GameEnums.PlayerId.NONE
@@ -310,6 +311,7 @@ func to_dict() -> Dictionary:
 		"favori_used_this_station": favori_used_this_station.duplicate(),
 		"paranoia_used_this_station": paranoia_used_this_station.duplicate(),
 		"foi_next_response_impedita": foi_next_response_impedita,
+		"missel_modifiers": missel_modifiers.duplicate(),
 		"log": log.duplicate(),
 		"game_over": game_over,
 		"winner": winner,
@@ -344,6 +346,7 @@ func from_dict(d: Dictionary) -> void:
 	favori_used_this_station = d.get("favori_used_this_station", favori_used_this_station)
 	paranoia_used_this_station = d.get("paranoia_used_this_station", paranoia_used_this_station)
 	foi_next_response_impedita = d.get("foi_next_response_impedita", false)
+	missel_modifiers = d.get("missel_modifiers", {}).duplicate()
 	log = d.get("log", [])
 	game_over = d.get("game_over", false)
 	winner = d.get("winner", GameEnums.PlayerId.NONE)

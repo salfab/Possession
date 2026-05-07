@@ -109,11 +109,15 @@ static func _pick_max(values: Dictionary, tie_breaker: Callable) -> int:
 # --- I — Signe de croix -----------------------------------------------------
 
 static func _pick_signe_target(state: GameState) -> int:
+	var mod: String = state.missel_modifiers.get(GameEnums.StationId.MURMURES, "")
+	if mod != "":
+		var override := MisselData.pick_target_domain(state, mod)
+		if override != -1:
+			return override
 	var totals := {}
 	for d_id in DomainData.DOMAINS:
 		totals[d_id] = _total_emprise(state, d_id)
 	return _pick_max(totals, func(tied):
-		# Closest to Volonté on the priority list
 		for v in GameEnums.VOLONTE_PROXIMITY_PRIORITY:
 			if v in tied:
 				return v
@@ -153,6 +157,11 @@ static func _signe_de_croix(state: GameState, impedita: bool) -> void:
 # --- II — Examen de conscience ---------------------------------------------
 
 static func _pick_examen_target(state: GameState) -> int:
+	var mod: String = state.missel_modifiers.get(GameEnums.StationId.TENTATION, "")
+	if mod != "":
+		var override := MisselData.pick_target_domain(state, mod)
+		if override != -1:
+			return override
 	var candidates := [GameEnums.DomainId.AMBITION, GameEnums.DomainId.DESIR]
 	var totals := {}
 	for d_id in candidates:
@@ -192,6 +201,11 @@ static func _set_no_seal_until(state: GameState, d_id: int, station_inclusive: i
 # Most "serious" transgressed domain: most infamies, then scandals, then total emprise.
 # Returns -1 if no domain is transgressed.
 static func _pick_contrition_target(state: GameState) -> int:
+	var mod: String = state.missel_modifiers.get(GameEnums.StationId.CHUTE, "")
+	if mod != "":
+		var override := MisselData.pick_target_domain(state, mod)
+		if override != -1:
+			return override
 	var transgressed := []
 	for d_id in DomainData.DOMAINS:
 		if state.is_transgressed(d_id):
@@ -239,6 +253,11 @@ static func _contrition(state: GameState, impedita: bool) -> void:
 # is still provided (the demon-without-initiative on tie) so the UI can label
 # the card.
 static func _pick_confession_target_player(state: GameState) -> Dictionary:
+	var mod: String = state.missel_modifiers.get(GameEnums.StationId.CONFESSION, "")
+	if mod != "":
+		var override := MisselData.pick_target_player(state, mod)
+		if override != -1:
+			return {"player": override, "total_transgressions": 1}
 	var counts := {GameEnums.PlayerId.RED: 0, GameEnums.PlayerId.BLUE: 0}
 	for d_id in DomainData.DOMAINS:
 		var d := state.domain(d_id)
@@ -338,6 +357,11 @@ static func available_confession_kinds(state: GameState, dec: GameState.PendingD
 # --- V — Communion ---------------------------------------------------------
 
 static func _pick_communion_target(state: GameState) -> int:
+	var mod: String = state.missel_modifiers.get(GameEnums.StationId.OFFICE, "")
+	if mod != "":
+		var override := MisselData.pick_target_domain(state, mod)
+		if override != -1:
+			return override
 	var candidates := [GameEnums.DomainId.FOI, GameEnums.DomainId.VOLONTE]
 	# Priority: sealed > has infamy > most emprise > demon-without-initiative chooses.
 	var sealed_c := []
