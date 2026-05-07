@@ -1,0 +1,41 @@
+name: Balance — Missel Corrompu
+
+on:
+  workflow_dispatch:
+    inputs:
+      n_per_modifier:
+        description: "Parties par modificateur (20 = ~7 min, 50 = ~18 min, 100 = ~35 min)"
+        required: false
+        default: "20"
+        type: string
+
+jobs:
+  balance:
+    name: Balance Missel Corrompu (${{ inputs.n_per_modifier }} parties/mod)
+    runs-on: ubuntu-22.04
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Import project
+        run: godot --headless --editor --path . --quit
+
+      - name: Run balance benchmarks
+        shell: bash
+        run: |
+          set -eo pipefail
+          N="${{ inputs.n_per_modifier }}"
+          godot --headless --path . \
+            --script res://scripts/cli/run_balance.gd -- "$N" \
+            2>&1 | tee balance.log
+          grep -q "Balance" balance.log || { echo "::error::Balance script did not run."; exit 1; }
+
+      - name: Upload balance log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: balance-log-n${{ inputs.n_per_modifier }}
+          path: balance.log
+          retention-days: 30
