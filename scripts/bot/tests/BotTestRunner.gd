@@ -20,7 +20,6 @@ func run_all() -> Dictionary:
 	_test_mcts_picks_action()
 	_benchmark_mcts_vs_heuristic()
 	_benchmark_mcts_vs_mcts()
-	_benchmark_mcts_budget(2000, 5)
 	_test_missel_baseline_unchanged()
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
@@ -30,6 +29,7 @@ func run_balance(n_per_modifier: int = 20) -> Dictionary:
 	pass_count = 0
 	fail_count = 0
 	results.append("=== Balance Missel Corrompu (%d parties/modificateur) ===" % n_per_modifier)
+	_benchmark_mcts_budget(2000, 10)
 	_benchmark_missel_all(n_per_modifier)
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
