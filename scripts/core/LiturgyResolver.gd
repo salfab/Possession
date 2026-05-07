@@ -257,7 +257,16 @@ static func _pick_confession_target_player(state: GameState) -> Dictionary:
 	if mod != "":
 		var override := MisselData.pick_target_player(state, mod)
 		if override != -1:
-			return {"player": override, "total_transgressions": 1}
+			var total := 0
+			for d_id in DomainData.DOMAINS:
+				var d := state.domain(d_id)
+				for ti in d.scandals:
+					if ti.owner == override:
+						total += 1
+				for ti in d.infamies:
+					if ti.owner == override:
+						total += 1
+			return {"player": override, "total_transgressions": total}
 	var counts := {GameEnums.PlayerId.RED: 0, GameEnums.PlayerId.BLUE: 0}
 	for d_id in DomainData.DOMAINS:
 		var d := state.domain(d_id)
