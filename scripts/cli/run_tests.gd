@@ -19,7 +19,11 @@ func _initialize() -> void:
 
 	print("")
 
-	var bots = load("res://scripts/bot/tests/BotTestRunner.gd").new()
+	var bot_script = load("res://scripts/bot/tests/BotTestRunner.gd")
+	if bot_script == null:
+		print("FAIL  BotTestRunner.gd failed to load (parse error)")
+		quit(1)
+	var bots = bot_script.new()
 	var r2: Dictionary = bots.run_all()
 	for line in r2["lines"]:
 		print(String(line))

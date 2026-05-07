@@ -338,7 +338,7 @@ func _benchmark_missel_modifier(modifier_id: String, n: int) -> void:
 			wins_blue += 1
 		else:
 			draws += 1
-	var asymmetry := abs(wins_red - wins_blue)
+	var asymmetry: int = absi(wins_red - wins_blue)
 	results.append("  [missel] %s (%s) sur %d parties :" % [modifier_id, name_str, n])
 	results.append("           Rouge %d/%d (%.0f%%)  Violet %d/%d (%.0f%%)  Église %d/%d (%.0f%%)" % [
 		wins_red, n, 100.0 * wins_red / n,
