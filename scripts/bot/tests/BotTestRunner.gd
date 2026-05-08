@@ -33,6 +33,8 @@ func run_balance(n_per_modifier: int = 20) -> Dictionary:
 	_benchmark_mcts_budget(2000, 10)
 	_benchmark_missel_all(n_per_modifier)
 	_benchmark_codex_vs_baseline(n_per_modifier)
+	_benchmark_combined(n_per_modifier)
+	_benchmark_initiative_swapped(n_per_modifier)
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
 
@@ -490,3 +492,83 @@ func _benchmark_codex_vs_baseline(n: int = 20) -> void:
 			results.append("    %s : %d" % [tid, c_infamy_counts[tid]])
 	_assert(c_err == 0, "Codex benchmark : 0 partie non terminée", "erreurs=%d" % c_err)
 	_assert(c_asym <= n, "Codex benchmark : asymétrie Rouge/Violet raisonnable", "R=%d V=%d" % [c_red, c_blue])
+
+
+# Codex des Transgressions + Missel Corrompu actifs simultanément
+# ---------------------------------------------------------------------------
+func _benchmark_combined(n: int = 20) -> void:
+	results.append("=== Balance Combiné : Codex + Missel (%d parties) ===" % n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0xCAFE1
+	var stations: Array = [
+		GameEnums.StationId.MURMURES,
+		GameEnums.StationId.TENTATION,
+		GameEnums.StationId.CHUTE,
+		GameEnums.StationId.CONFESSION,
+		GameEnums.StationId.OFFICE,
+	]
+	var red := 0; var blue := 0; var draws := 0; var errors := 0
+	var max_liturgy := 20
+	for _i in range(n):
+		var s := GameState.new()
+		CodexSetup.setup(s, rng)
+		for station in stations:
+			var mods: Array = MisselData.modifiers_for_station(station)
+			var pick: String = mods[rng.randi_range(0, mods.size() - 1)]
+			s.missel_modifiers[station] = pick
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty(): tm.acknowledge_liturgy()
+			else: break
+			turns += 1
+		if not s.game_over: errors += 1
+		elif s.winner == GameEnums.PlayerId.RED: red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE: blue += 1
+		else: draws += 1
+	var asym: int = absi(red - blue)
+	results.append("  [Combiné] Rouge %d  Violet %d  Église %d  Erreurs %d  (/%d)" % [red, blue, draws, errors, n])
+	_assert(errors == 0, "Combiné : 0 partie non terminée", "erreurs=%d" % errors)
+	_assert(asym <= n, "Combiné : asymétrie Rouge/Violet raisonnable", "R=%d V=%d" % [red, blue])
+
+
+# Initiative miroir : Violet prend I/III/V, Rouge prend II/IV/VI
+# Si la distribution se renverse, l'initiative cause le biais observé.
+# ---------------------------------------------------------------------------
+func _benchmark_initiative_swapped(n: int = 20) -> void:
+	results.append("=== Miroir Initiative (table inversée, %d parties) ===" % n)
+
+	# Construit la table inversée
+	var swapped: Dictionary = {}
+	for station in GameEnums.STATION_INITIATIVE.keys():
+		swapped[station] = GameEnums.opponent(GameEnums.STATION_INITIATIVE[station])
+
+	var red := 0; var blue := 0; var draws := 0; var errors := 0
+	var max_liturgy := 20
+	for _i in range(n):
+		var s := GameState.new()
+		s.initiative_override = swapped.duplicate()
+		var tm := TurnManager.new(s, true)
+		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		tm._check_bot_turn()
+		var turns := 0
+		while not s.game_over and turns < max_liturgy:
+			if not tm.pending_liturgy.is_empty(): tm.acknowledge_liturgy()
+			else: break
+			turns += 1
+		if not s.game_over: errors += 1
+		elif s.winner == GameEnums.PlayerId.RED: red += 1
+		elif s.winner == GameEnums.PlayerId.BLUE: blue += 1
+		else: draws += 1
+
+	var demon_wins: int = red + blue
+	var rouge_share: String = "—"
+	if demon_wins > 0:
+		rouge_share = "%d%%" % int(100.0 * red / demon_wins)
+	results.append("  [Miroir] Rouge %d  Violet %d  Église %d  Erreurs %d  (/%d)" % [red, blue, draws, errors, n])
+	results.append("  [Miroir] Rouge = %s des victoires démon (normal = 50%% si symétrique)" % rouge_share)
+	_assert(errors == 0, "Miroir initiative : 0 partie non terminée", "erreurs=%d" % errors)

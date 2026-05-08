@@ -179,6 +179,8 @@ func _pick_initiative() -> int:
 		return GameEnums.PlayerId.RED
 	if state.obeissance_acts_first.get(GameEnums.PlayerId.BLUE, false):
 		return GameEnums.PlayerId.BLUE
+	if state.initiative_override.has(state.current_station):
+		return state.initiative_override[state.current_station]
 	return GameEnums.STATION_INITIATIVE[state.current_station]
 
 
@@ -209,7 +211,8 @@ func _apply_mascarade_effect() -> void:
 
 func _queue_free_exploitation_decisions() -> void:
 	# Initiative player picks first.
-	var order: Array = [GameEnums.STATION_INITIATIVE[state.current_station], GameEnums.opponent(GameEnums.STATION_INITIATIVE[state.current_station])]
+	var _init_player: int = state.initiative_override.get(state.current_station, GameEnums.STATION_INITIATIVE[state.current_station])
+	var order: Array = [_init_player, GameEnums.opponent(_init_player)]
 	for p in order:
 		var options := []
 		for d_id in DomainData.DOMAINS:
