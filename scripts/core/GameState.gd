@@ -27,8 +27,8 @@ class TransgressionInstance extends RefCounted:
 class DomainState extends RefCounted:
 	var id: int = 0
 	var red_corruption: int = 0
-	var blue_corruption: int = 0
-	var seal_owner: int = GameEnums.PlayerId.NONE  # NONE / RED / BLUE
+	var purple_corruption: int = 0
+	var seal_owner: int = GameEnums.PlayerId.NONE  # NONE / RED / PURPLE
 	var scandals: Array = []   # Array of TransgressionInstance
 	var infamies: Array = []   # Array of TransgressionInstance
 	var penitence_until_station: int = -1   # StationId index up to which penitence applies, or -1
@@ -41,7 +41,7 @@ class DomainState extends RefCounted:
 		return {
 			"id": id,
 			"red_corruption": red_corruption,
-			"blue_corruption": blue_corruption,
+			"purple_corruption": purple_corruption,
 			"seal_owner": seal_owner,
 			"scandals": scandals.map(func(t): return t.to_dict()),
 			"infamies": infamies.map(func(t): return t.to_dict()),
@@ -55,7 +55,7 @@ class DomainState extends RefCounted:
 	func from_dict(d: Dictionary) -> void:
 		id = d.get("id", 0)
 		red_corruption = d.get("red_corruption", 0)
-		blue_corruption = d.get("blue_corruption", 0)
+		purple_corruption = d.get("purple_corruption", 0)
 		seal_owner = d.get("seal_owner", GameEnums.PlayerId.NONE)
 		penitence_until_station = d.get("penitence_until_station", -1)
 		exploited_by_red_this_station = d.get("exploited_by_red_this_station", false)
@@ -113,10 +113,10 @@ class PendingDecision extends RefCounted:
 
 var domains: Dictionary = {}        # DomainId -> DomainState
 var available_corruption: Dictionary = {  # PlayerId -> int
-	GameEnums.PlayerId.RED: GameEnums.STARTING_CORRUPTION,
-	GameEnums.PlayerId.BLUE: GameEnums.STARTING_CORRUPTION,
+	GameEnums.PlayerId.RED: GameEnums.STARTING_CORRUPTION_RED,
+	GameEnums.PlayerId.PURPLE: GameEnums.STARTING_CORRUPTION,
 }
-var ascendant: int = 0   # Tug-of-war: positive = RED, negative = BLUE
+var ascendant: int = 0   # Tug-of-war: positive = RED, negative = PURPLE
 var current_station: int = GameEnums.StationId.MURMURES
 var current_pulse: int = 1
 var active_player: int = GameEnums.PlayerId.RED
@@ -124,27 +124,27 @@ var pending_entraves: Array = []   # Array[PendingEntrave]
 var pending_decisions: Array = []  # Array[PendingDecision] — UI must resolve these
 var transgressions_provoked_this_station: Dictionary = {  # PlayerId -> int count
 	GameEnums.PlayerId.RED: 0,
-	GameEnums.PlayerId.BLUE: 0,
+	GameEnums.PlayerId.PURPLE: 0,
 }
 var trafic_discount_pending: Dictionary = {  # PlayerId -> bool
 	GameEnums.PlayerId.RED: false,
-	GameEnums.PlayerId.BLUE: false,
+	GameEnums.PlayerId.PURPLE: false,
 }
 var nepotisme_used_this_station: Dictionary = {  # PlayerId -> bool
 	GameEnums.PlayerId.RED: false,
-	GameEnums.PlayerId.BLUE: false,
+	GameEnums.PlayerId.PURPLE: false,
 }
 var trafic_infamy_used_this_station: Dictionary = {
 	GameEnums.PlayerId.RED: false,
-	GameEnums.PlayerId.BLUE: false,
+	GameEnums.PlayerId.PURPLE: false,
 }
 var favori_used_this_station: Dictionary = {
 	GameEnums.PlayerId.RED: false,
-	GameEnums.PlayerId.BLUE: false,
+	GameEnums.PlayerId.PURPLE: false,
 }
 var paranoia_used_this_station: Dictionary = {
 	GameEnums.PlayerId.RED: false,
-	GameEnums.PlayerId.BLUE: false,
+	GameEnums.PlayerId.PURPLE: false,
 }
 var foi_next_response_impedita: bool = false  # Simonie infamy effect
 var missel_modifiers: Dictionary = {}  # StationId -> String modifier_id; empty = V1h strict
@@ -159,11 +159,11 @@ var codex_of_transgressions_enabled: bool = false
 var codex_available: Array = []  # String IDs selected for this game (10 when active)
 var denonciation_blocked_domain: Dictionary = {  # owner PlayerId -> blocked DomainId or -1
 	GameEnums.PlayerId.RED: -1,
-	GameEnums.PlayerId.BLUE: -1,
+	GameEnums.PlayerId.PURPLE: -1,
 }
 var obeissance_acts_first: Dictionary = {  # PlayerId -> bool
 	GameEnums.PlayerId.RED: false,
-	GameEnums.PlayerId.BLUE: false,
+	GameEnums.PlayerId.PURPLE: false,
 }
 
 
@@ -183,7 +183,7 @@ func corruption_in(d_id: int, player: int) -> int:
 	var d := domain(d_id)
 	if d == null:
 		return 0
-	return d.red_corruption if player == GameEnums.PlayerId.RED else d.blue_corruption
+	return d.red_corruption if player == GameEnums.PlayerId.RED else d.purple_corruption
 
 func set_corruption_in(d_id: int, player: int, v: int) -> void:
 	var d := domain(d_id)
@@ -192,7 +192,7 @@ func set_corruption_in(d_id: int, player: int, v: int) -> void:
 	if player == GameEnums.PlayerId.RED:
 		d.red_corruption = max(0, v)
 	else:
-		d.blue_corruption = max(0, v)
+		d.purple_corruption = max(0, v)
 
 func add_corruption_pool(player: int, n: int) -> void:
 	available_corruption[player] = max(0, available_corruption.get(player, 0) + n)
@@ -207,10 +207,10 @@ func controller_of(d_id: int) -> int:
 	var d := domain(d_id)
 	if d == null:
 		return GameEnums.PlayerId.NONE
-	if d.red_corruption > d.blue_corruption:
+	if d.red_corruption > d.purple_corruption:
 		return GameEnums.PlayerId.RED
-	if d.blue_corruption > d.red_corruption:
-		return GameEnums.PlayerId.BLUE
+	if d.purple_corruption > d.red_corruption:
+		return GameEnums.PlayerId.PURPLE
 	return GameEnums.PlayerId.NONE
 
 func has_net_domination(d_id: int, player: int) -> bool:
@@ -218,9 +218,9 @@ func has_net_domination(d_id: int, player: int) -> bool:
 	if d == null:
 		return false
 	if player == GameEnums.PlayerId.RED:
-		return d.red_corruption - d.blue_corruption >= 2
-	if player == GameEnums.PlayerId.BLUE:
-		return d.blue_corruption - d.red_corruption >= 2
+		return d.red_corruption - d.purple_corruption >= 2
+	if player == GameEnums.PlayerId.PURPLE:
+		return d.purple_corruption - d.red_corruption >= 2
 	return false
 
 func is_transgressed(d_id: int) -> bool:
@@ -243,7 +243,7 @@ func is_contested(d_id: int) -> bool:
 	var d := domain(d_id)
 	if d == null:
 		return false
-	return d.red_corruption > 0 and d.blue_corruption > 0
+	return d.red_corruption > 0 and d.purple_corruption > 0
 
 func count_transgressed_domains() -> int:
 	var n := 0

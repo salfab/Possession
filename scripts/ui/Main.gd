@@ -838,7 +838,7 @@ func _snapshot_board_state() -> Dictionary:
 		var d := state.domain(d_id)
 		snap[d_id] = {
 			"red": d.red_corruption,
-			"blue": d.blue_corruption,
+			"blue": d.purple_corruption,
 			"seal": d.seal_owner,
 			"scandals": d.scandals.size(),
 			"infamies": d.infamies.size(),
@@ -893,7 +893,7 @@ func _refresh_active_player_highlight() -> void:
 		return
 	var active: int = state.active_player
 	_apply_player_panel_style(_player_panel_red, GameEnums.PlayerId.RED, active == GameEnums.PlayerId.RED)
-	_apply_player_panel_style(_player_panel_blue, GameEnums.PlayerId.BLUE, active == GameEnums.PlayerId.BLUE)
+	_apply_player_panel_style(_player_panel_blue, GameEnums.PlayerId.PURPLE, active == GameEnums.PlayerId.PURPLE)
 
 
 func _apply_player_panel_style(panel: PanelContainer, pid: int, is_active: bool) -> void:
@@ -1057,7 +1057,7 @@ func _refresh_domain_markers(d_id: int) -> void:
 		row.add_child(_make_transgression_marker(ti, false))
 	for ti in d.infamies:
 		row.add_child(_make_transgression_marker(ti, true))
-	dots.set_counts(d.red_corruption, d.blue_corruption)
+	dots.set_counts(d.red_corruption, d.purple_corruption)
 	row.add_child(dots)
 
 
@@ -1375,7 +1375,7 @@ func _build_placed_transgressions_dialog() -> void:
 	_placed_dialog.add_child(hbox)
 
 	var bundle_red: Dictionary = _build_placed_column(GameEnums.PlayerId.RED)
-	var bundle_blue: Dictionary = _build_placed_column(GameEnums.PlayerId.BLUE)
+	var bundle_blue: Dictionary = _build_placed_column(GameEnums.PlayerId.PURPLE)
 	_placed_list_red = bundle_red["list"]
 	_placed_list_blue = bundle_blue["list"]
 	hbox.add_child(bundle_red["panel"])
@@ -1486,7 +1486,7 @@ func _open_placed_card(tid: String, name_str: String, is_infamy: bool) -> void:
 
 func _build_player_transgression_panels() -> void:
 	var bundle_red: Dictionary = _build_player_panel(GameEnums.PlayerId.RED,  GameEnums.player_color_light(GameEnums.PlayerId.RED))
-	var bundle_blue: Dictionary = _build_player_panel(GameEnums.PlayerId.BLUE, GameEnums.player_color_light(GameEnums.PlayerId.BLUE))
+	var bundle_blue: Dictionary = _build_player_panel(GameEnums.PlayerId.PURPLE, GameEnums.player_color_light(GameEnums.PlayerId.PURPLE))
 	_player_panel_red = bundle_red["panel"]
 	_player_list_red = bundle_red["list"]
 	_player_reserve_red = bundle_red["reserve"]
@@ -1610,7 +1610,7 @@ func _refresh_player_transgression_panels() -> void:
 		var n_r: int = state.available_corruption[GameEnums.PlayerId.RED]
 		_player_reserve_red.text = I18n.t("ui.player_panel.reserve", [n_r, ("s" if n_r != 1 else "")])
 	if _player_reserve_blue != null:
-		var n_b: int = state.available_corruption[GameEnums.PlayerId.BLUE]
+		var n_b: int = state.available_corruption[GameEnums.PlayerId.PURPLE]
 		_player_reserve_blue.text = I18n.t("ui.player_panel.reserve", [n_b, ("s" if n_b != 1 else "")])
 	var n_red := 0
 	var n_blue := 0
@@ -1817,7 +1817,7 @@ func _on_btn_force_next_station() -> void:
 		return
 	state.current_pulse = GameEnums.STATION_PULSES[state.current_station]
 	manager._pulse_actions_done[GameEnums.PlayerId.RED] = true
-	manager._pulse_actions_done[GameEnums.PlayerId.BLUE] = true
+	manager._pulse_actions_done[GameEnums.PlayerId.PURPLE] = true
 	manager._end_pulse()
 	_refresh_all()
 
@@ -3647,7 +3647,7 @@ func _relocalize() -> void:
 		_placed_dialog.ok_button_text = I18n.t("ui.dialog.close")
 		# Column titles (just the player name, no "— Transgressions" suffix)
 		_relocalize_placed_column_title(_placed_list_red, GameEnums.PlayerId.RED)
-		_relocalize_placed_column_title(_placed_list_blue, GameEnums.PlayerId.BLUE)
+		_relocalize_placed_column_title(_placed_list_blue, GameEnums.PlayerId.PURPLE)
 	# Status label tooltip
 	if _status_label != null:
 		_status_label.tooltip_text = I18n.t("ui.tooltip.station_card")
@@ -3655,7 +3655,7 @@ func _relocalize() -> void:
 	if _player_panel_red != null and is_instance_valid(_player_panel_red):
 		_relocalize_player_panel_title(_player_panel_red, GameEnums.PlayerId.RED)
 	if _player_panel_blue != null and is_instance_valid(_player_panel_blue):
-		_relocalize_player_panel_title(_player_panel_blue, GameEnums.PlayerId.BLUE)
+		_relocalize_player_panel_title(_player_panel_blue, GameEnums.PlayerId.PURPLE)
 	# Cascading refresh for content that depends on locale
 	if state != null:
 		_refresh_all()

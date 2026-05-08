@@ -9,7 +9,7 @@ extends RefCounted
 # Variable: state.active_player flips after each individual action until both have acted; then pulse ends.
 
 var state: GameState
-var _pulse_actions_done: Dictionary = {GameEnums.PlayerId.RED: false, GameEnums.PlayerId.BLUE: false}
+var _pulse_actions_done: Dictionary = {GameEnums.PlayerId.RED: false, GameEnums.PlayerId.PURPLE: false}
 var _pending_advance_to_station: int = -1   # set when waiting for Confession decisions
 # Set after the liturgical response of a station resolves; the UI must
 # acknowledge before the game advances to the next station.
@@ -83,7 +83,7 @@ func _end_pulse() -> void:
 	state.add_log("--- Fin de la Pulsation %d/%d (Station %s) ---" %
 		[state.current_pulse, GameEnums.STATION_PULSES[state.current_station], GameEnums.STATION_NAMES[state.current_station]])
 	_pulse_actions_done[GameEnums.PlayerId.RED] = false
-	_pulse_actions_done[GameEnums.PlayerId.BLUE] = false
+	_pulse_actions_done[GameEnums.PlayerId.PURPLE] = false
 	if state.current_pulse < GameEnums.STATION_PULSES[state.current_station]:
 		state.current_pulse += 1
 		state.active_player = _pick_initiative()
@@ -106,7 +106,7 @@ func acknowledge_liturgy() -> void:
 	pending_liturgy = {}
 	# Bulle vendue infamy: +1 Corruption after each non-entraved liturgy.
 	# Dogme renversé infamy: +1 Corruption after each liturgy.
-	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.BLUE]:
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
 		var bulle_ti: GameState.TransgressionInstance = state.find_transgression_instance(p, TransgressionData.T_BULLE, GameEnums.TransgressionFace.INFAMIE)
 		if bulle_ti != null and not was_entraved:
 			state.add_corruption_pool(p, 1)
@@ -148,22 +148,22 @@ func _begin_station(station: int, _initial: bool) -> void:
 		d.exploited_by_blue_this_station = false
 		d.was_fissured_this_station = false
 	state.transgressions_provoked_this_station[GameEnums.PlayerId.RED] = 0
-	state.transgressions_provoked_this_station[GameEnums.PlayerId.BLUE] = 0
+	state.transgressions_provoked_this_station[GameEnums.PlayerId.PURPLE] = 0
 	state.nepotisme_used_this_station[GameEnums.PlayerId.RED] = false
-	state.nepotisme_used_this_station[GameEnums.PlayerId.BLUE] = false
+	state.nepotisme_used_this_station[GameEnums.PlayerId.PURPLE] = false
 	state.trafic_infamy_used_this_station[GameEnums.PlayerId.RED] = false
-	state.trafic_infamy_used_this_station[GameEnums.PlayerId.BLUE] = false
+	state.trafic_infamy_used_this_station[GameEnums.PlayerId.PURPLE] = false
 	state.favori_used_this_station[GameEnums.PlayerId.RED] = false
-	state.favori_used_this_station[GameEnums.PlayerId.BLUE] = false
+	state.favori_used_this_station[GameEnums.PlayerId.PURPLE] = false
 	state.paranoia_used_this_station[GameEnums.PlayerId.RED] = false
-	state.paranoia_used_this_station[GameEnums.PlayerId.BLUE] = false
+	state.paranoia_used_this_station[GameEnums.PlayerId.PURPLE] = false
 	# Dénonciation scandale block is station-scoped: reset at station start.
 	state.denonciation_blocked_domain[GameEnums.PlayerId.RED] = -1
-	state.denonciation_blocked_domain[GameEnums.PlayerId.BLUE] = -1
+	state.denonciation_blocked_domain[GameEnums.PlayerId.PURPLE] = -1
 	# Obéissance: scandale flag resets each station; re-activate for infamy holders.
 	state.obeissance_acts_first[GameEnums.PlayerId.RED] = false
-	state.obeissance_acts_first[GameEnums.PlayerId.BLUE] = false
-	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.BLUE]:
+	state.obeissance_acts_first[GameEnums.PlayerId.PURPLE] = false
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
 		if state.find_transgression_instance(p, TransgressionData.T_OBEISSANCE, GameEnums.TransgressionFace.INFAMIE) != null:
 			state.obeissance_acts_first[p] = true
 	# Mascarade de velours infamy: auto-move 1 corruption at station start.
@@ -177,15 +177,15 @@ func _begin_station(station: int, _initial: bool) -> void:
 func _pick_initiative() -> int:
 	if state.obeissance_acts_first.get(GameEnums.PlayerId.RED, false):
 		return GameEnums.PlayerId.RED
-	if state.obeissance_acts_first.get(GameEnums.PlayerId.BLUE, false):
-		return GameEnums.PlayerId.BLUE
+	if state.obeissance_acts_first.get(GameEnums.PlayerId.PURPLE, false):
+		return GameEnums.PlayerId.PURPLE
 	if state.initiative_override.has(state.current_station):
 		return state.initiative_override[state.current_station]
 	return GameEnums.STATION_INITIATIVE[state.current_station]
 
 
 func _apply_mascarade_effect() -> void:
-	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.BLUE]:
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
 		var ti: GameState.TransgressionInstance = state.find_transgression_instance(p, TransgressionData.T_MASCARADE, GameEnums.TransgressionFace.INFAMIE)
 		if ti == null:
 			continue
@@ -272,7 +272,7 @@ func force_advance_to_exorcism() -> void:
 		_drain_pending_decisions()
 		state.current_pulse = GameEnums.STATION_PULSES[state.current_station]
 		_pulse_actions_done[GameEnums.PlayerId.RED] = true
-		_pulse_actions_done[GameEnums.PlayerId.BLUE] = true
+		_pulse_actions_done[GameEnums.PlayerId.PURPLE] = true
 		_end_pulse()
 		if not pending_liturgy.is_empty():
 			acknowledge_liturgy()

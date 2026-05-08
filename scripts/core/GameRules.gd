@@ -43,7 +43,7 @@ static func can_exploiter(state: GameState, player: int, d_id: int) -> bool:
 	var d := state.domain(d_id)
 	if player == GameEnums.PlayerId.RED and d.exploited_by_red_this_station:
 		return false
-	if player == GameEnums.PlayerId.BLUE and d.exploited_by_blue_this_station:
+	if player == GameEnums.PlayerId.PURPLE and d.exploited_by_blue_this_station:
 		return false
 	# Dénonciation anonyme: scandale blocks a domain for opponent this station;
 	# infamy permanently blocks origin domain.
@@ -257,7 +257,7 @@ static func why_cannot_exploiter(state: GameState, player: int, d_id: int) -> St
 	var d := state.domain(d_id)
 	if player == GameEnums.PlayerId.RED and d.exploited_by_red_this_station:
 		return I18n.t("err.already_exploited")
-	if player == GameEnums.PlayerId.BLUE and d.exploited_by_blue_this_station:
+	if player == GameEnums.PlayerId.PURPLE and d.exploited_by_blue_this_station:
 		return I18n.t("err.already_exploited")
 	return ""
 

@@ -49,13 +49,13 @@ static func apply_final_ascendant_bonuses(state: GameState) -> void:
 		var d := state.domain(d_id)
 		if d.seal_owner == GameEnums.PlayerId.RED:
 			state.ascendant += 1
-		elif d.seal_owner == GameEnums.PlayerId.BLUE:
+		elif d.seal_owner == GameEnums.PlayerId.PURPLE:
 			state.ascendant -= 1
 		# Volonté sealed bonus
 		if d_id == GameEnums.DomainId.VOLONTE:
 			if d.seal_owner == GameEnums.PlayerId.RED:
 				state.ascendant += 1
-			elif d.seal_owner == GameEnums.PlayerId.BLUE:
+			elif d.seal_owner == GameEnums.PlayerId.PURPLE:
 				state.ascendant -= 1
 		# Infamies in a domain controlled by you
 		var ctrl := state.controller_of(d_id)
@@ -83,7 +83,7 @@ static func resolve_ascendant_winner(state: GameState) -> Dictionary:
 	if state.ascendant > 0:
 		return {"winner": GameEnums.PlayerId.RED, "reason": "Ascendant final favorable à Rouge."}
 	if state.ascendant < 0:
-		return {"winner": GameEnums.PlayerId.BLUE, "reason": "Ascendant final favorable à Bleu."}
+		return {"winner": GameEnums.PlayerId.PURPLE, "reason": "Ascendant final favorable à Bleu."}
 	# Zero ascendant tie-breakers
 	var vol := state.domain(GameEnums.DomainId.VOLONTE)
 	if vol.seal_owner != GameEnums.PlayerId.NONE:
@@ -98,12 +98,12 @@ static func resolve_ascendant_winner(state: GameState) -> Dictionary:
 		for ti in state.domain(d_id).infamies:
 			if ti.owner == GameEnums.PlayerId.RED:
 				red_inf += 1
-			elif ti.owner == GameEnums.PlayerId.BLUE:
+			elif ti.owner == GameEnums.PlayerId.PURPLE:
 				blue_inf += 1
 	if red_inf > blue_inf:
 		return {"winner": GameEnums.PlayerId.RED, "reason": "Égalité d'Ascendant : plus d'Infamies pour Rouge."}
 	if blue_inf > red_inf:
-		return {"winner": GameEnums.PlayerId.BLUE, "reason": "Égalité d'Ascendant : plus d'Infamies pour Bleu."}
+		return {"winner": GameEnums.PlayerId.PURPLE, "reason": "Égalité d'Ascendant : plus d'Infamies pour Bleu."}
 	# Most domains controlled
 	var red_ctrl := 0
 	var blue_ctrl := 0
@@ -111,12 +111,12 @@ static func resolve_ascendant_winner(state: GameState) -> Dictionary:
 		var c := state.controller_of(d_id)
 		if c == GameEnums.PlayerId.RED:
 			red_ctrl += 1
-		elif c == GameEnums.PlayerId.BLUE:
+		elif c == GameEnums.PlayerId.PURPLE:
 			blue_ctrl += 1
 	if red_ctrl > blue_ctrl:
 		return {"winner": GameEnums.PlayerId.RED, "reason": "Égalité d'Ascendant : plus de Domaines contrôlés par Rouge."}
 	if blue_ctrl > red_ctrl:
-		return {"winner": GameEnums.PlayerId.BLUE, "reason": "Égalité d'Ascendant : plus de Domaines contrôlés par Bleu."}
+		return {"winner": GameEnums.PlayerId.PURPLE, "reason": "Égalité d'Ascendant : plus de Domaines contrôlés par Bleu."}
 	return {"winner": GameEnums.PlayerId.NONE, "reason": "Possession instable — aucun gagnant."}
 
 

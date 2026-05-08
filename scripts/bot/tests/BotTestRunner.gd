@@ -83,7 +83,7 @@ func _test_eval_terminal() -> void:
 	s.game_over = true
 	s.winner = GameEnums.PlayerId.RED
 	_assert(Eval.score(s, GameEnums.PlayerId.RED) == 1.0, "Eval terminal : gagnant = +1")
-	_assert(Eval.score(s, GameEnums.PlayerId.BLUE) == -1.0, "Eval terminal : perdant = -1")
+	_assert(Eval.score(s, GameEnums.PlayerId.PURPLE) == -1.0, "Eval terminal : perdant = -1")
 	s.winner = GameEnums.PlayerId.NONE
 	_assert(Eval.score(s, GameEnums.PlayerId.RED) == 0.0, "Eval terminal : égalité = 0")
 
@@ -91,9 +91,9 @@ func _test_eval_terminal() -> void:
 func _test_eval_approx_zero_sum() -> void:
 	var s := GameState.new()
 	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
-	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.BLUE, 3)
+	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE, 3)
 	var r := Eval.score(s, GameEnums.PlayerId.RED)
-	var b := Eval.score(s, GameEnums.PlayerId.BLUE)
+	var b := Eval.score(s, GameEnums.PlayerId.PURPLE)
 	_assert(absf(r + b) < 0.01, "Eval approx zero-sum (r+b ≈ 0)", "r=%f b=%f" % [r, b])
 
 
@@ -111,7 +111,7 @@ func _test_random_bot_100_games() -> void:
 		var s := GameState.new()
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = RandomBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = RandomBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = RandomBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -137,7 +137,7 @@ func _benchmark_heuristic_vs_random() -> void:
 		var s := GameState.new()
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED]  = HeuristicBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = RandomBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = RandomBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -150,7 +150,7 @@ func _benchmark_heuristic_vs_random() -> void:
 			errors += 1
 		elif s.winner == GameEnums.PlayerId.RED:
 			wins_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE:
+		elif s.winner == GameEnums.PlayerId.PURPLE:
 			wins_blue += 1
 		else:
 			draws += 1
@@ -186,7 +186,7 @@ func _benchmark_mcts_vs_heuristic() -> void:
 		var s := GameState.new()
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED]  = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = HeuristicBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = HeuristicBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -199,7 +199,7 @@ func _benchmark_mcts_vs_heuristic() -> void:
 			errors += 1
 		elif s.winner == GameEnums.PlayerId.RED:
 			wins_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE:
+		elif s.winner == GameEnums.PlayerId.PURPLE:
 			wins_blue += 1
 		else:
 			draws += 1
@@ -225,7 +225,7 @@ func _benchmark_mcts_vs_mcts() -> void:
 		var s := GameState.new()
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED]  = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -238,7 +238,7 @@ func _benchmark_mcts_vs_mcts() -> void:
 			errors += 1
 		elif s.winner == GameEnums.PlayerId.RED:
 			wins_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE:
+		elif s.winner == GameEnums.PlayerId.PURPLE:
 			wins_blue += 1
 		else:
 			draws += 1
@@ -262,7 +262,7 @@ func _benchmark_mcts_budget(budget: int, n: int) -> void:
 		var bot := MCTSBot.new()
 		bot.budget_ms = budget
 		s.bot_for_player[GameEnums.PlayerId.RED]  = bot
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = HeuristicBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = HeuristicBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -275,7 +275,7 @@ func _benchmark_mcts_budget(budget: int, n: int) -> void:
 			errors += 1
 		elif s.winner == GameEnums.PlayerId.RED:
 			wins_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE:
+		elif s.winner == GameEnums.PlayerId.PURPLE:
 			wins_blue += 1
 		else:
 			draws += 1
@@ -326,7 +326,7 @@ func _benchmark_missel_modifier(modifier_id: String, n: int) -> void:
 		s.missel_modifiers[station] = modifier_id
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -339,7 +339,7 @@ func _benchmark_missel_modifier(modifier_id: String, n: int) -> void:
 			errors += 1
 		elif s.winner == GameEnums.PlayerId.RED:
 			wins_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE:
+		elif s.winner == GameEnums.PlayerId.PURPLE:
 			wins_blue += 1
 		else:
 			draws += 1
@@ -369,7 +369,7 @@ func _benchmark_missel_all(n: int = 20) -> void:
 		var s := GameState.new()
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -380,7 +380,7 @@ func _benchmark_missel_all(n: int = 20) -> void:
 			turns += 1
 		if not s.game_over: errors += 1
 		elif s.winner == GameEnums.PlayerId.RED: wins_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE: wins_blue += 1
+		elif s.winner == GameEnums.PlayerId.PURPLE: wins_blue += 1
 		else: draws += 1
 	results.append("  [baseline] Rouge %d/%d (%.0f%%)  Violet %d/%d (%.0f%%)  Église %d/%d (%.0f%%)" % [
 		wins_red, n, 100.0 * wins_red / n,
@@ -404,7 +404,7 @@ func _test_codex_games_complete() -> void:
 		CodexSetup.setup(s, rng)
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = HeuristicBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = HeuristicBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = HeuristicBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -431,7 +431,7 @@ func _benchmark_codex_vs_baseline(n: int = 20) -> void:
 		var s := GameState.new()
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -440,7 +440,7 @@ func _benchmark_codex_vs_baseline(n: int = 20) -> void:
 			turns += 1
 		if not s.game_over: b_err += 1
 		elif s.winner == GameEnums.PlayerId.RED: b_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE: b_blue += 1
+		elif s.winner == GameEnums.PlayerId.PURPLE: b_blue += 1
 		else: b_draws += 1
 	results.append("  [V1h baseline] Rouge %d  Violet %d  Église %d  (/%d)" % [b_red, b_blue, b_draws, n])
 
@@ -459,7 +459,7 @@ func _benchmark_codex_vs_baseline(n: int = 20) -> void:
 		CodexSetup.setup(s, rng)
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -470,7 +470,7 @@ func _benchmark_codex_vs_baseline(n: int = 20) -> void:
 			c_err += 1
 			continue
 		if s.winner == GameEnums.PlayerId.RED: c_red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE: c_blue += 1
+		elif s.winner == GameEnums.PlayerId.PURPLE: c_blue += 1
 		else: c_draws += 1
 		var reason: String = s.winner_reason
 		if "pape" in reason.to_lower() or "exorcism" in reason.to_lower():
@@ -519,7 +519,7 @@ func _benchmark_combined(n: int = 20) -> void:
 			s.missel_modifiers[station] = pick
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -528,7 +528,7 @@ func _benchmark_combined(n: int = 20) -> void:
 			turns += 1
 		if not s.game_over: errors += 1
 		elif s.winner == GameEnums.PlayerId.RED: red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE: blue += 1
+		elif s.winner == GameEnums.PlayerId.PURPLE: blue += 1
 		else: draws += 1
 	var asym: int = absi(red - blue)
 	results.append("  [Combiné] Rouge %d  Violet %d  Église %d  Erreurs %d  (/%d)" % [red, blue, draws, errors, n])
@@ -554,7 +554,7 @@ func _benchmark_initiative_swapped(n: int = 20) -> void:
 		s.initiative_override = swapped.duplicate()
 		var tm := TurnManager.new(s, true)
 		s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
-		s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+		s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 		tm._check_bot_turn()
 		var turns := 0
 		while not s.game_over and turns < max_liturgy:
@@ -563,7 +563,7 @@ func _benchmark_initiative_swapped(n: int = 20) -> void:
 			turns += 1
 		if not s.game_over: errors += 1
 		elif s.winner == GameEnums.PlayerId.RED: red += 1
-		elif s.winner == GameEnums.PlayerId.BLUE: blue += 1
+		elif s.winner == GameEnums.PlayerId.PURPLE: blue += 1
 		else: draws += 1
 
 	var demon_wins: int = red + blue
@@ -600,7 +600,7 @@ func _benchmark_corruption_asymmetry(n: int = 20) -> void:
 					s.available_corruption[GameEnums.PlayerId.RED] += delta
 				var tm := TurnManager.new(s, true)
 				s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
-				s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+				s.bot_for_player[GameEnums.PlayerId.PURPLE] = MCTSBot.new()
 				tm._check_bot_turn()
 				var turns := 0
 				while not s.game_over and turns < max_liturgy:
@@ -609,14 +609,15 @@ func _benchmark_corruption_asymmetry(n: int = 20) -> void:
 					turns += 1
 				if not s.game_over: errors += 1
 				elif s.winner == GameEnums.PlayerId.RED: red += 1
-				elif s.winner == GameEnums.PlayerId.BLUE: blue += 1
+				elif s.winner == GameEnums.PlayerId.PURPLE: blue += 1
 				else: draws += 1
 			var demon_wins: int = red + blue
 			var rouge_share: String = "—"
 			if demon_wins > 0:
 				rouge_share = "%d%%" % int(100.0 * red / demon_wins)
-			var label: String = "Rouge 5 vs Violet 5" if delta == 0 else \
-				"Rouge %d vs Violet 5" % (GameEnums.STARTING_CORRUPTION + delta)
+			var label: String = "Rouge %d vs Violet %d" % [
+				GameEnums.STARTING_CORRUPTION_RED + delta,
+				GameEnums.STARTING_CORRUPTION]
 			results.append("    [%s]  R=%d V=%d Église=%d err=%d  Rouge=%s vict.démon" %
 				[label, red, blue, draws, errors, rouge_share])
 			_assert(errors == 0,

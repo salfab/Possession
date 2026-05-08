@@ -59,7 +59,7 @@ static func _signe_purificateur(state: GameState) -> int:
 	var candidates := {}
 	for d_id in DomainData.DOMAINS:
 		if not state.is_sealed(d_id):
-			var total := state.domain(d_id).red_corruption + state.domain(d_id).blue_corruption
+			var total := state.domain(d_id).red_corruption + state.domain(d_id).purple_corruption
 			if total > 0:
 				candidates[d_id] = total
 	if candidates.is_empty():
@@ -74,7 +74,7 @@ static func _signe_sur_la_plaie(state: GameState) -> int:
 	var candidates := {}
 	for d_id in DomainData.DOMAINS:
 		if state.is_transgressed(d_id):
-			var total := state.domain(d_id).red_corruption + state.domain(d_id).blue_corruption
+			var total := state.domain(d_id).red_corruption + state.domain(d_id).purple_corruption
 			if total > 0:
 				candidates[d_id] = total
 	if candidates.is_empty():
@@ -86,7 +86,7 @@ static func _signe_sur_la_plaie(state: GameState) -> int:
 # Targets Désir if it has any corruption; otherwise Ambition.
 static func _examen_chair(state: GameState) -> int:
 	var desir := state.domain(GameEnums.DomainId.DESIR)
-	if desir.red_corruption + desir.blue_corruption > 0:
+	if desir.red_corruption + desir.purple_corruption > 0:
 		return GameEnums.DomainId.DESIR
 	return GameEnums.DomainId.AMBITION
 
@@ -95,7 +95,7 @@ static func _examen_chair(state: GameState) -> int:
 # Targets Ambition if it has any corruption; otherwise Désir.
 static func _examen_vanites(state: GameState) -> int:
 	var amb := state.domain(GameEnums.DomainId.AMBITION)
-	if amb.red_corruption + amb.blue_corruption > 0:
+	if amb.red_corruption + amb.purple_corruption > 0:
 		return GameEnums.DomainId.AMBITION
 	return GameEnums.DomainId.DESIR
 
@@ -131,7 +131,7 @@ static func _contrition_scandales(state: GameState) -> int:
 			return da.scandals.size() > db.scandals.size()
 		if da.infamies.size() != db.infamies.size():
 			return da.infamies.size() > db.infamies.size()
-		return (da.red_corruption + da.blue_corruption) > (db.red_corruption + db.blue_corruption)
+		return (da.red_corruption + da.purple_corruption) > (db.red_corruption + db.purple_corruption)
 	)
 	return with_scandal[0]
 
@@ -142,7 +142,7 @@ static func _confession_orgueilleux(state: GameState) -> int:
 	if state.ascendant > 0:
 		return GameEnums.PlayerId.RED
 	if state.ascendant < 0:
-		return GameEnums.PlayerId.BLUE
+		return GameEnums.PlayerId.PURPLE
 	return -1  # fallback to V1h (most transgressions)
 
 
@@ -169,11 +169,11 @@ static func _confession_corrupteur(state: GameState) -> int:
 	red_total += red_inf
 	blue_total += blue_inf
 	if red_inf != blue_inf:
-		return GameEnums.PlayerId.RED if red_inf > blue_inf else GameEnums.PlayerId.BLUE
+		return GameEnums.PlayerId.RED if red_inf > blue_inf else GameEnums.PlayerId.PURPLE
 	if red_total != blue_total:
-		return GameEnums.PlayerId.RED if red_total > blue_total else GameEnums.PlayerId.BLUE
+		return GameEnums.PlayerId.RED if red_total > blue_total else GameEnums.PlayerId.PURPLE
 	if state.ascendant != 0:
-		return GameEnums.PlayerId.RED if state.ascendant > 0 else GameEnums.PlayerId.BLUE
+		return GameEnums.PlayerId.RED if state.ascendant > 0 else GameEnums.PlayerId.PURPLE
 	return -1  # fallback (non-initiative)
 
 
@@ -199,7 +199,7 @@ static func _communion_volonte(state: GameState) -> int:
 # a penitence marker, or a no-seal-until flag.
 static func _domain_is_active(state: GameState, d_id: int) -> bool:
 	var d := state.domain(d_id)
-	return (d.red_corruption + d.blue_corruption > 0
+	return (d.red_corruption + d.purple_corruption > 0
 		or d.seal_owner != GameEnums.PlayerId.NONE
 		or d.scandals.size() > 0
 		or d.infamies.size() > 0
@@ -235,4 +235,4 @@ static func _contrition_severity_gt(state: GameState, a: int, b: int) -> bool:
 		return da.infamies.size() > db.infamies.size()
 	if da.scandals.size() != db.scandals.size():
 		return da.scandals.size() > db.scandals.size()
-	return (da.red_corruption + da.blue_corruption) > (db.red_corruption + db.blue_corruption)
+	return (da.red_corruption + da.purple_corruption) > (db.red_corruption + db.purple_corruption)

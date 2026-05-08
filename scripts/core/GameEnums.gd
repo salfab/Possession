@@ -2,7 +2,7 @@ extends Node
 # Autoloaded singleton: GameEnums
 # Centralised constants and enum-like dictionaries for the rules engine.
 
-enum PlayerId { NONE = 0, RED = 1, BLUE = 2 }
+enum PlayerId { NONE = 0, RED = 1, PURPLE = 2 }
 
 enum DomainId { AMBITION = 0, DESIR = 1, FOI = 2, PEUR = 3, VOLONTE = 4 }
 
@@ -25,25 +25,25 @@ enum TransgressionFace { NONE, SCANDALE, INFAMIE }
 enum LiturgyMode { IN_INTEGRO, IMPEDITA }
 
 # ─── Player visual identity (single source of truth) ──────────────────────────
-# PlayerId.BLUE keeps its enum name (changing it would touch ~30 files), but
+# PlayerId.PURPLE keeps its enum name (changing it would touch ~30 files), but
 # its visual identity is now violet/purple. All UI code reads from these
 # tables — never hardcode a player colour again.
 
 const PLAYER_COLORS := {
 	PlayerId.RED:  Color(0.92, 0.30, 0.32),  # warm crimson
-	PlayerId.BLUE: Color(0.65, 0.40, 0.95),  # demonic violet
+	PlayerId.PURPLE: Color(0.65, 0.40, 0.95),  # demonic violet
 }
 
 # Lighter accent variants for badges, ascendant bars, glow effects.
 const PLAYER_COLORS_LIGHT := {
 	PlayerId.RED:  Color(1.00, 0.55, 0.55),
-	PlayerId.BLUE: Color(0.78, 0.55, 1.00),
+	PlayerId.PURPLE: Color(0.78, 0.55, 1.00),
 }
 
 # Translation keys — call I18n.t() to get the localised string.
 const PLAYER_NAME_KEYS := {
 	PlayerId.RED:  "player.red",
-	PlayerId.BLUE: "player.blue",
+	PlayerId.PURPLE: "player.purple",
 }
 
 const DOMAIN_NAME_KEYS := {
@@ -110,11 +110,11 @@ const STATION_PULSES := {
 
 const STATION_INITIATIVE := {
 	StationId.MURMURES: PlayerId.RED,
-	StationId.TENTATION: PlayerId.BLUE,
+	StationId.TENTATION: PlayerId.PURPLE,
 	StationId.CHUTE: PlayerId.RED,
-	StationId.CONFESSION: PlayerId.BLUE,
+	StationId.CONFESSION: PlayerId.PURPLE,
 	StationId.OFFICE: PlayerId.RED,
-	StationId.EXORCISME: PlayerId.BLUE,
+	StationId.EXORCISME: PlayerId.PURPLE,
 }
 
 # Used by Signe-de-croix and Confession tie-breakers (priority list closest to Volonté).
@@ -130,13 +130,14 @@ const VOLONTE_PROXIMITY_PRIORITY := [
 # tempo. The Entrave action also no longer pays from the reserve
 # (it's positional now — see GameRules.linked_domains_for_response),
 # so 5 is enough for the typical Investir / Provoquer opening lines.
-const STARTING_CORRUPTION := 5
+const STARTING_CORRUPTION := 5        # Purple (second player)
+const STARTING_CORRUPTION_RED := 4   # Red gets -1 to compensate first-player tempo advantage
 
 
 func opponent(p: int) -> int:
 	if p == PlayerId.RED:
-		return PlayerId.BLUE
-	if p == PlayerId.BLUE:
+		return PlayerId.PURPLE
+	if p == PlayerId.PURPLE:
 		return PlayerId.RED
 	return PlayerId.NONE
 

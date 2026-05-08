@@ -36,7 +36,7 @@ func _draw() -> void:
 	var x: float = 0.0
 	var y: float = (size.y - DOT_SIZE) * 0.5
 	var red: Color = GameEnums.PLAYER_COLORS[GameEnums.PlayerId.RED]
-	var blue: Color = GameEnums.PLAYER_COLORS[GameEnums.PlayerId.BLUE]
+	var blue: Color = GameEnums.PLAYER_COLORS[GameEnums.PlayerId.PURPLE]
 	for i in red_count:
 		var rect := Rect2(x, y, DOT_SIZE, DOT_SIZE)
 		draw_rect(rect, red, true)

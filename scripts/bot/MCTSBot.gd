@@ -111,7 +111,7 @@ func _simulate(state: GameState, player: int, action: Dictionary) -> float:
 
 	# Shallow rollout: RandomBot for both sides, up to ROLLOUT_STATIONS transitions.
 	s.bot_for_player[GameEnums.PlayerId.RED] = _rollout_bot
-	s.bot_for_player[GameEnums.PlayerId.BLUE] = _rollout_bot
+	s.bot_for_player[GameEnums.PlayerId.PURPLE] = _rollout_bot
 	tm._check_bot_turn()
 	var turns := 0
 	while not s.game_over and turns < ROLLOUT_STATIONS:

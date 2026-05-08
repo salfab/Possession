@@ -85,7 +85,7 @@ static func _without_initiative_player(state: GameState) -> int:
 
 static func _total_emprise(state: GameState, d_id: int) -> int:
 	var d := state.domain(d_id)
-	return d.red_corruption + d.blue_corruption
+	return d.red_corruption + d.purple_corruption
 
 static func _pick_max(values: Dictionary, tie_breaker: Callable) -> int:
 	# values: DomainId -> score. Returns chosen DomainId.
@@ -132,25 +132,25 @@ static func _signe_de_croix(state: GameState, impedita: bool) -> void:
 	if impedita:
 		# Most-emprise player loses 1 available corruption.
 		var d := state.domain(target)
-		if d.red_corruption > d.blue_corruption:
+		if d.red_corruption > d.purple_corruption:
 			state.add_corruption_pool(GameEnums.PlayerId.RED, -1)
 			state.add_log("Impedita : Rouge perd 1 Corruption disponible.")
-		elif d.blue_corruption > d.red_corruption:
-			state.add_corruption_pool(GameEnums.PlayerId.BLUE, -1)
+		elif d.purple_corruption > d.red_corruption:
+			state.add_corruption_pool(GameEnums.PlayerId.PURPLE, -1)
 			state.add_log("Impedita : Bleu perd 1 Corruption disponible.")
 		else:
 			state.add_log("Impedita : égalité, aucun effet.")
 	else:
 		var d := state.domain(target)
-		var lead: int = abs(d.red_corruption - d.blue_corruption)
+		var lead: int = abs(d.red_corruption - d.purple_corruption)
 		if lead >= 2:
 			ActionResolver.break_domination(state, target)
 		else:
 			# No domination -> each demon with corruption here loses 1 available corruption.
 			if d.red_corruption > 0:
 				state.add_corruption_pool(GameEnums.PlayerId.RED, -1)
-			if d.blue_corruption > 0:
-				state.add_corruption_pool(GameEnums.PlayerId.BLUE, -1)
+			if d.purple_corruption > 0:
+				state.add_corruption_pool(GameEnums.PlayerId.PURPLE, -1)
 			state.add_log("In Integro : pas de Domination, chaque démon présent perd 1 Corruption disponible.")
 
 
@@ -269,7 +269,7 @@ static func _pick_confession_target_player(state: GameState) -> Dictionary:
 					if ti.owner == override:
 						total += 1
 			return {"player": override, "total_transgressions": total}
-	var counts := {GameEnums.PlayerId.RED: 0, GameEnums.PlayerId.BLUE: 0}
+	var counts := {GameEnums.PlayerId.RED: 0, GameEnums.PlayerId.PURPLE: 0}
 	for d_id in DomainData.DOMAINS:
 		var d := state.domain(d_id)
 		for ti in d.scandals:
@@ -277,21 +277,21 @@ static func _pick_confession_target_player(state: GameState) -> Dictionary:
 		for ti in d.infamies:
 			counts[ti.owner] += 1
 	var target_player: int
-	if counts[GameEnums.PlayerId.RED] > counts[GameEnums.PlayerId.BLUE]:
+	if counts[GameEnums.PlayerId.RED] > counts[GameEnums.PlayerId.PURPLE]:
 		target_player = GameEnums.PlayerId.RED
-	elif counts[GameEnums.PlayerId.BLUE] > counts[GameEnums.PlayerId.RED]:
-		target_player = GameEnums.PlayerId.BLUE
+	elif counts[GameEnums.PlayerId.PURPLE] > counts[GameEnums.PlayerId.RED]:
+		target_player = GameEnums.PlayerId.PURPLE
 	else:
 		# Tie -> demon with most Ascendant, then demon without initiative.
 		if state.ascendant > 0:
 			target_player = GameEnums.PlayerId.RED
 		elif state.ascendant < 0:
-			target_player = GameEnums.PlayerId.BLUE
+			target_player = GameEnums.PlayerId.PURPLE
 		else:
 			target_player = _without_initiative_player(state)
 	return {
 		"player": target_player,
-		"total_transgressions": counts[GameEnums.PlayerId.RED] + counts[GameEnums.PlayerId.BLUE],
+		"total_transgressions": counts[GameEnums.PlayerId.RED] + counts[GameEnums.PlayerId.PURPLE],
 	}
 
 

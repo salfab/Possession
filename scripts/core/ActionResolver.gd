@@ -200,16 +200,16 @@ static func break_domination(state: GameState, d_id: int) -> void:
 	var d := state.domain(d_id)
 	if d == null:
 		return
-	var lead: int = abs(d.red_corruption - d.blue_corruption)
+	var lead: int = abs(d.red_corruption - d.purple_corruption)
 	if lead < 2:
 		return
-	var dominant := GameEnums.PlayerId.RED if d.red_corruption > d.blue_corruption else GameEnums.PlayerId.BLUE
+	var dominant := GameEnums.PlayerId.RED if d.red_corruption > d.purple_corruption else GameEnums.PlayerId.PURPLE
 	# Reduce dominant by (lead - 1) so the gap becomes 1.
 	var to_remove: int = lead - 1
 	if dominant == GameEnums.PlayerId.RED:
 		d.red_corruption = max(0, d.red_corruption - to_remove)
 	else:
-		d.blue_corruption = max(0, d.blue_corruption - to_remove)
+		d.purple_corruption = max(0, d.purple_corruption - to_remove)
 	state.add_log("Briser la Domination en %s (-%d à %s)." %
 		[GameEnums.DOMAIN_NAMES[d_id], to_remove, GameEnums.player_name(dominant)])
 	# Persécution infamy: when YOU break domination here, the OTHER demon also loses
