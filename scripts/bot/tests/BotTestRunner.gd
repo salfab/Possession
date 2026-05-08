@@ -35,6 +35,7 @@ func run_balance(n_per_modifier: int = 20) -> Dictionary:
 	_benchmark_codex_vs_baseline(n_per_modifier)
 	_benchmark_combined(n_per_modifier)
 	_benchmark_initiative_swapped(n_per_modifier)
+	_benchmark_corruption_asymmetry(n_per_modifier)
 	return {"pass": pass_count, "fail": fail_count, "total": pass_count + fail_count, "lines": results}
 
 
@@ -572,3 +573,52 @@ func _benchmark_initiative_swapped(n: int = 20) -> void:
 	results.append("  [Miroir] Rouge %d  Violet %d  Église %d  Erreurs %d  (/%d)" % [red, blue, draws, errors, n])
 	results.append("  [Miroir] Rouge = %s des victoires démon (normal = 50%% si symétrique)" % rouge_share)
 	_assert(errors == 0, "Miroir initiative : 0 partie non terminée", "erreurs=%d" % errors)
+
+
+# Asymétrie de Corruption de départ : calibration de la compensation premier joueur.
+# Teste deux compositions connues (V1h déséquilibré / Missel I-A équitable)
+# avec delta = 0 / -1 / -2 Corruption de départ pour Rouge.
+# ---------------------------------------------------------------------------
+func _benchmark_corruption_asymmetry(n: int = 20) -> void:
+	results.append("=== Asymétrie Corruption départ (compensation premier joueur) ===")
+	var compositions: Array = [
+		{"name": "V1h          ", "modifier": "", "station": -1},
+		{"name": "Missel I-A   ", "modifier": "I-A", "station": GameEnums.StationId.MURMURES},
+	]
+	var deltas: Array = [0, -1, -2]
+	var max_liturgy := 20
+
+	for comp in compositions:
+		results.append("  --- %s ---" % comp["name"].strip_edges())
+		for delta in deltas:
+			var red := 0; var blue := 0; var draws := 0; var errors := 0
+			for _i in range(n):
+				var s := GameState.new()
+				if comp["station"] >= 0:
+					s.missel_modifiers[comp["station"]] = comp["modifier"]
+				if delta != 0:
+					s.available_corruption[GameEnums.PlayerId.RED] += delta
+				var tm := TurnManager.new(s, true)
+				s.bot_for_player[GameEnums.PlayerId.RED] = MCTSBot.new()
+				s.bot_for_player[GameEnums.PlayerId.BLUE] = MCTSBot.new()
+				tm._check_bot_turn()
+				var turns := 0
+				while not s.game_over and turns < max_liturgy:
+					if not tm.pending_liturgy.is_empty(): tm.acknowledge_liturgy()
+					else: break
+					turns += 1
+				if not s.game_over: errors += 1
+				elif s.winner == GameEnums.PlayerId.RED: red += 1
+				elif s.winner == GameEnums.PlayerId.BLUE: blue += 1
+				else: draws += 1
+			var demon_wins: int = red + blue
+			var rouge_share: String = "—"
+			if demon_wins > 0:
+				rouge_share = "%d%%" % int(100.0 * red / demon_wins)
+			var label: String = "Rouge 5 vs Violet 5" if delta == 0 else \
+				"Rouge %d vs Violet 5" % (GameEnums.STARTING_CORRUPTION + delta)
+			results.append("    [%s]  R=%d V=%d Église=%d err=%d  Rouge=%s vict.démon" %
+				[label, red, blue, draws, errors, rouge_share])
+			_assert(errors == 0,
+				"Asymétrie %s delta=%d : 0 erreur" % [comp["name"].strip_edges(), delta],
+				"err=%d" % errors)
