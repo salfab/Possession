@@ -898,15 +898,18 @@ def compose_board_pdf(pdf_path: Path):
 # the runtime label on the parchment area of each banner.
 BANNER_CARTOUCHE = (0.40, 0.10, 0.92, 0.89)
 
-# Banner physical size on the printed A3 board, derived from
-# LITURGY_BANNER_HALF = Vector2(0.090, 0.045) in Main.gd (= 0.180 × 0.090
-# of the board image). The board PDF lays the board at ~369.4 × 277 mm
-# (height-limited inside the A3 minus margins envelope), so each banner
-# slot is :
-#   width  : 0.180 × 369.4 ≈ 66.5 mm
-#   height : 0.090 × 277   ≈ 24.93 mm
-# That matches the 600/225 ≈ 2.67 banner aspect cleanly. Print at this
-# size so the cut banners drop right onto their slot on the printed board.
+# Banner physical size on the printed A3 board. NOT derived from
+# LITURGY_BANNER_HALF — that constant defines the in-game tap hotspot,
+# which is intentionally a touch larger than the painted slot for thumb
+# comfort. Measured directly off Board v3 (possession board 3.png) by
+# scanning the brightness profile of the right-side banner column :
+# the painted parchment slots are 0.168 × 0.093 of the board (NOT the
+# 0.180 × 0.090 the in-game hotspot uses). On A3 landscape with 10 mm
+# margins the board renders at 395.2 × 277 mm (height-limited), giving
+# slots of 66.4 × 25.8 mm. The banner artwork itself is 600 × 225 ≈
+# 2.667:1 — printing at 66.5 × 25.0 mm preserves that native aspect and
+# leaves ~0.4 mm of parchment margin top/bottom in each slot, which
+# reads as a clean inset rather than an overlap.
 BANNER_PRINT_W_MM = 66.5
 BANNER_PRINT_H_MM = 25.0
 
