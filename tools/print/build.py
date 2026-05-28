@@ -29,7 +29,7 @@ from typing import Optional
 
 import io
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from reportlab.lib.pagesizes import A4, A3, landscape
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as pdfcanvas
@@ -44,6 +44,7 @@ FONTS_DIR = ASSETS / "fonts"
 ILLUSTRATIONS_DIR = ASSETS / "cards" / "illustrations"
 TEMPLATES_DIR = ASSETS / "cards" / "templates"
 SPECIAL_DIR = ASSETS / "cards" / "special"
+REFERENCE_DIR = ASSETS / "cards" / "reference"
 BANNERS_DIR = ASSETS / "cards" / "liturgy_banners"
 # For print, prefer the original PNG source over the JPG ingame export :
 # JPG was recompressed to ~500 KB for runtime download size, the PNG keeps
@@ -148,6 +149,8 @@ class CardSpec:
     back_template: Optional[Path] = None   # WebP frame to use as background, back face
     is_reference: bool = False
     front_full_bleed: Optional[Path] = None  # painted card art that occupies the entire face (Exorcism)
+    front_reference_art: Optional[Path] = None  # illustrated background for text-heavy reference faces
+    back_reference_art: Optional[Path] = None
 
 
 # Hardcoded transgression catalogue (domain + costs from TransgressionData.gd).
@@ -240,6 +243,21 @@ def draw_corner_marks(draw: ImageDraw.ImageDraw, w: int, h: int, gold):
                    (w - SAFE_MARGIN - 24, h - SAFE_MARGIN - 24)]:
         draw.ellipse((cx - r1, cy - r1, cx + r1, cy + r1), outline=gold, width=2)
         draw.ellipse((cx - r2, cy - r2, cx + r2, cy + r2), outline=gold, width=2)
+
+
+def rounded_rect_layer(
+    img: Image.Image,
+    xy,
+    radius: int,
+    fill,
+    outline=None,
+    width: int = 1,
+) -> None:
+    """Draw a translucent rounded panel directly into an RGB card image."""
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    layer_draw = ImageDraw.Draw(layer)
+    layer_draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
+    img.alpha_composite(layer)
 
 
 def measure_text(draw: ImageDraw.ImageDraw, txt: str, fnt) -> tuple[int, int]:
@@ -552,25 +570,45 @@ def render_face(
     cost: Optional[int | str],
     body: list[tuple[str, str]],
     illustration: Optional[Image.Image] = None,
+    background: Optional[Image.Image] = None,
     is_reference: bool = False,
     compact_body: bool = False,    # smaller body fonts when many blocks (reference cards)
 ) -> Image.Image:
-    img = Image.new("RGB", (CARD_W, CARD_H), COL_BG)
+    if background is not None:
+        fitted = ImageOps.fit(background.convert("RGB"), (CARD_W, CARD_H), method=Image.LANCZOS)
+        navy_wash = Image.new("RGB", (CARD_W, CARD_H), (7, 16, 34))
+        img = Image.blend(fitted, navy_wash, 0.18).convert("RGBA")
+    else:
+        img = Image.new("RGBA", (CARD_W, CARD_H), COL_BG + (255,))
     d = ImageDraw.Draw(img)
 
-    # Outer + inner border lines, with a subtle inset gold rectangle.
-    d.rectangle((SAFE_MARGIN, SAFE_MARGIN, CARD_W - SAFE_MARGIN, CARD_H - SAFE_MARGIN),
-                outline=COL_BORDER_GOLD, width=3)
-    d.rectangle((SAFE_MARGIN + 8, SAFE_MARGIN + 8, CARD_W - SAFE_MARGIN - 8, CARD_H - SAFE_MARGIN - 8),
-                outline=COL_BORDER_DIM, width=1)
-    draw_corner_marks(d, CARD_W, CARD_H, COL_BORDER_GOLD)
+    # Flat reference cards used to be drawn entirely with line art. When a
+    # painted background is available, keep its own frame and only add
+    # translucent reading plates so the illustration remains part of the card.
+    if background is None:
+        d.rectangle((SAFE_MARGIN, SAFE_MARGIN, CARD_W - SAFE_MARGIN, CARD_H - SAFE_MARGIN),
+                    outline=COL_BORDER_GOLD, width=3)
+        d.rectangle((SAFE_MARGIN + 8, SAFE_MARGIN + 8, CARD_W - SAFE_MARGIN - 8, CARD_H - SAFE_MARGIN - 8),
+                    outline=COL_BORDER_DIM, width=1)
+        draw_corner_marks(d, CARD_W, CARD_H, COL_BORDER_GOLD)
 
     # Title plate — rounded rect at the top, title + subtitle inside.
     plate_top = SAFE_MARGIN + 50
     plate_bot = plate_top + 200
     plate_lr_inset = 90
-    rounded_rect(d, (plate_lr_inset, plate_top, CARD_W - plate_lr_inset, plate_bot),
-                 radius=18, outline=COL_BORDER_GOLD, width=3)
+    if background is not None:
+        rounded_rect_layer(
+            img,
+            (plate_lr_inset, plate_top, CARD_W - plate_lr_inset, plate_bot),
+            radius=18,
+            fill=(8, 18, 38, 205),
+            outline=COL_BORDER_GOLD + (210,),
+            width=2,
+        )
+        d = ImageDraw.Draw(img)
+    else:
+        rounded_rect(d, (plate_lr_inset, plate_top, CARD_W - plate_lr_inset, plate_bot),
+                     radius=18, outline=COL_BORDER_GOLD, width=3)
     title_font = font(72, "title")
     sub_font = font(34, "title")
     tw, th = measure_text(d, title, title_font)
@@ -582,8 +620,19 @@ def render_face(
     rib_top = plate_bot + 30
     rib_bot = rib_top + 84
     rib_inset = 110
-    rounded_rect(d, (rib_inset, rib_top, CARD_W - rib_inset, rib_bot),
-                 radius=10, fill=COL_RIBBON_BG, outline=COL_RIBBON_BORDER, width=2)
+    if background is not None:
+        rounded_rect_layer(
+            img,
+            (rib_inset, rib_top, CARD_W - rib_inset, rib_bot),
+            radius=10,
+            fill=COL_RIBBON_BG + (225,),
+            outline=COL_RIBBON_BORDER + (230,),
+            width=2,
+        )
+        d = ImageDraw.Draw(img)
+    else:
+        rounded_rect(d, (rib_inset, rib_top, CARD_W - rib_inset, rib_bot),
+                     radius=10, fill=COL_RIBBON_BG, outline=COL_RIBBON_BORDER, width=2)
     rib_text = f"{domain_label}  —  {face.upper()}"
     rib_font = font(38, "face")
     rw, rh = measure_text(d, rib_text, rib_font)
@@ -593,8 +642,19 @@ def render_face(
     body_top = rib_bot + 30
     body_bot = CARD_H - SAFE_MARGIN - 90
     body_lr = SAFE_MARGIN + 30
-    rounded_rect(d, (body_lr, body_top, CARD_W - body_lr, body_bot),
-                 radius=22, fill=COL_BG_INNER, outline=COL_BORDER_DIM, width=2)
+    if background is not None:
+        rounded_rect_layer(
+            img,
+            (body_lr, body_top, CARD_W - body_lr, body_bot),
+            radius=22,
+            fill=(9, 20, 42, 218),
+            outline=COL_BORDER_DIM + (210,),
+            width=2,
+        )
+        d = ImageDraw.Draw(img)
+    else:
+        rounded_rect(d, (body_lr, body_top, CARD_W - body_lr, body_bot),
+                     radius=22, fill=COL_BG_INNER, outline=COL_BORDER_DIM, width=2)
 
     # Optional illustration in the upper half of the body panel.
     body_inset_x = body_lr + 30
@@ -669,7 +729,7 @@ def render_face(
     d.text(((CARD_W - fw) // 2, CARD_H - SAFE_MARGIN - 40), foot,
            fill=COL_LABEL_GOLD, font=foot_font)
 
-    return img
+    return img.convert("RGB")
 
 
 # ─── Card spec building (pull data from i18n + catalogue) ──────────────────────
@@ -787,6 +847,7 @@ def build_exorcism_spec(i18n: dict[str, str]) -> CardSpec:
         # because the artwork already carries title + image + rules in
         # the printed source asset.
         front_full_bleed=SPECIAL_DIR / "exorcisme_final.jpg",
+        back_reference_art=REFERENCE_DIR / "final_exorcism_rules.png",
         is_reference=True,    # routes to compact custom layout (smaller fonts)
     )
 
@@ -817,6 +878,8 @@ def build_reference_pulse_spec() -> CardSpec:
             ("Final Ascendancy", "If Soul is Ruptured at Station VI, the demon with more Ascendancy wins ; tie goes to Initiative holder."),
         ],
         is_reference=True,
+        front_reference_art=REFERENCE_DIR / "station_flow.png",
+        back_reference_art=REFERENCE_DIR / "station_flow.png",
     )
 
 
@@ -848,6 +911,8 @@ def build_reference_actions_spec() -> CardSpec:
             ("Reminder", "Hindering and Sealing do NOT grant Ascendancy. Only Provocations do."),
         ],
         is_reference=True,
+        front_reference_art=REFERENCE_DIR / "demon_actions.png",
+        back_reference_art=REFERENCE_DIR / "demon_actions.png",
     )
 
 
@@ -1208,6 +1273,18 @@ def main():
                 ill = Image.open(spec.illustration_path).convert("RGB")
             except Exception as e:
                 print(f"    illustration failed for {spec.card_id}: {e}")
+        front_bg = None
+        if spec.front_reference_art and spec.front_reference_art.exists():
+            try:
+                front_bg = Image.open(spec.front_reference_art).convert("RGB")
+            except Exception as e:
+                print(f"    reference art failed for {spec.card_id} A: {e}")
+        back_bg = None
+        if spec.back_reference_art and spec.back_reference_art.exists():
+            try:
+                back_bg = Image.open(spec.back_reference_art).convert("RGB")
+            except Exception as e:
+                print(f"    reference art failed for {spec.card_id} B: {e}")
 
         # Dispatcher : templated cards (transgressions, liturgies) use the
         # illustrated WebP frame from assets/cards/templates/ ; reference
@@ -1237,6 +1314,7 @@ def main():
                 cost=spec.front_cost,
                 body=spec.front_body,
                 illustration=ill,
+                background=front_bg,
                 is_reference=spec.is_reference,
                 compact_body=spec.is_reference,
             )
@@ -1260,6 +1338,7 @@ def main():
                 cost=spec.back_cost,
                 body=spec.back_body,
                 illustration=ill,
+                background=back_bg,
                 is_reference=spec.is_reference,
                 compact_body=spec.is_reference,
             )
