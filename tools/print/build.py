@@ -483,7 +483,7 @@ def render_face_with_template(
         title_size -= 2
         title_font = font(title_size, "title")
     tw, th = measure_text(d, title, title_font)
-    title_y_adjust = -5 if is_impedita else -2
+    title_y_adjust = 20 if is_impedita else -2
     draw_centered_text(d, (tx0, ty0, tx1, ty1), title, title_font,
                        COL_TPL_INK_TITLE, y_adjust=title_y_adjust)
 
