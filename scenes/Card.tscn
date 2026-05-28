@@ -55,10 +55,10 @@ mouse_filter = 2
 
 [node name="EffectText" type="Label" parent="."]
 anchor_left = 0.203
-anchor_top = 0.743
-anchor_right = 0.807
-anchor_bottom = 0.890
-horizontal_alignment = 1
+anchor_top = 0.735
+anchor_right = 0.817
+anchor_bottom = 0.898
+horizontal_alignment = 0
 vertical_alignment = 1
 autowrap_mode = 3
 mouse_filter = 2

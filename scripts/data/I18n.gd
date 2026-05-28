@@ -95,8 +95,8 @@ const STRINGS := {
 		"en": "The most-serious transgressed Domain: most Infamies, then most Scandals, then most Grip. No target if no Domain is transgressed (the Liturgy then has no effect).",
 	},
 	"liturgy.targeting.confession": {
-		"fr": "Le démon avec le plus de Transgressions placées (Scandales + Infamies). En cas d'égalité : démon avec Ascendant ; sinon, démon sans Initiative à cette Station.",
-		"en": "The demon with the most placed Transgressions (Scandals + Infamies). On tie: demon holding Ascendancy; otherwise the demon without Initiative at this Station.",
+		"fr": "Le démon avec le plus de Transgressions placées. En cas d'égalité : démon avec Ascendant ; sinon, démon sans Initiative.",
+		"en": "The demon with the most placed Transgressions. On tie: demon holding Ascendancy; otherwise the demon without Initiative.",
 	},
 	"liturgy.targeting.communion": {
 		"fr": "Foi ou Volonté. Priorité : Domaine scellé > Domaine avec Infamie > Domaine avec le plus d'Emprise.",

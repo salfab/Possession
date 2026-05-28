@@ -155,7 +155,7 @@ func _apply_styles() -> void:
 	_setup_label(lbl_title,  FONT_TITLE, 30, Color(0.20, 0.06, 0.04))
 	_setup_label(lbl_cost,   FONT_BODY,  56, Color(0.20, 0.06, 0.04))
 	_setup_label(lbl_domain, FONT_TITLE, 22, Color(0.20, 0.06, 0.04))
-	_setup_label(lbl_text,   FONT_BODY,  20, Color(0.16, 0.07, 0.03))
+	_setup_label(lbl_text,   FONT_BODY,  22, Color(0.12, 0.05, 0.02))
 	_setup_label(lbl_face,   FONT_FACE,  26, Color(0.43, 0.08, 0.06))
 
 
@@ -170,10 +170,14 @@ func _on_resized() -> void:
 	# Scale label font sizes proportionally to the card's actual width.
 	# Floor bumped from 6 → 12 so the text stays legible even on very small
 	# thumbnail renders ; combined with MSDF this is crisp at any size.
-	var s: float = max(0.1, size.x / REF_WIDTH)
 	for lbl in [lbl_title, lbl_cost, lbl_domain, lbl_text, lbl_face]:
 		var base: int = int(lbl.get_meta("base_size", 20))
-		lbl.add_theme_font_size_override("font_size", max(12, int(round(base * s))))
+		_apply_scaled_label_size(lbl, base)
+
+
+func _apply_scaled_label_size(lbl: Label, base: int) -> void:
+	var s: float = max(0.1, size.x / REF_WIDTH)
+	lbl.add_theme_font_size_override("font_size", max(12, int(round(base * s))))
 
 
 # ─── Public setup methods ─────────────────────────────────────────────────────
@@ -302,10 +306,14 @@ func _refresh_text() -> void:
 			lbl_domain.text = "—"
 		if _face == GameEnums.TransgressionFace.INFAMIE:
 			lbl_face.text = I18n.t("face.infamie").to_upper()
+			lbl_cost.set_meta("base_size", 56)
+			_apply_scaled_label_size(lbl_cost, 56)
 			lbl_cost.text = str(int(def.get("amplification_cost", 0)))
 			lbl_text.text = String(def.get("infamy_text", ""))
 		else:
 			lbl_face.text = I18n.t("face.scandale").to_upper()
+			lbl_cost.set_meta("base_size", 56)
+			_apply_scaled_label_size(lbl_cost, 56)
 			lbl_cost.text = str(int(def.get("scandal_cost", 0)))
 			lbl_text.text = String(def.get("scandal_text", ""))
 	elif _kind == "liturgy":
@@ -313,7 +321,9 @@ func _refresh_text() -> void:
 		if resp.is_empty():
 			return
 		lbl_title.text = String(resp.get("name", "?"))
-		lbl_cost.text = "—"
+		lbl_cost.set_meta("base_size", 24)
+		_apply_scaled_label_size(lbl_cost, 24)
+		lbl_cost.text = _liturgy_target_badge()
 		lbl_domain.text = _liturgy_target_text()
 		lbl_face.text = (I18n.t("liturgy.impedita") if _impedita else I18n.t("liturgy.in_integro")).to_upper()
 		var key: String = "text_impedita" if _impedita else "text_in_integro"
@@ -350,6 +360,21 @@ func _liturgy_target_full() -> String:
 	if _target_player > 0:
 		return GameEnums.player_name(_target_player)
 	return ""
+
+
+func _liturgy_target_badge() -> String:
+	match _station:
+		1:
+			return "EMP" if I18n.current_locale == "fr" else "GRIP"
+		2:
+			return "AMB\nDES"
+		3:
+			return "GRV" if I18n.current_locale == "fr" else "SIN"
+		4:
+			return "DEM"
+		5:
+			return "FOI\nVOL" if I18n.current_locale == "fr" else "FTH\nWIL"
+	return "—"
 
 
 # Three-letter localised domain abbreviation that fits the small badge slot.

@@ -68,7 +68,9 @@ SLOT_TITLE       = (0.283, 0.057, 0.726, 0.128)
 SLOT_COST        = (0.066, 0.047, 0.245, 0.179)
 SLOT_DOMAIN      = (0.774, 0.088, 0.929, 0.145)
 SLOT_ILLUSTR     = (0.123, 0.135, 0.873, 0.728)
-SLOT_EFFECT_TEXT = (0.203, 0.743, 0.807, 0.890)
+SLOT_EFFECT_TEXT = (0.183, 0.735, 0.817, 0.898)
+SLOT_EFFECT_TEXT_IN_INTEGRO = (0.183, 0.735, 0.817, 0.898)
+SLOT_EFFECT_TEXT_IMPEDITA = (0.168, 0.722, 0.832, 0.908)
 SLOT_FACE        = (0.302, 0.917, 0.708, 0.957)
 
 
@@ -137,8 +139,8 @@ class CardSpec:
     domain_label: str               # e.g. "Ambition" or "Faith ▸ Will" for split
     front_face: str                 # e.g. "Scandal", "In Integro"
     back_face: str                  # e.g. "Infamy", "Impedita"
-    front_cost: Optional[int]       # corruption cost shown on front, None to hide
-    back_cost: Optional[int]
+    front_cost: Optional[int | str]  # cost or short target cue shown in the top-left circle
+    back_cost: Optional[int | str]
     front_body: list[tuple[str, str]]   # list of (label, paragraph) blocks for the front
     back_body: list[tuple[str, str]]    # same for the back
     illustration_path: Optional[Path] = None  # optional artwork file
@@ -172,6 +174,14 @@ LITURGY_CATALOG = [
     ("confession",             "IV — Confession"),
     ("communion",              "V — Holy Office"),
 ]
+
+LITURGY_TARGET_BADGE = {
+    "signe_de_croix": "GRIP",
+    "examen_de_conscience": "AMB\nDES",
+    "contrition": "GRAVE\nSIN",
+    "confession": "DEMON",
+    "communion": "FAITH\nWILL",
+}
 
 
 # ─── I18n parser ────────────────────────────────────────────────────────────────
@@ -237,6 +247,57 @@ def measure_text(draw: ImageDraw.ImageDraw, txt: str, fnt) -> tuple[int, int]:
     return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
+def draw_centered_text(draw: ImageDraw.ImageDraw, box, txt: str, fnt, fill, y_adjust: int = 0):
+    """Center text using the actual glyph bounding box, not just advance size."""
+    x0, y0, x1, y1 = box
+    bbox = draw.textbbox((0, 0), txt, font=fnt)
+    bw = bbox[2] - bbox[0]
+    bh = bbox[3] - bbox[1]
+    x = x0 + ((x1 - x0) - bw) // 2 - bbox[0]
+    y = y0 + ((y1 - y0) - bh) // 2 - bbox[1] + y_adjust
+    draw.text((x, y), txt, fill=fill, font=fnt)
+
+
+def draw_centered_multiline_text(draw: ImageDraw.ImageDraw, box, txt: str, weight: str, fill, start_size: int, min_size: int):
+    x0, y0, x1, y1 = box
+    lines = [line for line in str(txt).split("\n") if line]
+    size = start_size
+    while size >= min_size:
+        fnt = font(size, weight)
+        line_metrics = []
+        max_w = 0
+        total_h = 0
+        line_gap = max(2, size // 9)
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=fnt)
+            bw = bbox[2] - bbox[0]
+            bh = bbox[3] - bbox[1]
+            line_metrics.append((line, bbox, bw, bh))
+            max_w = max(max_w, bw)
+            total_h += bh
+        total_h += line_gap * max(0, len(lines) - 1)
+        if max_w <= (x1 - x0) - 22 and total_h <= (y1 - y0) - 22:
+            break
+        size -= 1
+
+    fnt = font(size, weight)
+    line_gap = max(2, size // 9)
+    metrics = []
+    total_h = 0
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=fnt)
+        bw = bbox[2] - bbox[0]
+        bh = bbox[3] - bbox[1]
+        metrics.append((line, bbox, bw, bh))
+        total_h += bh
+    total_h += line_gap * max(0, len(lines) - 1)
+    y = y0 + ((y1 - y0) - total_h) // 2
+    for line, bbox, bw, bh in metrics:
+        x = x0 + ((x1 - x0) - bw) // 2 - bbox[0]
+        draw.text((x, y - bbox[1]), line, fill=fill, font=fnt)
+        y += bh + line_gap
+
+
 def wrap_text(draw: ImageDraw.ImageDraw, txt: str, fnt, max_width: int) -> list[str]:
     """Word-wrap text to fit within max_width, preserving \\n breaks."""
     out: list[str] = []
@@ -276,6 +337,44 @@ def draw_paragraph(draw, x, y, max_width, blocks, body_font, label_font, ink, la
     return cur_y
 
 
+def paragraph_height(draw, max_width, blocks, body_font, label_font, line_h, label_h, paragraph_gap=12) -> int:
+    h = 0
+    for label, text in blocks:
+        if label:
+            h += label_h + 4
+        h += line_h * len(wrap_text(draw, text, body_font, max_width))
+        h += paragraph_gap
+    return h
+
+
+def fit_paragraph_fonts(
+    draw,
+    max_width: int,
+    max_height: int,
+    blocks,
+    *,
+    start_body_size: int,
+    start_label_size: int,
+    min_body_size: int,
+    paragraph_gap: int,
+    line_extra: int = 8,
+    label_extra: int = 4,
+):
+    body_size = start_body_size
+    label_delta = start_body_size - start_label_size
+    while True:
+        body_font = font(body_size, "body")
+        label_size = max(14, body_size - label_delta)
+        label_font = font(label_size, "face")
+        line_h = body_size + line_extra
+        label_h = label_size + label_extra
+        total_h = paragraph_height(draw, max_width, blocks, body_font, label_font,
+                                   line_h, label_h, paragraph_gap)
+        if total_h <= max_height or body_size <= min_body_size:
+            return body_font, label_font, line_h, label_h, total_h, body_size
+        body_size -= 1
+
+
 # ─── Per-face card render — illustrated template path ─────────────────────────
 
 # Slot palette for templated cards — dark ink on parchment, warm gold for
@@ -293,7 +392,7 @@ def render_face_with_template(
     *,
     template_path: Path,
     title: str,
-    cost: Optional[int],
+    cost: Optional[int | str],
     domain_label: str,
     face: str,
     body: list[tuple[str, str]],
@@ -304,6 +403,8 @@ def render_face_with_template(
     the supplied WebP template frame. Slot positions match Card.tscn so
     the printed card reads the same way as the in-game card.
     """
+    is_impedita = template_path.stem.endswith("impedita")
+    is_in_integro = template_path.stem.endswith("in_integro")
     # Load the template at our render resolution. The shipped templates are
     # 720×1008 ; we render at 900×1260 (1.25×) so we resample once with
     # LANCZOS — losing some fine detail but staying ahead of the print DPI
@@ -364,19 +465,22 @@ def render_face_with_template(
         title_size -= 2
         title_font = font(title_size, "title")
     tw, th = measure_text(d, title, title_font)
-    d.text((tx0 + (title_w - tw) // 2, ty0 + (title_h - th) // 2 - 4),
-           title, fill=COL_TPL_INK_TITLE, font=title_font)
+    title_y_adjust = -5 if is_impedita else -2
+    draw_centered_text(d, (tx0, ty0, tx1, ty1), title, title_font,
+                       COL_TPL_INK_TITLE, y_adjust=title_y_adjust)
 
     # Cost — number centered in the top-left circle of the template.
     if cost is not None:
         cx0, cy0, cx1, cy1 = slot_box(SLOT_COST)
-        cost_size = (cy1 - cy0) - 32
-        cost_font = font(cost_size, "face")
         cs = str(cost)
-        cw, chh = measure_text(d, cs, cost_font)
-        d.text((cx0 + (cx1 - cx0 - cw) // 2,
-                cy0 + (cy1 - cy0 - chh) // 2 - 6),
-               cs, fill=COL_TPL_INK_LABEL, font=cost_font)
+        if cs.isdigit():
+            cost_size = (cy1 - cy0) - 32
+            cost_font = font(cost_size, "face")
+            draw_centered_text(d, (cx0, cy0, cx1, cy1), cs, cost_font,
+                               COL_TPL_INK_LABEL)
+        else:
+            draw_centered_multiline_text(d, (cx0, cy0, cx1, cy1), cs.upper(), "title",
+                                         COL_TPL_INK_LABEL, start_size=31, min_size=18)
 
     # Domain — short label in the top-right shield.
     dx0, dy0, dx1, dy1 = slot_box(SLOT_DOMAIN)
@@ -387,39 +491,37 @@ def render_face_with_template(
     while measure_text(d, domain_label, dom_font)[0] > dom_w - 8 and dom_size > 14:
         dom_size -= 2
         dom_font = font(dom_size, "title")
-    dw, dh = measure_text(d, domain_label, dom_font)
-    d.text((dx0 + (dom_w - dw) // 2, dy0 + (dom_h - dh) // 2 - 2),
-           domain_label, fill=COL_TPL_INK_LABEL, font=dom_font)
+    draw_centered_text(d, (dx0, dy0, dx1, dy1), domain_label, dom_font,
+                       COL_TPL_INK_LABEL)
 
     # Effect text — body blocks inside the bottom parchment plate.
-    ex0, ey0, ex1, ey1 = slot_box(SLOT_EFFECT_TEXT)
-    text_max_w = ex1 - ex0 - 20
-    body_size = 24
-    body_font_lg = font(body_size, "body")
-    label_font = font(20, "face")
-    line_h = 30
-    label_h = 24
-    # Pre-flight : if the body is too tall for the slot at the default size,
-    # scale fonts down progressively until it fits. Avoids the body
-    # overflowing the parchment plate on long Infamy effects.
-    def total_body_height(b_font, lbl_font, lh, lh_label):
-        h = 0
-        for label, text in body:
-            if label:
-                h += lh_label + 4
-            wrapped = wrap_text(d, text, b_font, text_max_w)
-            h += lh * len(wrapped)
-            h += 6
-        return h
-
-    while body_size > 14 and total_body_height(body_font_lg, label_font, line_h, label_h) > (ey1 - ey0):
-        body_size -= 2
-        body_font_lg = font(body_size, "body")
-        label_font = font(max(14, body_size - 4), "face")
-        line_h = body_size + 6
-        label_h = max(18, body_size - 2)
-
-    draw_paragraph(d, ex0 + 10, ey0 + 8, text_max_w, body, body_font_lg, label_font,
+    if is_impedita:
+        effect_slot = SLOT_EFFECT_TEXT_IMPEDITA
+    elif is_in_integro:
+        effect_slot = SLOT_EFFECT_TEXT_IN_INTEGRO
+    else:
+        effect_slot = SLOT_EFFECT_TEXT
+    ex0, ey0, ex1, ey1 = slot_box(effect_slot)
+    inner_pad = 26 if is_impedita else 10
+    text_max_w = ex1 - ex0 - (inner_pad * 2)
+    available_h = ey1 - ey0 - (inner_pad * 2)
+    body_font_lg, label_font, line_h, label_h, body_h, _body_size = fit_paragraph_fonts(
+        d,
+        text_max_w,
+        available_h,
+        body,
+        start_body_size=31 if is_impedita else 28,
+        start_label_size=24 if is_impedita else 23,
+        min_body_size=21 if is_impedita else 14,
+        paragraph_gap=6,
+        line_extra=5,
+        label_extra=2,
+    )
+    spare_h = max(0, available_h - body_h)
+    center_offset = spare_h // 2
+    liturgy_front_y_adjust = min(10, max(0, spare_h - center_offset - 8)) if is_in_integro else 0
+    text_y = ey0 + inner_pad + center_offset + liturgy_front_y_adjust
+    draw_paragraph(d, ex0 + inner_pad, text_y, text_max_w, body, body_font_lg, label_font,
                    COL_TPL_INK, COL_TPL_INK_LABEL, line_h, label_h, paragraph_gap=6)
 
     # Face label — "SCANDAL" / "INFAMY" / "IN INTEGRO" / "IMPEDITA" centred
@@ -433,9 +535,8 @@ def render_face_with_template(
     while measure_text(d, face_text, face_font)[0] > face_w - 12 and face_size > 14:
         face_size -= 2
         face_font = font(face_size, "face")
-    fw, fh = measure_text(d, face_text, face_font)
-    d.text((fx0 + (face_w - fw) // 2, fy0 + (face_h - fh) // 2 - 2),
-           face_text, fill=COL_TPL_RIBBON_INK, font=face_font)
+    draw_centered_text(d, (fx0, fy0, fx1, fy1), face_text, face_font,
+                       COL_TPL_RIBBON_INK)
 
     return img
 
@@ -448,7 +549,7 @@ def render_face(
     subtitle: str,
     domain_label: str,
     face: str,           # "Scandal" / "Infamy" / "In Integro" / "Impedita" / etc.
-    cost: Optional[int],
+    cost: Optional[int | str],
     body: list[tuple[str, str]],
     illustration: Optional[Image.Image] = None,
     is_reference: bool = False,
@@ -543,23 +644,21 @@ def render_face(
         cw, chh = measure_text(d, cs, cost_font)
         d.text((cc_x - cw // 2, cc_y - chh // 2 - 6), cs, fill=COL_RIBBON_INK, font=cost_font)
 
-    # Body blocks. Compact mode = smaller everything, used for reference
-    # cards that pack many short paragraphs into a single face.
-    if compact_body:
-        body_font_lg = font(24, "body")
-        label_font = font(22, "face")
-        line_h = 32
-        label_h = 26
-    else:
-        body_font_lg = font(32, "body")
-        label_font = font(28, "face")
-        line_h = 42
-        label_h = 32
     text_left = body_inset_x + (110 if cost is not None else 0)
     if cost is not None:
         text_top = max(text_top, body_inset_y + 110)
     text_max_w = body_inset_r - text_left - 10
     paragraph_gap = 6 if compact_body else 12
+    body_font_lg, label_font, line_h, label_h, _body_h, _body_size = fit_paragraph_fonts(
+        d,
+        text_max_w,
+        max(1, body_inset_b - text_top),
+        body,
+        start_body_size=27 if compact_body else 36,
+        start_label_size=24 if compact_body else 31,
+        min_body_size=18 if compact_body else 22,
+        paragraph_gap=paragraph_gap,
+    )
     draw_paragraph(d, text_left, text_top, text_max_w, body, body_font_lg, label_font,
                    COL_INK, COL_LABEL_GOLD, line_h, label_h, paragraph_gap)
 
@@ -619,8 +718,8 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
         name = i18n.get(f"liturgy.{rid}.name", rid)
         in_int = i18n.get(f"liturgy.{rid}.in_integro", "")
         impedita = i18n.get(f"liturgy.{rid}.impedita", "")
-        target = i18n.get(f"liturgy.targeting.{rid}", "")
         ill_path = ILLUSTRATIONS_DIR / f"{rid}.jpg"
+        target_badge = LITURGY_TARGET_BADGE.get(rid, "TARGET")
 
         out.append(CardSpec(
             card_id=f"liturgy_{rid}",
@@ -632,10 +731,9 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
             domain_label=station_name.split(" — ")[0],   # "I", "II", …
             front_face="In Integro",
             back_face="Impedita",
-            front_cost=None,
-            back_cost=None,
+            front_cost=target_badge,
+            back_cost=target_badge,
             front_body=[
-                ("Targeting", target),
                 ("In Integro effect", in_int),
             ],
             back_body=[
@@ -644,7 +742,7 @@ def build_liturgy_specs(i18n: dict[str, str]) -> list[CardSpec]:
                 # ornate skull / candle ornaments that eat into the usable
                 # text area, so the Impedita effect needs the full slot
                 # to render at a legible size.
-                ("Impedita effect", impedita),
+                ("", impedita),
             ],
             illustration_path=ill_path if ill_path.exists() else None,
             front_template=TEMPLATES_DIR / "liturgie_in_integro.webp",
