@@ -10,10 +10,10 @@ mouse_filter = 1
 script = ExtResource("1_card")
 
 [node name="Illustration" type="TextureRect" parent="."]
-anchor_left = 0.123
-anchor_top = 0.135
-anchor_right = 0.873
-anchor_bottom = 0.728
+anchor_left = 0.089
+anchor_top = 0.199
+anchor_right = 0.908
+anchor_bottom = 0.643
 expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
@@ -26,48 +26,48 @@ stretch_mode = 0
 mouse_filter = 2
 
 [node name="Title" type="Label" parent="."]
-anchor_left = 0.283
-anchor_top = 0.057
-anchor_right = 0.726
-anchor_bottom = 0.128
+anchor_left = 0.26
+anchor_top = 0.094
+anchor_right = 0.74
+anchor_bottom = 0.181
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 clip_text = true
 
 [node name="Cost" type="Label" parent="."]
-anchor_left = 0.066
-anchor_top = 0.047
-anchor_right = 0.245
-anchor_bottom = 0.179
+anchor_left = 0.056
+anchor_top = 0.095
+anchor_right = 0.198
+anchor_bottom = 0.198
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
 [node name="Domain" type="Label" parent="."]
-anchor_left = 0.774
-anchor_top = 0.088
-anchor_right = 0.929
-anchor_bottom = 0.145
+anchor_left = 0.805
+anchor_top = 0.095
+anchor_right = 0.945
+anchor_bottom = 0.198
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
 [node name="EffectText" type="Label" parent="."]
-anchor_left = 0.203
-anchor_top = 0.735
-anchor_right = 0.817
-anchor_bottom = 0.898
+anchor_left = 0.16
+anchor_top = 0.69
+anchor_right = 0.84
+anchor_bottom = 0.872
 horizontal_alignment = 0
 vertical_alignment = 1
 autowrap_mode = 3
 mouse_filter = 2
 
 [node name="FaceLabel" type="Label" parent="."]
-anchor_left = 0.302
-anchor_top = 0.917
-anchor_right = 0.708
-anchor_bottom = 0.957
+anchor_left = 0.3
+anchor_top = 0.902
+anchor_right = 0.7
+anchor_bottom = 0.947
 horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2

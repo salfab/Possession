@@ -17,6 +17,31 @@ const FONT_FACE  := preload("res://assets/fonts/CinzelDecorative-Bold.ttf")
 # scaled in _on_resized() so the look stays consistent at any actual size.
 const REF_WIDTH := 720.0
 
+const SLOT_TITLE_TRANS := [0.260, 0.094, 0.740, 0.181]
+const SLOT_COST_TRANS := [0.056, 0.095, 0.198, 0.198]
+const SLOT_DOMAIN_TRANS := [0.805, 0.095, 0.945, 0.198]
+const SLOT_EFFECT_SCANDALE := [0.160, 0.690, 0.840, 0.872]
+const SLOT_EFFECT_INFAMIE := [0.160, 0.675, 0.840, 0.848]
+const SLOT_FACE_TRANS := [0.300, 0.902, 0.700, 0.947]
+const SLOT_ILLUSTR_SCANDALE := [0.089, 0.199, 0.908, 0.643]
+const SLOT_ILLUSTR_INFAMIE := [0.090, 0.189, 0.910, 0.633]
+
+const SLOT_TITLE_LITURGY := [0.260, 0.098, 0.740, 0.185]
+const SLOT_COST_IN_INTEGRO := [0.050, 0.045, 0.205, 0.150]
+const SLOT_DOMAIN_IN_INTEGRO := [0.800, 0.045, 0.950, 0.150]
+const SLOT_COST_IMPEDITA := [0.055, 0.045, 0.195, 0.145]
+const SLOT_DOMAIN_IMPEDITA := [0.805, 0.045, 0.945, 0.145]
+const SLOT_EFFECT_IN_INTEGRO := [0.215, 0.735, 0.785, 0.895]
+const SLOT_EFFECT_IMPEDITA := [0.225, 0.735, 0.775, 0.895]
+const SLOT_FACE_LITURGY := [0.340, 0.935, 0.660, 0.978]
+const SLOT_ILLUSTR_IN_INTEGRO := [0.182, 0.200, 0.818, 0.691]
+const SLOT_ILLUSTR_IMPEDITA := [0.185, 0.202, 0.815, 0.698]
+
+const COL_DARK_INK := Color(0.12, 0.05, 0.02)
+const COL_DARK_TITLE := Color(0.20, 0.06, 0.04)
+const COL_DARK_FACE := Color(0.43, 0.08, 0.06)
+const COL_LIGHT_PLATE_INK := Color(0.94, 0.86, 0.60)
+
 @onready var illustration: TextureRect = $Illustration
 @onready var template: TextureRect = $Template
 @onready var lbl_title: Label = $Title
@@ -152,11 +177,11 @@ static func _configure_card_fonts() -> void:
 
 
 func _apply_styles() -> void:
-	_setup_label(lbl_title,  FONT_TITLE, 30, Color(0.20, 0.06, 0.04))
-	_setup_label(lbl_cost,   FONT_BODY,  56, Color(0.20, 0.06, 0.04))
-	_setup_label(lbl_domain, FONT_TITLE, 22, Color(0.20, 0.06, 0.04))
-	_setup_label(lbl_text,   FONT_BODY,  22, Color(0.12, 0.05, 0.02))
-	_setup_label(lbl_face,   FONT_FACE,  26, Color(0.43, 0.08, 0.06))
+	_setup_label(lbl_title,  FONT_TITLE, 30, COL_DARK_TITLE)
+	_setup_label(lbl_cost,   FONT_BODY,  56, COL_DARK_TITLE)
+	_setup_label(lbl_domain, FONT_TITLE, 22, COL_DARK_TITLE)
+	_setup_label(lbl_text,   FONT_BODY,  22, COL_DARK_INK)
+	_setup_label(lbl_face,   FONT_FACE,  26, COL_DARK_FACE)
 
 
 func _setup_label(lbl: Label, font: Font, base_size: int, color: Color) -> void:
@@ -173,6 +198,46 @@ func _on_resized() -> void:
 	for lbl in [lbl_title, lbl_cost, lbl_domain, lbl_text, lbl_face]:
 		var base: int = int(lbl.get_meta("base_size", 20))
 		_apply_scaled_label_size(lbl, base)
+
+
+func _set_slot(ctrl: Control, slot: Array) -> void:
+	ctrl.anchor_left = float(slot[0])
+	ctrl.anchor_top = float(slot[1])
+	ctrl.anchor_right = float(slot[2])
+	ctrl.anchor_bottom = float(slot[3])
+	ctrl.offset_left = 0
+	ctrl.offset_top = 0
+	ctrl.offset_right = 0
+	ctrl.offset_bottom = 0
+
+
+func _apply_template_layout() -> void:
+	if _kind == "transgression":
+		_set_slot(lbl_title, SLOT_TITLE_TRANS)
+		_set_slot(lbl_cost, SLOT_COST_TRANS)
+		_set_slot(lbl_domain, SLOT_DOMAIN_TRANS)
+		_set_slot(lbl_text, SLOT_EFFECT_INFAMIE if _face == GameEnums.TransgressionFace.INFAMIE else SLOT_EFFECT_SCANDALE)
+		_set_slot(lbl_face, SLOT_FACE_TRANS)
+		_set_slot(illustration, SLOT_ILLUSTR_INFAMIE if _face == GameEnums.TransgressionFace.INFAMIE else SLOT_ILLUSTR_SCANDALE)
+		lbl_face.set_meta("base_size", 20)
+		_apply_scaled_label_size(lbl_face, 20)
+		lbl_title.add_theme_color_override("font_color", COL_LIGHT_PLATE_INK)
+		lbl_face.add_theme_color_override("font_color", COL_LIGHT_PLATE_INK)
+	elif _kind == "liturgy":
+		_set_slot(lbl_title, SLOT_TITLE_LITURGY)
+		_set_slot(lbl_cost, SLOT_COST_IMPEDITA if _impedita else SLOT_COST_IN_INTEGRO)
+		_set_slot(lbl_domain, SLOT_DOMAIN_IMPEDITA if _impedita else SLOT_DOMAIN_IN_INTEGRO)
+		_set_slot(lbl_text, SLOT_EFFECT_IMPEDITA if _impedita else SLOT_EFFECT_IN_INTEGRO)
+		_set_slot(lbl_face, SLOT_FACE_LITURGY)
+		_set_slot(illustration, SLOT_ILLUSTR_IMPEDITA if _impedita else SLOT_ILLUSTR_IN_INTEGRO)
+		lbl_face.set_meta("base_size", 26)
+		_apply_scaled_label_size(lbl_face, 26)
+		lbl_title.add_theme_color_override("font_color", COL_DARK_TITLE)
+		lbl_face.add_theme_color_override("font_color", COL_DARK_FACE)
+	if _domain_btn != null:
+		_set_slot(_domain_btn, [lbl_domain.anchor_left, lbl_domain.anchor_top, lbl_domain.anchor_right, lbl_domain.anchor_bottom])
+	if _effect_btn != null:
+		_set_slot(_effect_btn, [lbl_text.anchor_left, lbl_text.anchor_top, lbl_text.anchor_right, lbl_text.anchor_bottom])
 
 
 func _apply_scaled_label_size(lbl: Label, base: int) -> void:
@@ -271,6 +336,7 @@ func _apply_binding() -> void:
 		var resp: Dictionary = LiturgicalResponseData.get_response(_station)
 		if not resp.is_empty():
 			illustration.texture = CardImages.illustration(String(resp.get("id", "")))
+	_apply_template_layout()
 	# Badge tap target — only meaningful on Liturgy cards (the rule popup
 	# describes how the response picks its Domain / demon). Hidden on
 	# Transgressions, where the badge is a static domain requirement.

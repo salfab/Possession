@@ -1,13 +1,18 @@
-# Possession V1g — Print-and-Play kit (English)
+# Possession V1h — Print-and-Play kit
 
 Output of `tools/print/build.py`. Re-run that script any time the i18n
-strings or the card list change.
+strings, rules text, or card list change.
 
 ## Files
 
 - `possession_print_kit_en.pdf` — A4, duplex (long-edge binding), 9 cards
   per page, cut marks at every corner. Page 1 = fronts, Page 2 = backs
   (mirrored for proper duplex alignment), Page 3 = next set of fronts, etc.
+- `possession_rulebook_fr.pdf` / `possession_rulebook_en.pdf` — A5 portrait
+  French and English rulebooks with a light generated page texture,
+  illustrated section openers, V1h flow, actions, Liturgical Response
+  targeting, Missel Corrompu / Corrupted Missal variants, Codex des
+  Transgressions setup, Final Exorcism reference, and glossary.
 - `possession_board_a3.pdf` — A3 landscape, single page with the game
   board centred and full-bleed inside a 10 mm margin. Cut marks at the
   four corners of the board image.
@@ -34,6 +39,13 @@ strings or the card list change.
   - *Demon Actions* — every action a demon can take, costed and described.
 
 ## Print recipes
+
+### Rulebooks (`possession_rulebook_fr.pdf`, `possession_rulebook_en.pdf`)
+1. Print at 100 % scale. The PDF is A5 portrait with sequential pages, so
+   most printer dialogs can impose it as a booklet on A4 automatically.
+2. For a hand-assembled copy, print two A5 pages per A4 sheet, duplex on
+   the short edge, then fold / staple.
+3. Use 100–120 g/m² paper if you want the page texture to stay subtle.
 
 ### Cards (`possession_print_kit_en.pdf`)
 1. Print at 100 % scale (no fit-to-page) on **200–250 g/m² cardstock**.
@@ -73,5 +85,7 @@ python tools/print/build.py
 
 Requires Python 3.12+ with `Pillow` and `reportlab` installed
 (`pip install Pillow reportlab`). Reads the card data straight from
-`scripts/data/I18n.gd` so any text change there flows into the next
-print kit on the next build.
+`scripts/data/I18n.gd` so any text change there flows into the next print
+kit on the next build. The rulebook also uses
+`assets/print/rulebook_page_texture.png`, generated once and kept in the
+workspace so the PDF build remains reproducible.
