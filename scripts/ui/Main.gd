@@ -74,6 +74,23 @@ const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
 # resizes individual banner slots.
 const LITURGY_BANNER_HALF_OVERRIDES := {}
 
+# Penitence arch markers — one ogival golden border per Domain, shown in
+# game only while that Domain is in Penitence (state.is_in_penitence). The
+# arch REUSES the Domain's existing zone rectangle (the hotspot bounds, which
+# are already calibrated) as its left/right/top/bottom box ; the only
+# arch-specific value is the apex RISE above the rectangle's top edge. So
+# there is just one calibratable number per Domain.
+#
+# PLACEHOLDER rises (normalised, fraction of board height) — dial in via the
+# in-game calibration mode (FAB → "Arches pénitence") then freeze here.
+const PENITENCE_ARCH_RISE := {
+	GameEnums.DomainId.AMBITION: 0.060,
+	GameEnums.DomainId.FOI:      0.060,
+	GameEnums.DomainId.VOLONTE:  0.060,
+	GameEnums.DomainId.DESIR:    0.060,
+	GameEnums.DomainId.PEUR:     0.060,
+}
+
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
 const ZOOM_STEP := 1.25
@@ -88,11 +105,45 @@ var manager: TurnManager
 var pending_action: int = -1
 var pending_kwargs: Dictionary = {}
 
+# ─── AI opponent ──────────────────────────────────────────────────────────────
+# Per-side control: PlayerId -> PLAYER_HUMAN / PLAYER_AI, chosen at new game.
+# Defaults to all-human (hotseat) so launch / endgame-replay behave as before.
+const PLAYER_HUMAN := "human"
+const PLAYER_AI := "ai"
+const AI_STEP_DELAY := 0.6   # seconds between watched bot moves (legibility)
+var _player_config: Dictionary = {
+	GameEnums.PlayerId.RED: PLAYER_HUMAN,
+	GameEnums.PlayerId.PURPLE: PLAYER_HUMAN,
+}
+# One-shot timer that paces bot moves: each timeout applies a single
+# step_bot_once() so the player can watch the AI play instead of the whole
+# turn resolving instantly. Created lazily in _ensure_ai_timer().
+var _ai_timer: Timer
+
 # Created in _build_overlays
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
 var _domain_name_labels: Dictionary = {}   # domain_id -> Label (board overlay)
 var _debug_hotspots: bool = false   # cyan outline overlay for calibration
+
+# Penitence arch overlay (golden ogival border per Domain). One PenitenceArch
+# Control covers the whole board inside _zoom_layer (follows zoom/pan). The
+# arch box is the Domain's zone rectangle (read live from the hotspot Button
+# anchors each refresh) ; the only per-domain arch value is the apex rise,
+# held in _arch_rise (seeded from PENITENCE_ARCH_RISE, mutated live by the
+# single apex handle). _arch_calibrating forces all 5 arches visible + spawns
+# one draggable apex handle each; off, only penitent Domains show.
+var _arch_overlay: PenitenceArch
+var _arch_rise: Dictionary = {}     # domain_id -> float (apex rise, normalised)
+var _arch_calibrating: bool = false
+var _arch_handles: Dictionary = {}  # domain_id -> apex handle Button
+var _arch_labels: Dictionary = {}   # domain_id -> Label (name + live rise)
+# Throttle for the live journal dump during an arch drag : drag motion fires
+# many samples per second, and each _refresh_log() rebuilds the whole journal
+# UI, so we coalesce to at most one journal write every _ARCH_LOG_INTERVAL ms.
+# The per-arch live label still updates on every sample (cheap, no rebuild).
+var _arch_log_last_ms: int = 0
+const _ARCH_LOG_INTERVAL := 250
 
 # Per-zone half-extents in normalised board coordinates. Initialised in
 # _build_overlays from DOMAIN_HALF / LITURGY_BANNER_HALF (the global default)
@@ -248,7 +299,17 @@ func _save_game() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify(state.to_dict()))
+	# Wrap the state with the human/AI player config so a resumed game keeps
+	# its bots. Older saves stored the bare state dict; _load_game() detects
+	# both shapes for backward compatibility.
+	var payload := {
+		"state": state.to_dict(),
+		"players": {
+			"red": _player_config.get(GameEnums.PlayerId.RED, PLAYER_HUMAN),
+			"purple": _player_config.get(GameEnums.PlayerId.PURPLE, PLAYER_HUMAN),
+		},
+	}
+	f.store_string(JSON.stringify(payload))
 	f.close()
 
 
@@ -268,7 +329,22 @@ func _load_game() -> bool:
 	var parsed: Variant = JSON.parse_string(raw)
 	if not (parsed is Dictionary):
 		return false
-	state.from_dict(parsed)
+	# New wrapped shape {state, players} vs legacy bare-state dict.
+	var state_dict: Dictionary = parsed
+	if parsed.has("state") and parsed["state"] is Dictionary:
+		state_dict = parsed["state"]
+		var players: Dictionary = parsed.get("players", {})
+		_player_config = {
+			GameEnums.PlayerId.RED: players.get("red", PLAYER_HUMAN),
+			GameEnums.PlayerId.PURPLE: players.get("purple", PLAYER_HUMAN),
+		}
+	else:
+		_player_config = {
+			GameEnums.PlayerId.RED: PLAYER_HUMAN,
+			GameEnums.PlayerId.PURPLE: PLAYER_HUMAN,
+		}
+	state.from_dict(state_dict)
+	_apply_player_config()
 	return true
 
 
@@ -313,9 +389,15 @@ func _apply_theme() -> void:
 	theme = t
 
 
-func new_game() -> void:
+func new_game(config: Dictionary = {}) -> void:
 	state = GameState.new()
 	manager = TurnManager.new(state)
+	# The UI paces bot moves itself (one per timer tick) instead of letting
+	# perform_action() resolve the whole bot turn synchronously.
+	manager.auto_bot = false
+	if not config.is_empty():
+		_player_config = config.duplicate()
+	_apply_player_config()
 	pending_action = -1
 	pending_kwargs.clear()
 	_endgame_shown = false
@@ -323,6 +405,62 @@ func new_game() -> void:
 	# a fresh game from mid-Exorcisme.
 	_last_seen_station = -1
 	_refresh_all()
+	# AI may hold the initiative on the very first pulse — kick the stepper.
+	_maybe_resume_ai()
+
+
+# Wire state.bot_for_player from the current _player_config. PLAYER_AI sides
+# get an MCTSBot (the main brain per the dev-bot brief); PLAYER_HUMAN sides
+# are left absent so the UI surfaces their turns / decisions normally.
+func _apply_player_config() -> void:
+	if state == null:
+		return
+	state.bot_for_player.clear()
+	for pid in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+		if _player_config.get(pid, PLAYER_HUMAN) == PLAYER_AI:
+			state.bot_for_player[pid] = MCTSBot.new()
+
+
+func _has_ai_player() -> bool:
+	return _player_config.get(GameEnums.PlayerId.RED, PLAYER_HUMAN) == PLAYER_AI \
+		or _player_config.get(GameEnums.PlayerId.PURPLE, PLAYER_HUMAN) == PLAYER_AI
+
+
+func _ensure_ai_timer() -> void:
+	if _ai_timer != null:
+		return
+	_ai_timer = Timer.new()
+	_ai_timer.one_shot = true
+	_ai_timer.timeout.connect(_ai_tick)
+	add_child(_ai_timer)
+
+
+# Arm the step timer if (and only if) the engine is currently waiting on a
+# bot's move. Called at the tail of every _refresh_all(), so the AI resumes
+# automatically after a human action, after a liturgy acknowledgement, or
+# after its own previous move — without each call site knowing about bots.
+# No-op while a tick is already pending (timer running) so ticks don't stack.
+func _maybe_resume_ai() -> void:
+	if manager == null or state == null or manager.auto_bot:
+		return
+	if not manager.bot_should_act():
+		return
+	_ensure_ai_timer()
+	if not _ai_timer.is_stopped():
+		return
+	_ai_timer.start(AI_STEP_DELAY)
+
+
+# Apply exactly one bot move, then refresh (which animates the move via
+# _animate_action_feedback and re-arms this timer through _maybe_resume_ai
+# if the bot still has the turn). Persists after each accepted move so an
+# iPad swipe-away mid AI-turn doesn't lose progress.
+func _ai_tick() -> void:
+	if manager == null or not manager.bot_should_act():
+		return
+	if manager.step_bot_once():
+		_save_game()
+		_refresh_all()
 
 
 # ─── UI CONSTRUCTION ──────────────────────────────────────────────────────────
@@ -436,6 +574,16 @@ func _build_overlays() -> void:
 		var badges := DomainBadges.new()
 		badges_row.add_child(badges)
 		_domain_badges[d_id] = badges
+
+	# Penitence arch overlay — single full-board Control above the hotspots
+	# (added last among the board children so its strokes draw on top). Seed
+	# the live rise map from the PENITENCE_ARCH_RISE const (the arch box itself
+	# is derived from the hotspot anchors each refresh, not stored here).
+	for d_id in PENITENCE_ARCH_RISE.keys():
+		_arch_rise[d_id] = float(PENITENCE_ARCH_RISE[d_id])
+	_arch_overlay = PenitenceArch.new()
+	_arch_overlay.name = "PenitenceArchOverlay"
+	_zoom_layer.add_child(_arch_overlay)
 
 	# Domain name caption labels — own POS / HALF, calibratable as
 	# independent zones via FAB → Hotspots.
@@ -611,6 +759,7 @@ const FAB_PUISER     := 1007
 const FAB_JOURNAL    := 1008
 const FAB_HOTSPOTS   := 1009
 const FAB_GLOSSARY   := 1010
+const FAB_ARCHES     := 1011
 
 
 # Hamburger icon synthesised at startup so we don't depend on a Unicode
@@ -658,6 +807,7 @@ func _on_fab_pressed() -> void:
 	_fab_menu.add_item(I18n.t("ui.btn.glossary"), FAB_GLOSSARY)
 	_fab_menu.add_item(I18n.t("ui.btn.journal"), FAB_JOURNAL)
 	_fab_menu.add_item(I18n.t("ui.btn.hotspots"), FAB_HOTSPOTS)
+	_fab_menu.add_item(I18n.t("ui.btn.arches"), FAB_ARCHES)
 	# Position just above the FAB.
 	var fab_pos := _fab.get_screen_position()
 	var fab_size := _fab.size
@@ -678,6 +828,7 @@ func _on_fab_menu_pressed(id: int) -> void:
 		FAB_GLOSSARY:   _on_btn_glossary()
 		FAB_JOURNAL:    _on_btn_toggle_log()
 		FAB_HOTSPOTS:   _on_btn_toggle_hotspots()
+		FAB_ARCHES:     _on_btn_toggle_arches()
 
 
 func _build_log_panel() -> void:
@@ -820,9 +971,11 @@ func _refresh_all() -> void:
 	_refresh_active_player_highlight()
 	_refresh_fab_highlight()
 	_animate_state_deltas()
+	_animate_action_feedback()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
 	_maybe_show_endgame_dialog()
+	_maybe_resume_ai()
 
 
 # Per-domain board snapshot kept between refreshes so _animate_state_deltas
@@ -882,6 +1035,36 @@ func _flash_domain(d_id: int) -> void:
 		tw.tween_property(node, "modulate", Color.WHITE, 0.45) \
 			.set_trans(Tween.TRANS_EXPO) \
 			.set_ease(Tween.EASE_OUT)
+
+
+# Per-action visual cue, replayed once per accepted move. Reads the record
+# TurnManager stamps on perform_action() so it fires identically for human
+# taps and for bot moves applied via step_bot_once(). Phase 1 keeps this
+# lightweight (targeted domain flash + a toast that names bot moves so a
+# watching human can follow the AI); richer per-action-type signatures are
+# the next milestone. Consumes the record so unrelated refreshes don't
+# replay it.
+func _animate_action_feedback() -> void:
+	if manager == null:
+		return
+	var action: int = manager.last_action
+	if action < 0:
+		return
+	var who: int = manager.last_action_player
+	var kwargs: Dictionary = manager.last_kwargs
+	manager.consume_last_action()
+	# Domain-targeted actions: flash the affected domain even when the net
+	# board delta is subtle (e.g. an Investir that only bumps one counter).
+	var d: int = int(kwargs.get("domain", -1))
+	if d >= 0:
+		_flash_domain(d)
+	# Announce bot moves so a watching human knows what the AI just played.
+	# Human moves stay silent on success (the board change is the feedback)
+	# per the project's no-success-toast rule.
+	if state != null and state.bot_for_player.has(who):
+		var key: String = GameEnums.ACTION_NAME_KEYS.get(action, "")
+		var action_name: String = I18n.t(key) if key != "" else "?"
+		_flash_action_toast("%s — %s" % [GameEnums.player_name(who), action_name], "accepted")
 
 
 # Whose turn is it ? Active player's panel gets a brighter border + heavier
@@ -1031,6 +1214,7 @@ func _refresh_overlays() -> void:
 	# coloured player panel).
 	_ascendant_label.text = "Asc %+d" % state.ascendant
 	_refresh_liturgy_banners()
+	_refresh_penitence_arches()
 
 
 # ─── Domain transgression markers ─────────────────────────────────────────────
@@ -1803,11 +1987,60 @@ func _on_popup_action(action_id: int) -> void:
 # ─── DEBUG BUTTONS ────────────────────────────────────────────────────────────
 
 func _on_btn_new_game() -> void:
+	# Offer the human/AI side picker first; the actual start happens in
+	# _start_new_game() once the player confirms their choice.
+	_show_new_game_dialog()
+
+
+# Small modal letting the player set each side to Human or AI before
+# starting. Built lazily; reused across new-game requests. Pre-selects the
+# previous game's config so repeat starts are one tap.
+func _show_new_game_dialog() -> void:
+	var dlg := AcceptDialog.new()
+	dlg.exclusive = true
+	dlg.title = I18n.t("ui.dialog.title.new_game")
+	dlg.ok_button_text = I18n.t("ui.dialog.start")
+	dlg.add_cancel_button(I18n.t("ui.dialog.cancel"))
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 16)
+	dlg.add_child(box)
+
+	var picks: Dictionary = {}
+	for pid in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var name_lbl := Label.new()
+		name_lbl.text = GameEnums.player_name(pid)
+		name_lbl.custom_minimum_size = Vector2(160, 0)
+		name_lbl.add_theme_color_override("font_color", GameEnums.player_color_light(pid))
+		row.add_child(name_lbl)
+		var opt := OptionButton.new()
+		opt.add_item(I18n.t("ui.player.human"), 0)   # idx 0 -> PLAYER_HUMAN
+		opt.add_item(I18n.t("ui.player.ai"), 1)       # idx 1 -> PLAYER_AI
+		opt.selected = 1 if _player_config.get(pid, PLAYER_HUMAN) == PLAYER_AI else 0
+		row.add_child(opt)
+		picks[pid] = opt
+		box.add_child(row)
+
+	add_child(dlg)
+	dlg.confirmed.connect(func():
+		var config := {}
+		for pid in picks.keys():
+			config[pid] = PLAYER_AI if (picks[pid] as OptionButton).selected == 1 else PLAYER_HUMAN
+		_start_new_game(config)
+		dlg.queue_free()
+	)
+	dlg.canceled.connect(func(): dlg.queue_free())
+	dlg.popup_centered()
+
+
+func _start_new_game(config: Dictionary) -> void:
 	# Manual new-game wipes any persisted save so the next refresh starts
 	# fresh too (otherwise the resume prompt would offer the *previous*
 	# game's state on next launch).
 	_delete_save()
-	new_game()
+	new_game(config)
 	state.add_log(I18n.t("log.new_game", [Time.get_time_string_from_system()]))
 	_refresh_log()
 
@@ -2369,6 +2602,264 @@ func _dump_calibration_for_paste() -> void:
 		_refresh_log()
 	OS.alert(block + "\n(Bloc également imprimé dans la console DevTools du navigateur — F12 → Console.)",
 		"Calibration — coller dans Main.gd")
+
+
+# ─── Penitence arch calibration ───────────────────────────────────────────────
+# The arch reuses the Domain's zone rectangle (the hotspot Button anchors,
+# already calibrated via FAB → Hotspots) as its box ; the only thing we
+# calibrate here is the apex RISE above the rectangle's top edge — one value
+# per Domain, one draggable handle each (top-centre, vertical drag). On
+# toggle-off we dump a paste-ready PENITENCE_ARCH_RISE block.
+const _ARCH_HANDLE_SIZE := 26
+const _ARCH_MAX_RISE := 0.40   # clamp so the apex can't shoot off the board
+
+
+# Arch geometry for one Domain, derived live from its zone rectangle (hotspot
+# anchors) plus the calibrated rise. Returns {} if the hotspot isn't built.
+func _arch_geom(d_id: int) -> Dictionary:
+	var btn: Button = _hotspots.get(d_id)
+	if btn == null or not is_instance_valid(btn):
+		return {}
+	var left: float = btn.anchor_left
+	var right: float = btn.anchor_right
+	var top: float = btn.anchor_top
+	var bottom: float = btn.anchor_bottom
+	return {
+		"cx": (left + right) * 0.5,
+		"hw": (right - left) * 0.5,
+		"top": top,
+		"bottom": bottom,
+		"rise": float(_arch_rise.get(d_id, 0.05)),
+	}
+
+
+func _refresh_penitence_arches() -> void:
+	# Feed the overlay live geometry (zone rect + rise) and decide which arches
+	# it paints : in calibration mode every arch shows ; otherwise only Domains
+	# currently in Penitence.
+	if _arch_overlay == null:
+		return
+	var geom: Dictionary = {}
+	var vis: Dictionary = {}
+	for d_id in _arch_rise.keys():
+		var g := _arch_geom(d_id)
+		if g.is_empty():
+			continue
+		geom[d_id] = g
+		if _arch_calibrating:
+			vis[d_id] = true
+		elif state != null and state.is_in_penitence(d_id):
+			vis[d_id] = true
+	_arch_overlay.set_arches(geom)
+	_arch_overlay.set_visible_ids(vis)
+
+
+func _on_btn_toggle_arches() -> void:
+	_arch_calibrating = not _arch_calibrating
+	if _arch_calibrating:
+		for d_id in _arch_rise.keys():
+			_build_arch_handle(d_id)
+			_ensure_arch_label(d_id)
+	else:
+		for d_id in _arch_rise.keys():
+			_destroy_arch_handle(d_id)
+			_remove_arch_label(d_id)
+		_dump_arches_for_paste()
+	# Recompute visibility (all arches in calib mode, penitent only otherwise)
+	# and force a redraw of the overlay.
+	_refresh_penitence_arches()
+	if _arch_overlay != null:
+		_arch_overlay.queue_redraw()
+
+
+# Apex handle position : top-centre of the zone rectangle, raised by `rise`.
+# Vertical drag changes the rise (see _on_arch_handle_input).
+func _arch_apex_pos(d_id: int) -> Vector2:
+	var g := _arch_geom(d_id)
+	if g.is_empty():
+		return Vector2(0.5, 0.5)
+	return Vector2(float(g["cx"]), float(g["top"]) - float(g["rise"]))
+
+
+func _build_arch_handle(d_id: int) -> void:
+	if _arch_handles.has(d_id):
+		return
+	var handle := Button.new()
+	handle.text = ""
+	handle.custom_minimum_size = Vector2(_ARCH_HANDLE_SIZE, _ARCH_HANDLE_SIZE)
+	handle.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Square bright-gold apex handle (shape + colour cue per the accessibility
+	# rule). It's the only handle now : vertical drag sets the arch height.
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(1.0, 0.95, 0.55, 0.95)
+	sb.border_color = Color(0.5, 0.40, 0.0, 1.0)
+	sb.set_corner_radius_all(0)
+	sb.set_border_width_all(2)
+	handle.add_theme_stylebox_override("normal",  sb)
+	handle.add_theme_stylebox_override("hover",   sb)
+	handle.add_theme_stylebox_override("pressed", sb)
+	handle.add_theme_stylebox_override("focus",   sb)
+	handle.gui_input.connect(_on_arch_handle_input.bind(d_id))
+	_zoom_layer.add_child(handle)
+	_arch_handles[d_id] = handle
+	_position_arch_handle(handle, d_id)
+
+
+func _position_arch_handle(handle: Button, d_id: int) -> void:
+	var apex := _arch_apex_pos(d_id)
+	handle.anchor_left = apex.x
+	handle.anchor_right = apex.x
+	handle.anchor_top = apex.y
+	handle.anchor_bottom = apex.y
+	handle.offset_left = -_ARCH_HANDLE_SIZE / 2.0
+	handle.offset_top = -_ARCH_HANDLE_SIZE / 2.0
+	handle.offset_right = _ARCH_HANDLE_SIZE / 2.0
+	handle.offset_bottom = _ARCH_HANDLE_SIZE / 2.0
+
+
+func _refresh_arch_handles(d_id: int) -> void:
+	var h: Button = _arch_handles.get(d_id)
+	if h != null and is_instance_valid(h):
+		_position_arch_handle(h, d_id)
+
+
+func _destroy_arch_handle(d_id: int) -> void:
+	var h: Button = _arch_handles.get(d_id)
+	if h != null and is_instance_valid(h):
+		h.queue_free()
+	_arch_handles.erase(d_id)
+
+
+func _ensure_arch_label(d_id: int) -> void:
+	if _arch_labels.has(d_id):
+		_refresh_arch_label(d_id)
+		return
+	var lbl := Label.new()
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 4)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_zoom_layer.add_child(lbl)
+	_arch_labels[d_id] = lbl
+	_refresh_arch_label(d_id)
+
+
+func _remove_arch_label(d_id: int) -> void:
+	var lbl: Label = _arch_labels.get(d_id)
+	if lbl != null and is_instance_valid(lbl):
+		lbl.queue_free()
+	_arch_labels.erase(d_id)
+
+
+func _refresh_arch_label(d_id: int) -> void:
+	var lbl: Label = _arch_labels.get(d_id)
+	if lbl == null:
+		return
+	var g := _arch_geom(d_id)
+	if g.is_empty():
+		return
+	var name_str: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
+	lbl.text = "%s\nrise %.3f" % [name_str, float(g["rise"])]
+	# Anchor the label across the zone rectangle (centred on it).
+	var cx: float = float(g["cx"])
+	var hw: float = float(g["hw"])
+	lbl.anchor_left = cx - hw
+	lbl.anchor_right = cx + hw
+	lbl.anchor_top = float(g["top"])
+	lbl.anchor_bottom = float(g["bottom"])
+	lbl.offset_left = 0
+	lbl.offset_top = 0
+	lbl.offset_right = 0
+	lbl.offset_bottom = 0
+
+
+func _on_arch_handle_input(event: InputEvent, d_id: int) -> void:
+	if not _arch_calibrating:
+		return
+	var delta: Vector2 = Vector2.ZERO
+	if event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		if (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+			return
+		delta = mm.relative
+	elif event is InputEventScreenDrag:
+		var sd: InputEventScreenDrag = event
+		delta = sd.relative
+	else:
+		return
+	if delta.y == 0.0:
+		return
+	var screen_size: Vector2 = _zoom_layer.size * _zoom_layer.scale
+	if screen_size.y <= 0:
+		return
+	var dy: float = delta.y / screen_size.y
+	# The apex sits at top - rise, so dragging the handle UP (negative dy)
+	# raises it → bigger rise ; dragging DOWN flattens the arch.
+	var new_rise: float = clampf(float(_arch_rise.get(d_id, 0.05)) - dy, 0.0, _ARCH_MAX_RISE)
+	_arch_rise[d_id] = new_rise
+	_refresh_penitence_arches()
+	_refresh_arch_handles(d_id)
+	_refresh_arch_label(d_id)
+	# Live-dump the full set to the journal on every change so the user can
+	# copy the current coordinates at any time without leaving the mode.
+	_log_arches_live()
+
+
+# Lightweight live log : appends the current PENITENCE_ARCH_RISE values to the
+# journal panel so the user reads up-to-date rises while still dragging.
+func _log_arches_live() -> void:
+	if state == null:
+		return
+	var now: int = Time.get_ticks_msec()
+	if now - _arch_log_last_ms < _ARCH_LOG_INTERVAL:
+		return
+	_arch_log_last_ms = now
+	state.add_log("[Arches] " + _arch_block_oneline())
+	_refresh_log()
+
+
+# One-line compact representation for the live journal feedback.
+func _arch_block_oneline() -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	for d_id in _arch_rise.keys():
+		parts.append("%s %.3f" % [_domain_id_to_enum_name(d_id), float(_arch_rise[d_id])])
+	return " ".join(parts)
+
+
+# Full paste-ready PENITENCE_ARCH_RISE block, same delivery as the hotspot
+# dump : a single console.log entry on web (clean copy-paste) plus the journal
+# + OS.alert. Paste it over the PENITENCE_ARCH_RISE const to freeze the values.
+func _dump_arches_for_paste() -> void:
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("const PENITENCE_ARCH_RISE := {")
+	for d_id in _arch_rise.keys():
+		lines.append("\tGameEnums.DomainId.%s: %.3f," % [
+			_domain_id_to_enum_name(d_id), float(_arch_rise[d_id])])
+	lines.append("}")
+	var block: String = ""
+	for ln in lines:
+		block += ln + "\n"
+	var full_dump: String = "\n========== POSSESSION ARCH DUMP — BEGIN ==========\n" \
+		+ block \
+		+ "========== POSSESSION ARCH DUMP — END ============\n"
+	if OS.has_feature("web"):
+		var console_obj: Variant = JavaScriptBridge.get_interface("console")
+		if console_obj != null:
+			console_obj.log(full_dump)
+		else:
+			print(full_dump)
+	else:
+		print(full_dump)
+	if state != null:
+		state.add_log("[Arches] Nouvelles valeurs :")
+		for ln in lines:
+			state.add_log(ln)
+		_refresh_log()
+	OS.alert(block + "\n(Bloc également imprimé dans la console DevTools du navigateur — F12 → Console.)",
+		"Arches pénitence — coller dans Main.gd")
 
 
 # Map DomainId int → constant name. Used to emit the

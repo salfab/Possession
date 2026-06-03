@@ -158,3 +158,40 @@ Angle : on veut ajouter des "modificateurs de liturgie" pour la rejouabilité
 Fil conducteur : les studios AAA font ça avec des milliers de bots.
 Ici on le fait en ~4 minutes de Docker sur un jeu indie solo.
 Le bot qu'on a construit pour jouer devient un outil de QA gratuit.
+
+---
+
+## Étape — Sortir le bot du headless : le faire jouer DANS l'UI Godot
+
+Jusqu'ici le bot ne vivait qu'en tests headless (`BotTestRunner`), piloté par
+`TurnManager._check_bot_turn()` : une boucle `while` **synchrone** qui résout tout
+le tour du bot d'un coup. Parfait pour benchmarker 100 parties en 4 min, inutilisable
+pour *regarder* l'IA jouer — l'écran ne se rafraîchit jamais entre deux coups.
+
+Le déclic : pour jouer contre l'IA depuis l'interface, il fallait d'abord un
+**mécanisme de cadencement**. Et ce cadencement, c'est exactement ce qui rend les
+animations utiles. Les deux features (anims + IA jouable) ne sont pas deux chantiers :
+c'est le même.
+
+Refactor minimal du core (une seule source de vérité pour la logique bot) :
+- `TurnManager.auto_bot` (défaut `true`) — l'UI le passe à `false`.
+- `step_bot_once()` — applique **un seul** coup bot (une décision drainée OU une action
+  choisie) et retourne `true` s'il a agi. La boucle headless devient
+  `while step_bot_once(): pass`, donc comportement identique en test.
+- `bot_should_act()` — prédicat sans effet de bord : « le moteur attend-il un coup bot ? »
+- `last_action` / `last_kwargs` / `last_action_player` — estampillés par `perform_action()`,
+  pour qu'un dispatcher d'anim rejoue le coup, **humain ou bot, même chemin**.
+
+Côté UI (`Main.gd`) :
+- Dialogue de nouvelle partie : Humain / IA par camp (Rouge / Violet).
+- `MCTSBot` câblé dans `state.bot_for_player` selon le choix.
+- Un `Timer` one-shot joue un coup IA toutes les ~600 ms, refresh + anim entre chaque,
+  ré-armé automatiquement en queue de `_refresh_all()` via `_maybe_resume_ai()`.
+- Toast nominatif sur les coups de l'IA (« Violet — Investir ») : exception assumée à
+  la règle « pas de toast sur succès » — il faut bien voir ce que l'adversaire fait.
+- Config Humain/IA persistée dans la sauvegarde (format `{state, players}`, lecture
+  rétro-compatible avec les vieilles sauvegardes bare-state).
+
+Prochain jalon : une signature visuelle dédiée par type d'action (pose corruption,
+entraver, provoquer, amplifier, puiser…) — le hook `_animate_action_feedback()` est
+déjà le point d'accroche.
