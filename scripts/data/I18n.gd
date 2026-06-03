@@ -53,6 +53,31 @@ const STRINGS := {
 	"domain.peur":          {"fr": "Peur",     "en": "Fear"},
 	"domain.volonte":       {"fr": "Volonté",  "en": "Will"},
 
+	# Domain hint chips — compact yield labels shown on the board
+	"domain.chip.ambition": {"fr": "2 Corr.",   "en": "2 Corr."},
+	"domain.chip.desir":    {"fr": "2–3 Corr.", "en": "2–3 Corr."},
+	"domain.chip.foi":      {"fr": "1–2 Corr.", "en": "1–2 Corr."},
+	"domain.chip.peur":     {"fr": "1–2 Corr.", "en": "1–2 Corr."},
+	"domain.chip.volonte":  {"fr": "Victoire",  "en": "Victory"},
+
+	# Domain advantage lines ("why invest") — shown in the action menu header
+	"domain.hint.ambition": {"fr": "Produit 2 Corruptions. Requis pour déclencher des Transgressions.",
+		"en": "Produces 2 Corruptions. Required to trigger Transgressions."},
+	"domain.hint.desir":    {"fr": "Produit 2 Corruptions (3 si transgressé). Active l'infamie « Appétit hérétique ».",
+		"en": "Produces 2 Corruptions (3 if Transgressed). Enables the \"Heretical Appetite\" infamy."},
+	"domain.hint.foi":      {"fr": "Produit 1 Corruption (2 si transgressé). Bonus d'Ascendant à l'Exorcisme.",
+		"en": "Produces 1 Corruption (2 if Transgressed). Ascendant bonus at the Exorcism."},
+	"domain.hint.peur":     {"fr": "Produit 1 Corruption (2 si un domaine a été fissuré ce tour).",
+		"en": "Produces 1 Corruption (2 if a Domain was cracked this turn)."},
+	"domain.hint.volonte":  {"fr": "Ne produit rien, mais scellé + transgressé = victoire automatique (Fiat Tenebris).",
+		"en": "Produces nothing, but Sealed + Transgressed = automatic victory (Fiat Tenebris)."},
+
+	# Action menu (custom DomainActionMenu)
+	"ui.menu.meta":  {"fr": "Contrôle : %s — Transgressions : %d", "en": "Control: %s — Transgressions: %d"},
+	"ui.menu.gain":  {"fr": "+%d Corr.", "en": "+%d Corr."},
+	"ui.menu.provoke_section": {"fr": "Provoquer ici", "en": "Provoke here"},
+	"ui.menu.amplify_section": {"fr": "Amplifier",     "en": "Amplify"},
+
 	# Stations (with their roman numerals so the prefix stays universal)
 	"station.murmures":     {"fr": "I — Murmures",    "en": "I — Whispers"},
 	"station.tentation":    {"fr": "II — Tentation",  "en": "II — Temptation"},

@@ -14,6 +14,7 @@ func run_all() -> Dictionary:
 	fail_count = 0
 	_test_control_and_domination()
 	_test_production()
+	_test_domain_hint_strings()
 	_test_seal_rules()
 	_test_demonic_fissure()
 	_test_liturgical_fissure_in_integro()
@@ -1187,3 +1188,28 @@ func _test_codex_renoncement() -> void:
 		GameEnums.DomainId.AMBITION)
 	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == red_pool_before + 1,
 		"Renoncement Infamie : propriétaire gagne +1 Corruption quand l'adversaire Entrave")
+
+
+# ---------------------------------------------------------------------------
+# Domain hint strings — chip labels and advantage texts
+# ---------------------------------------------------------------------------
+func _test_domain_hint_strings() -> void:
+	for d in DomainData.DOMAINS:
+		var chip: String = DomainData.chip_label(d)
+		_assert(chip != "" and not chip.begins_with("domain.chip."),
+			"hint.chip_label[%d]" % d, "label de pastille vide ou non traduit")
+		var adv: String = DomainData.advantage_text(d)
+		_assert(adv != "" and not adv.begins_with("domain.hint."),
+			"hint.advantage_text[%d]" % d, "texte d'avantage vide ou non traduit")
+	var vol: String = DomainData.advantage_text(GameEnums.DomainId.VOLONTE)
+	_assert(vol.to_lower().contains("victoire"),
+		"hint.volonte_victory", "la ligne d'avantage de Volonté doit mentionner la victoire")
+	# Same keys must resolve in EN. Toggle then restore (other rules tests are
+	# locale-agnostic, so this is safe).
+	I18n.set_locale("en")
+	for d in DomainData.DOMAINS:
+		_assert(DomainData.chip_label(d) != "" and not DomainData.chip_label(d).begins_with("domain.chip."),
+			"hint.chip_label.en[%d]" % d, "label EN manquant")
+		_assert(DomainData.advantage_text(d) != "" and not DomainData.advantage_text(d).begins_with("domain.hint."),
+			"hint.advantage_text.en[%d]" % d, "texte EN manquant")
+	I18n.set_locale("fr")
