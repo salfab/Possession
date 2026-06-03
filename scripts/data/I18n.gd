@@ -115,6 +115,7 @@ const STRINGS := {
 	"ui.btn.journal":       {"fr": "Journal",     "en": "Journal"},
 	"ui.btn.glossary":      {"fr": "Glossaire",   "en": "Glossary"},
 	"ui.btn.hotspots":      {"fr": "Zones",       "en": "Hotspots"},
+	"ui.btn.arches":        {"fr": "Arches pénitence", "en": "Penitence arches"},
 	"ui.btn.puiser":        {"fr": "Puiser",      "en": "Draw"},
 	"ui.btn.puiser.tooltip":{"fr": "Puiser dans l'Ombre — gagner 1 Corruption (uniquement si réserve à 0)",
 	                         "en": "Draw from the Shadow — gain 1 Corruption (only when your pool is empty)"},

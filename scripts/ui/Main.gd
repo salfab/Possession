@@ -74,6 +74,27 @@ const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
 # resizes individual banner slots.
 const LITURGY_BANNER_HALF_OVERRIDES := {}
 
+# Penitence arch markers — one ogival golden border per Domain, shown in
+# game only while that Domain is in Penitence (state.is_in_penitence). These
+# are PLACEHOLDER values, roughly centred on each DOMAIN_POS and a touch
+# larger than the hotspot, meant to be dialled in via the in-game
+# calibration mode (FAB → "Arches pénitence") and then frozen here.
+#
+# Param schema (normalised 0..1 board coords) :
+#   cx  : centre x of the arch
+#   cy  : centre y of the arch (vertical middle of the bounding box)
+#   hw  : half-width (left/right reach from cx)
+#   h   : total height (apex → base)
+#   arc : apex rise as a fraction of total height (0 = flat top,
+#         1 = fully curved). ~0.45 ≈ a typical ogival niche.
+const PENITENCE_ARCH := {
+	GameEnums.DomainId.AMBITION: {"cx": 0.270, "cy": 0.328, "hw": 0.095, "h": 0.230, "arc": 0.45},
+	GameEnums.DomainId.FOI:      {"cx": 0.686, "cy": 0.313, "hw": 0.095, "h": 0.230, "arc": 0.45},
+	GameEnums.DomainId.VOLONTE:  {"cx": 0.481, "cy": 0.199, "hw": 0.095, "h": 0.230, "arc": 0.45},
+	GameEnums.DomainId.DESIR:    {"cx": 0.289, "cy": 0.655, "hw": 0.095, "h": 0.230, "arc": 0.45},
+	GameEnums.DomainId.PEUR:     {"cx": 0.685, "cy": 0.654, "hw": 0.095, "h": 0.230, "arc": 0.45},
+}
+
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
 const ZOOM_STEP := 1.25
@@ -108,6 +129,25 @@ var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
 var _domain_name_labels: Dictionary = {}   # domain_id -> Label (board overlay)
 var _debug_hotspots: bool = false   # cyan outline overlay for calibration
+
+# Penitence arch overlay (golden ogival border per Domain). One PenitenceArch
+# Control covers the whole board inside _zoom_layer (follows zoom/pan). Its
+# per-domain params live in _arch_params (seeded from PENITENCE_ARCH, mutated
+# live by the arch calibration handles). _arch_calibrating forces all 5 arches
+# visible + spawns draggable handles; off, only penitent Domains show.
+var _arch_overlay: PenitenceArch
+var _arch_params: Dictionary = {}   # domain_id -> {cx, cy, hw, h, arc}
+var _arch_calibrating: bool = false
+# domain_id -> Array of handle Buttons. Index 0..3 = bounding-box corners
+# (TL, TR, BL, BR — resize hw/h), index 4 = apex handle (adjusts arc).
+var _arch_handles: Dictionary = {}
+var _arch_labels: Dictionary = {}   # domain_id -> Label (name + live params)
+# Throttle for the live journal dump during an arch drag : drag motion fires
+# many samples per second, and each _refresh_log() rebuilds the whole journal
+# UI, so we coalesce to at most one journal write every _ARCH_LOG_INTERVAL ms.
+# The per-arch live label still updates on every sample (cheap, no rebuild).
+var _arch_log_last_ms: int = 0
+const _ARCH_LOG_INTERVAL := 250
 
 # Per-zone half-extents in normalised board coordinates. Initialised in
 # _build_overlays from DOMAIN_HALF / LITURGY_BANNER_HALF (the global default)
@@ -539,6 +579,17 @@ func _build_overlays() -> void:
 		badges_row.add_child(badges)
 		_domain_badges[d_id] = badges
 
+	# Penitence arch overlay — single full-board Control above the hotspots
+	# (added last among the board children so its strokes draw on top). Seed
+	# the live param map from the PENITENCE_ARCH const (deep-copied so runtime
+	# calibration edits don't mutate the const dictionaries).
+	for d_id in PENITENCE_ARCH.keys():
+		_arch_params[d_id] = (PENITENCE_ARCH[d_id] as Dictionary).duplicate(true)
+	_arch_overlay = PenitenceArch.new()
+	_arch_overlay.name = "PenitenceArchOverlay"
+	_arch_overlay.set_arches(_arch_params)
+	_zoom_layer.add_child(_arch_overlay)
+
 	# Domain name caption labels — own POS / HALF, calibratable as
 	# independent zones via FAB → Hotspots.
 	_build_domain_name_labels()
@@ -713,6 +764,7 @@ const FAB_PUISER     := 1007
 const FAB_JOURNAL    := 1008
 const FAB_HOTSPOTS   := 1009
 const FAB_GLOSSARY   := 1010
+const FAB_ARCHES     := 1011
 
 
 # Hamburger icon synthesised at startup so we don't depend on a Unicode
@@ -760,6 +812,7 @@ func _on_fab_pressed() -> void:
 	_fab_menu.add_item(I18n.t("ui.btn.glossary"), FAB_GLOSSARY)
 	_fab_menu.add_item(I18n.t("ui.btn.journal"), FAB_JOURNAL)
 	_fab_menu.add_item(I18n.t("ui.btn.hotspots"), FAB_HOTSPOTS)
+	_fab_menu.add_item(I18n.t("ui.btn.arches"), FAB_ARCHES)
 	# Position just above the FAB.
 	var fab_pos := _fab.get_screen_position()
 	var fab_size := _fab.size
@@ -780,6 +833,7 @@ func _on_fab_menu_pressed(id: int) -> void:
 		FAB_GLOSSARY:   _on_btn_glossary()
 		FAB_JOURNAL:    _on_btn_toggle_log()
 		FAB_HOTSPOTS:   _on_btn_toggle_hotspots()
+		FAB_ARCHES:     _on_btn_toggle_arches()
 
 
 func _build_log_panel() -> void:
@@ -1165,6 +1219,7 @@ func _refresh_overlays() -> void:
 	# coloured player panel).
 	_ascendant_label.text = "Asc %+d" % state.ascendant
 	_refresh_liturgy_banners()
+	_refresh_penitence_arches()
 
 
 # ─── Domain transgression markers ─────────────────────────────────────────────
@@ -2552,6 +2607,315 @@ func _dump_calibration_for_paste() -> void:
 		_refresh_log()
 	OS.alert(block + "\n(Bloc également imprimé dans la console DevTools du navigateur — F12 → Console.)",
 		"Calibration — coller dans Main.gd")
+
+
+# ─── Penitence arch calibration ───────────────────────────────────────────────
+# Parallel to the hotspot calibration above, but for the 5 PENITENCE_ARCH
+# entries. The arch overlay (_arch_overlay) already lives in _zoom_layer and
+# follows zoom/pan ; here we only manage : (a) forcing all 5 arches visible,
+# (b) spawning draggable handles + a live param label per arch, (c) dumping a
+# paste-ready PENITENCE_ARCH block on toggle-off. Each arch has 5 handles :
+#   index 0..3 = bounding-box corners (TL, TR, BL, BR) — move cx/cy + resize
+#                hw/h, centre-preserving like the hotspot corners.
+#   index 4    = apex handle (top centre) — vertical drag adjusts `arc`.
+const _ARCH_HANDLE_SIZE := 26
+const _ARCH_CORNER_TL := 0
+const _ARCH_CORNER_TR := 1
+const _ARCH_CORNER_BL := 2
+const _ARCH_CORNER_BR := 3
+const _ARCH_APEX := 4
+const _ARCH_MOVE := 5            # centre handle : drags the whole arch
+const _ARCH_MIN_HALF := 0.005    # smallest sensible half-width / half-height
+
+
+func _refresh_penitence_arches() -> void:
+	# Decide which arches the overlay should paint. In calibration mode every
+	# arch shows ; otherwise only Domains currently in Penitence.
+	if _arch_overlay == null:
+		return
+	var vis: Dictionary = {}
+	for d_id in _arch_params.keys():
+		if _arch_calibrating:
+			vis[d_id] = true
+		elif state != null and state.is_in_penitence(d_id):
+			vis[d_id] = true
+	_arch_overlay.set_visible_ids(vis)
+
+
+func _on_btn_toggle_arches() -> void:
+	_arch_calibrating = not _arch_calibrating
+	if _arch_calibrating:
+		for d_id in _arch_params.keys():
+			_build_arch_handles(d_id)
+			_ensure_arch_label(d_id)
+	else:
+		for d_id in _arch_params.keys():
+			_destroy_arch_handles(d_id)
+			_remove_arch_label(d_id)
+		_dump_arches_for_paste()
+	# Recompute visibility (all arches in calib mode, penitent only otherwise)
+	# and force a redraw of the overlay.
+	_refresh_penitence_arches()
+	if _arch_overlay != null:
+		_arch_overlay.queue_redraw()
+
+
+# Curvature handle position : sits on the SHOULDER line (where the curved top
+# meets the straight sides), centred in x. shoulder_y = top + h*arc, so
+# dragging this handle down raises `arc` (more curve), up lowers it (flatter).
+# This is the visually meaningful control — the handle tracks exactly the line
+# the user is shaping, unlike the static bbox-top apex.
+func _arch_apex_pos(d_id: int) -> Vector2:
+	var p: Dictionary = _arch_params[d_id]
+	var top: float = float(p["cy"]) - float(p["h"]) * 0.5
+	var shoulder: float = top + float(p["h"]) * clampf(float(p["arc"]), 0.0, 1.0)
+	return Vector2(float(p["cx"]), shoulder)
+
+
+func _build_arch_handles(d_id: int) -> void:
+	if _arch_handles.has(d_id):
+		return
+	var handles: Array = []
+	for idx in [_ARCH_CORNER_TL, _ARCH_CORNER_TR, _ARCH_CORNER_BL, _ARCH_CORNER_BR, _ARCH_APEX, _ARCH_MOVE]:
+		var handle := Button.new()
+		handle.text = ""
+		handle.custom_minimum_size = Vector2(_ARCH_HANDLE_SIZE, _ARCH_HANDLE_SIZE)
+		handle.mouse_filter = Control.MOUSE_FILTER_STOP
+		var sb := StyleBoxFlat.new()
+		# Three handle styles, distinguished by colour AND shape (project
+		# accessibility rule) : square bright-gold = apex (curvature), round
+		# gold = 4 resize corners, round cyan = centre (move whole arch).
+		if idx == _ARCH_APEX:
+			sb.bg_color = Color(1.0, 0.95, 0.55, 0.95)
+			sb.border_color = Color(0.5, 0.40, 0.0, 1.0)
+			sb.set_corner_radius_all(0)
+		elif idx == _ARCH_MOVE:
+			sb.bg_color = Color(0.3, 0.85, 0.95, 0.95)
+			sb.border_color = Color(0.0, 0.35, 0.45, 1.0)
+			sb.set_corner_radius_all(_ARCH_HANDLE_SIZE / 2)
+		else:
+			sb.bg_color = Color(1.0, 0.85, 0.0, 0.95)
+			sb.border_color = Color(0.4, 0.30, 0.0, 1.0)
+			sb.set_corner_radius_all(_ARCH_HANDLE_SIZE / 2)
+		sb.set_border_width_all(2)
+		handle.add_theme_stylebox_override("normal",  sb)
+		handle.add_theme_stylebox_override("hover",   sb)
+		handle.add_theme_stylebox_override("pressed", sb)
+		handle.add_theme_stylebox_override("focus",   sb)
+		_position_arch_handle(handle, d_id, idx)
+		handle.gui_input.connect(_on_arch_handle_input.bind(d_id, idx))
+		_zoom_layer.add_child(handle)
+		handles.append(handle)
+	_arch_handles[d_id] = handles
+
+
+func _position_arch_handle(handle: Button, d_id: int, idx: int) -> void:
+	var p: Dictionary = _arch_params[d_id]
+	var cx: float = float(p["cx"])
+	var cy: float = float(p["cy"])
+	var hw: float = float(p["hw"])
+	var hh: float = float(p["h"]) * 0.5
+	var ax: float = cx
+	var ay: float = cy
+	if idx == _ARCH_MOVE:
+		ax = cx
+		ay = cy
+	elif idx == _ARCH_APEX:
+		var apex: Vector2 = _arch_apex_pos(d_id)
+		ax = apex.x
+		ay = apex.y
+	else:
+		ax = cx - hw if (idx == _ARCH_CORNER_TL or idx == _ARCH_CORNER_BL) else cx + hw
+		ay = cy - hh if (idx == _ARCH_CORNER_TL or idx == _ARCH_CORNER_TR) else cy + hh
+	handle.anchor_left = ax
+	handle.anchor_right = ax
+	handle.anchor_top = ay
+	handle.anchor_bottom = ay
+	handle.offset_left = -_ARCH_HANDLE_SIZE / 2.0
+	handle.offset_top = -_ARCH_HANDLE_SIZE / 2.0
+	handle.offset_right = _ARCH_HANDLE_SIZE / 2.0
+	handle.offset_bottom = _ARCH_HANDLE_SIZE / 2.0
+
+
+func _refresh_arch_handles(d_id: int) -> void:
+	var handles: Array = _arch_handles.get(d_id, [])
+	var order := [_ARCH_CORNER_TL, _ARCH_CORNER_TR, _ARCH_CORNER_BL, _ARCH_CORNER_BR, _ARCH_APEX, _ARCH_MOVE]
+	for i in range(handles.size()):
+		var h: Button = handles[i]
+		if is_instance_valid(h):
+			_position_arch_handle(h, d_id, order[i])
+
+
+func _destroy_arch_handles(d_id: int) -> void:
+	var handles: Array = _arch_handles.get(d_id, [])
+	for h in handles:
+		if is_instance_valid(h):
+			h.queue_free()
+	_arch_handles.erase(d_id)
+
+
+func _ensure_arch_label(d_id: int) -> void:
+	if _arch_labels.has(d_id):
+		_refresh_arch_label(d_id)
+		return
+	var lbl := Label.new()
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 4)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_zoom_layer.add_child(lbl)
+	_arch_labels[d_id] = lbl
+	_refresh_arch_label(d_id)
+
+
+func _remove_arch_label(d_id: int) -> void:
+	var lbl: Label = _arch_labels.get(d_id)
+	if lbl != null and is_instance_valid(lbl):
+		lbl.queue_free()
+	_arch_labels.erase(d_id)
+
+
+func _refresh_arch_label(d_id: int) -> void:
+	var lbl: Label = _arch_labels.get(d_id)
+	if lbl == null:
+		return
+	var p: Dictionary = _arch_params[d_id]
+	var name_str: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
+	lbl.text = "%s\ncx %.3f cy %.3f\nhw %.3f h %.3f arc %.2f" % [
+		name_str, float(p["cx"]), float(p["cy"]),
+		float(p["hw"]), float(p["h"]), float(p["arc"])]
+	# Anchor the label across the arch's bounding box (centred on it).
+	var cx: float = float(p["cx"])
+	var cy: float = float(p["cy"])
+	var hw: float = float(p["hw"])
+	var hh: float = float(p["h"]) * 0.5
+	lbl.anchor_left = cx - hw
+	lbl.anchor_right = cx + hw
+	lbl.anchor_top = cy - hh
+	lbl.anchor_bottom = cy + hh
+	lbl.offset_left = 0
+	lbl.offset_top = 0
+	lbl.offset_right = 0
+	lbl.offset_bottom = 0
+
+
+func _on_arch_handle_input(event: InputEvent, d_id: int, idx: int) -> void:
+	if not _arch_calibrating:
+		return
+	var delta: Vector2 = Vector2.ZERO
+	if event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		if (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+			return
+		delta = mm.relative
+	elif event is InputEventScreenDrag:
+		var sd: InputEventScreenDrag = event
+		delta = sd.relative
+	else:
+		return
+	if delta == Vector2.ZERO:
+		return
+	var screen_size: Vector2 = _zoom_layer.size * _zoom_layer.scale
+	if screen_size.x <= 0 or screen_size.y <= 0:
+		return
+	var dx: float = delta.x / screen_size.x
+	var dy: float = delta.y / screen_size.y
+	var p: Dictionary = _arch_params[d_id]
+	if idx == _ARCH_MOVE:
+		# Centre handle : translate the whole arch, leaving hw/h/arc intact.
+		p["cx"] = float(p["cx"]) + dx
+		p["cy"] = float(p["cy"]) + dy
+	elif idx == _ARCH_APEX:
+		# Curvature handle on the shoulder line : arc = (shoulder - top) / h,
+		# and the handle's y moves by `dy`, so the change in arc is dy / h.
+		# Dragging the handle DOWN (positive dy) lowers the shoulder → bigger
+		# `arc` (taller curved top) ; dragging UP flattens it.
+		var h: float = float(p["h"])
+		if h > 0.0:
+			var new_arc: float = clampf(float(p["arc"]) + dy / h, 0.0, 1.0)
+			p["arc"] = new_arc
+	else:
+		# Centre-preserving corner resize, identical maths to the hotspot
+		# corner handler : a corner dragged outward grows the half-extent.
+		var half_dx: float = dx
+		var half_dy: float = dy
+		if idx == _ARCH_CORNER_TL or idx == _ARCH_CORNER_BL:
+			half_dx = -dx
+		if idx == _ARCH_CORNER_TL or idx == _ARCH_CORNER_TR:
+			half_dy = -dy
+		p["hw"] = max(_ARCH_MIN_HALF, float(p["hw"]) + half_dx)
+		var new_h: float = max(_ARCH_MIN_HALF * 2.0, float(p["h"]) + half_dy * 2.0)
+		p["h"] = new_h
+	_arch_overlay.set_arches(_arch_params)
+	_refresh_arch_handles(d_id)
+	_refresh_arch_label(d_id)
+	# Live-dump the full set to the journal on every change so the user can
+	# copy the current coordinates at any time without leaving the mode.
+	_log_arches_live()
+
+
+# Lightweight live log : appends the current PENITENCE_ARCH block to the
+# journal panel so the user reads up-to-date coords while still dragging.
+func _log_arches_live() -> void:
+	if state == null:
+		return
+	var now: int = Time.get_ticks_msec()
+	if now - _arch_log_last_ms < _ARCH_LOG_INTERVAL:
+		return
+	_arch_log_last_ms = now
+	state.add_log("[Arches] " + _arch_block_oneline())
+	_refresh_log()
+
+
+# One-line compact representation for the live journal feedback.
+func _arch_block_oneline() -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	for d_id in _arch_params.keys():
+		var p: Dictionary = _arch_params[d_id]
+		parts.append("%s(%.3f,%.3f,%.3f,%.3f,%.2f)" % [
+			_domain_id_to_enum_name(d_id),
+			float(p["cx"]), float(p["cy"]),
+			float(p["hw"]), float(p["h"]), float(p["arc"])])
+	return " ".join(parts)
+
+
+# Full paste-ready PENITENCE_ARCH block, same delivery as the hotspot dump :
+# a single console.log entry on web (clean copy-paste) plus the journal +
+# OS.alert. Paste the block over the PENITENCE_ARCH const to freeze the values.
+func _dump_arches_for_paste() -> void:
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("const PENITENCE_ARCH := {")
+	for d_id in _arch_params.keys():
+		var p: Dictionary = _arch_params[d_id]
+		lines.append("\tGameEnums.DomainId.%s: {\"cx\": %.3f, \"cy\": %.3f, \"hw\": %.3f, \"h\": %.3f, \"arc\": %.2f}," % [
+			_domain_id_to_enum_name(d_id),
+			float(p["cx"]), float(p["cy"]),
+			float(p["hw"]), float(p["h"]), float(p["arc"])])
+	lines.append("}")
+	var block: String = ""
+	for ln in lines:
+		block += ln + "\n"
+	var full_dump: String = "\n========== POSSESSION ARCH DUMP — BEGIN ==========\n" \
+		+ block \
+		+ "========== POSSESSION ARCH DUMP — END ============\n"
+	if OS.has_feature("web"):
+		var console_obj: Variant = JavaScriptBridge.get_interface("console")
+		if console_obj != null:
+			console_obj.log(full_dump)
+		else:
+			print(full_dump)
+	else:
+		print(full_dump)
+	if state != null:
+		state.add_log("[Arches] Nouvelles valeurs :")
+		for ln in lines:
+			state.add_log(ln)
+		_refresh_log()
+	OS.alert(block + "\n(Bloc également imprimé dans la console DevTools du navigateur — F12 → Console.)",
+		"Arches pénitence — coller dans Main.gd")
 
 
 # Map DomainId int → constant name. Used to emit the
