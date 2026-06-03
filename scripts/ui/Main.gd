@@ -92,6 +92,7 @@ var pending_kwargs: Dictionary = {}
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
 var _domain_name_labels: Dictionary = {}   # domain_id -> Label (board overlay)
+var _domain_hint_chips: Dictionary = {}
 var _debug_hotspots: bool = false   # cyan outline overlay for calibration
 
 # Per-zone half-extents in normalised board coordinates. Initialised in
@@ -1115,6 +1116,24 @@ func _build_domain_name_labels() -> void:
 		name_label.gui_input.connect(_on_zone_body_drag.bind(_zone_kind_domain_name(), d_id))
 		_zoom_layer.add_child(name_label)
 		_domain_name_labels[d_id] = name_label
+		# Always-visible yield chip, centred in a thin anchored box just above
+		# the name caption. CenterContainer keeps the chip at its intrinsic
+		# (pixel) size instead of stretching it with the board.
+		var chip_box := CenterContainer.new()
+		chip_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip_box.anchor_left = npos.x - nh.x
+		chip_box.anchor_right = npos.x + nh.x
+		chip_box.anchor_top = npos.y - nh.y - 0.055
+		chip_box.anchor_bottom = npos.y - nh.y - 0.012
+		chip_box.offset_left = 0
+		chip_box.offset_right = 0
+		chip_box.offset_top = 0
+		chip_box.offset_bottom = 0
+		var chip := DomainHintChip.new()
+		chip.set_domain(d_id)
+		chip_box.add_child(chip)
+		_zoom_layer.add_child(chip_box)
+		_domain_hint_chips[d_id] = chip
 
 
 func _build_liturgy_banners() -> void:
@@ -3613,6 +3632,11 @@ func _relocalize() -> void:
 		var lbl: Label = _domain_name_labels[d_id]
 		if is_instance_valid(lbl):
 			lbl.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
+	# Chips carry FR/EN text → re-apply on locale toggle.
+	for d_id in _domain_hint_chips.keys():
+		var chip: DomainHintChip = _domain_hint_chips[d_id]
+		if is_instance_valid(chip):
+			chip.set_domain(d_id)
 	# FAB label + tooltip — items inside the popup are recreated on each
 	# open so they pick up the current locale automatically.
 	if _fab != null:
