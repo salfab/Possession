@@ -88,6 +88,21 @@ var manager: TurnManager
 var pending_action: int = -1
 var pending_kwargs: Dictionary = {}
 
+# ─── AI opponent ──────────────────────────────────────────────────────────────
+# Per-side control: PlayerId -> PLAYER_HUMAN / PLAYER_AI, chosen at new game.
+# Defaults to all-human (hotseat) so launch / endgame-replay behave as before.
+const PLAYER_HUMAN := "human"
+const PLAYER_AI := "ai"
+const AI_STEP_DELAY := 0.6   # seconds between watched bot moves (legibility)
+var _player_config: Dictionary = {
+	GameEnums.PlayerId.RED: PLAYER_HUMAN,
+	GameEnums.PlayerId.PURPLE: PLAYER_HUMAN,
+}
+# One-shot timer that paces bot moves: each timeout applies a single
+# step_bot_once() so the player can watch the AI play instead of the whole
+# turn resolving instantly. Created lazily in _ensure_ai_timer().
+var _ai_timer: Timer
+
 # Created in _build_overlays
 var _zoom_layer: Control            # parent scaled/translated of board+hotspots
 var _hotspots: Dictionary = {}      # domain_id -> Button
@@ -248,7 +263,17 @@ func _save_game() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify(state.to_dict()))
+	# Wrap the state with the human/AI player config so a resumed game keeps
+	# its bots. Older saves stored the bare state dict; _load_game() detects
+	# both shapes for backward compatibility.
+	var payload := {
+		"state": state.to_dict(),
+		"players": {
+			"red": _player_config.get(GameEnums.PlayerId.RED, PLAYER_HUMAN),
+			"purple": _player_config.get(GameEnums.PlayerId.PURPLE, PLAYER_HUMAN),
+		},
+	}
+	f.store_string(JSON.stringify(payload))
 	f.close()
 
 
@@ -268,7 +293,22 @@ func _load_game() -> bool:
 	var parsed: Variant = JSON.parse_string(raw)
 	if not (parsed is Dictionary):
 		return false
-	state.from_dict(parsed)
+	# New wrapped shape {state, players} vs legacy bare-state dict.
+	var state_dict: Dictionary = parsed
+	if parsed.has("state") and parsed["state"] is Dictionary:
+		state_dict = parsed["state"]
+		var players: Dictionary = parsed.get("players", {})
+		_player_config = {
+			GameEnums.PlayerId.RED: players.get("red", PLAYER_HUMAN),
+			GameEnums.PlayerId.PURPLE: players.get("purple", PLAYER_HUMAN),
+		}
+	else:
+		_player_config = {
+			GameEnums.PlayerId.RED: PLAYER_HUMAN,
+			GameEnums.PlayerId.PURPLE: PLAYER_HUMAN,
+		}
+	state.from_dict(state_dict)
+	_apply_player_config()
 	return true
 
 
@@ -313,9 +353,15 @@ func _apply_theme() -> void:
 	theme = t
 
 
-func new_game() -> void:
+func new_game(config: Dictionary = {}) -> void:
 	state = GameState.new()
 	manager = TurnManager.new(state)
+	# The UI paces bot moves itself (one per timer tick) instead of letting
+	# perform_action() resolve the whole bot turn synchronously.
+	manager.auto_bot = false
+	if not config.is_empty():
+		_player_config = config.duplicate()
+	_apply_player_config()
 	pending_action = -1
 	pending_kwargs.clear()
 	_endgame_shown = false
@@ -323,6 +369,62 @@ func new_game() -> void:
 	# a fresh game from mid-Exorcisme.
 	_last_seen_station = -1
 	_refresh_all()
+	# AI may hold the initiative on the very first pulse — kick the stepper.
+	_maybe_resume_ai()
+
+
+# Wire state.bot_for_player from the current _player_config. PLAYER_AI sides
+# get an MCTSBot (the main brain per the dev-bot brief); PLAYER_HUMAN sides
+# are left absent so the UI surfaces their turns / decisions normally.
+func _apply_player_config() -> void:
+	if state == null:
+		return
+	state.bot_for_player.clear()
+	for pid in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+		if _player_config.get(pid, PLAYER_HUMAN) == PLAYER_AI:
+			state.bot_for_player[pid] = MCTSBot.new()
+
+
+func _has_ai_player() -> bool:
+	return _player_config.get(GameEnums.PlayerId.RED, PLAYER_HUMAN) == PLAYER_AI \
+		or _player_config.get(GameEnums.PlayerId.PURPLE, PLAYER_HUMAN) == PLAYER_AI
+
+
+func _ensure_ai_timer() -> void:
+	if _ai_timer != null:
+		return
+	_ai_timer = Timer.new()
+	_ai_timer.one_shot = true
+	_ai_timer.timeout.connect(_ai_tick)
+	add_child(_ai_timer)
+
+
+# Arm the step timer if (and only if) the engine is currently waiting on a
+# bot's move. Called at the tail of every _refresh_all(), so the AI resumes
+# automatically after a human action, after a liturgy acknowledgement, or
+# after its own previous move — without each call site knowing about bots.
+# No-op while a tick is already pending (timer running) so ticks don't stack.
+func _maybe_resume_ai() -> void:
+	if manager == null or state == null or manager.auto_bot:
+		return
+	if not manager.bot_should_act():
+		return
+	_ensure_ai_timer()
+	if not _ai_timer.is_stopped():
+		return
+	_ai_timer.start(AI_STEP_DELAY)
+
+
+# Apply exactly one bot move, then refresh (which animates the move via
+# _animate_action_feedback and re-arms this timer through _maybe_resume_ai
+# if the bot still has the turn). Persists after each accepted move so an
+# iPad swipe-away mid AI-turn doesn't lose progress.
+func _ai_tick() -> void:
+	if manager == null or not manager.bot_should_act():
+		return
+	if manager.step_bot_once():
+		_save_game()
+		_refresh_all()
 
 
 # ─── UI CONSTRUCTION ──────────────────────────────────────────────────────────
@@ -820,9 +922,11 @@ func _refresh_all() -> void:
 	_refresh_active_player_highlight()
 	_refresh_fab_highlight()
 	_animate_state_deltas()
+	_animate_action_feedback()
 	_maybe_show_liturgy_dialog()
 	_maybe_show_decision_dialog()
 	_maybe_show_endgame_dialog()
+	_maybe_resume_ai()
 
 
 # Per-domain board snapshot kept between refreshes so _animate_state_deltas
@@ -882,6 +986,36 @@ func _flash_domain(d_id: int) -> void:
 		tw.tween_property(node, "modulate", Color.WHITE, 0.45) \
 			.set_trans(Tween.TRANS_EXPO) \
 			.set_ease(Tween.EASE_OUT)
+
+
+# Per-action visual cue, replayed once per accepted move. Reads the record
+# TurnManager stamps on perform_action() so it fires identically for human
+# taps and for bot moves applied via step_bot_once(). Phase 1 keeps this
+# lightweight (targeted domain flash + a toast that names bot moves so a
+# watching human can follow the AI); richer per-action-type signatures are
+# the next milestone. Consumes the record so unrelated refreshes don't
+# replay it.
+func _animate_action_feedback() -> void:
+	if manager == null:
+		return
+	var action: int = manager.last_action
+	if action < 0:
+		return
+	var who: int = manager.last_action_player
+	var kwargs: Dictionary = manager.last_kwargs
+	manager.consume_last_action()
+	# Domain-targeted actions: flash the affected domain even when the net
+	# board delta is subtle (e.g. an Investir that only bumps one counter).
+	var d: int = int(kwargs.get("domain", -1))
+	if d >= 0:
+		_flash_domain(d)
+	# Announce bot moves so a watching human knows what the AI just played.
+	# Human moves stay silent on success (the board change is the feedback)
+	# per the project's no-success-toast rule.
+	if state != null and state.bot_for_player.has(who):
+		var key: String = GameEnums.ACTION_NAME_KEYS.get(action, "")
+		var action_name: String = I18n.t(key) if key != "" else "?"
+		_flash_action_toast("%s — %s" % [GameEnums.player_name(who), action_name], "accepted")
 
 
 # Whose turn is it ? Active player's panel gets a brighter border + heavier
@@ -1803,11 +1937,60 @@ func _on_popup_action(action_id: int) -> void:
 # ─── DEBUG BUTTONS ────────────────────────────────────────────────────────────
 
 func _on_btn_new_game() -> void:
+	# Offer the human/AI side picker first; the actual start happens in
+	# _start_new_game() once the player confirms their choice.
+	_show_new_game_dialog()
+
+
+# Small modal letting the player set each side to Human or AI before
+# starting. Built lazily; reused across new-game requests. Pre-selects the
+# previous game's config so repeat starts are one tap.
+func _show_new_game_dialog() -> void:
+	var dlg := AcceptDialog.new()
+	dlg.exclusive = true
+	dlg.title = I18n.t("ui.dialog.title.new_game")
+	dlg.ok_button_text = I18n.t("ui.dialog.start")
+	dlg.add_cancel_button(I18n.t("ui.dialog.cancel"))
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 16)
+	dlg.add_child(box)
+
+	var picks: Dictionary = {}
+	for pid in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var name_lbl := Label.new()
+		name_lbl.text = GameEnums.player_name(pid)
+		name_lbl.custom_minimum_size = Vector2(160, 0)
+		name_lbl.add_theme_color_override("font_color", GameEnums.player_color_light(pid))
+		row.add_child(name_lbl)
+		var opt := OptionButton.new()
+		opt.add_item(I18n.t("ui.player.human"), 0)   # idx 0 -> PLAYER_HUMAN
+		opt.add_item(I18n.t("ui.player.ai"), 1)       # idx 1 -> PLAYER_AI
+		opt.selected = 1 if _player_config.get(pid, PLAYER_HUMAN) == PLAYER_AI else 0
+		row.add_child(opt)
+		picks[pid] = opt
+		box.add_child(row)
+
+	add_child(dlg)
+	dlg.confirmed.connect(func():
+		var config := {}
+		for pid in picks.keys():
+			config[pid] = PLAYER_AI if (picks[pid] as OptionButton).selected == 1 else PLAYER_HUMAN
+		_start_new_game(config)
+		dlg.queue_free()
+	)
+	dlg.canceled.connect(func(): dlg.queue_free())
+	dlg.popup_centered()
+
+
+func _start_new_game(config: Dictionary) -> void:
 	# Manual new-game wipes any persisted save so the next refresh starts
 	# fresh too (otherwise the resume prompt would offer the *previous*
 	# game's state on next launch).
 	_delete_save()
-	new_game()
+	new_game(config)
 	state.add_log(I18n.t("log.new_game", [Time.get_time_string_from_system()]))
 	_refresh_log()
 
