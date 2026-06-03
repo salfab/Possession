@@ -14,11 +14,11 @@ const SAVE_PATH := "user://save_game.json"
 # If the alignment is still off, toggle the "Hot" debug button in the
 # bottom bar to see the hit areas overlaid in cyan.
 const DOMAIN_POS := {
-	GameEnums.DomainId.AMBITION: Vector2(0.270, 0.328),
-	GameEnums.DomainId.FOI:      Vector2(0.686, 0.313),
-	GameEnums.DomainId.VOLONTE:  Vector2(0.481, 0.199),
-	GameEnums.DomainId.DESIR:    Vector2(0.289, 0.655),
-	GameEnums.DomainId.PEUR:     Vector2(0.685, 0.654),
+	GameEnums.DomainId.AMBITION: Vector2(0.269, 0.362),
+	GameEnums.DomainId.FOI:      Vector2(0.687, 0.343),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.478, 0.230),
+	GameEnums.DomainId.DESIR:    Vector2(0.288, 0.686),
+	GameEnums.DomainId.PEUR:     Vector2(0.679, 0.658),
 }
 const DOMAIN_HALF := Vector2(0.080, 0.085)
 
@@ -26,11 +26,11 @@ const DOMAIN_HALF := Vector2(0.080, 0.085)
 # calibration mode (FAB → Hotspots) — Volonté is sized noticeably larger
 # than the others to match its visual prominence on the new board.
 const DOMAIN_HALF_OVERRIDES := {
-	GameEnums.DomainId.AMBITION: Vector2(0.061, 0.132),
-	GameEnums.DomainId.FOI:      Vector2(0.059, 0.127),
-	GameEnums.DomainId.VOLONTE:  Vector2(0.078, 0.140),
-	GameEnums.DomainId.DESIR:    Vector2(0.065, 0.115),
-	GameEnums.DomainId.PEUR:     Vector2(0.049, 0.118),
+	GameEnums.DomainId.AMBITION: Vector2(0.061, 0.102),
+	GameEnums.DomainId.FOI:      Vector2(0.063, 0.082),
+	GameEnums.DomainId.VOLONTE:  Vector2(0.080, 0.109),
+	GameEnums.DomainId.DESIR:    Vector2(0.066, 0.084),
+	GameEnums.DomainId.PEUR:     Vector2(0.047, 0.094),
 }
 
 # Domain name caption — independent zone with its own position + size,
@@ -81,14 +81,14 @@ const LITURGY_BANNER_HALF_OVERRIDES := {}
 # arch-specific value is the apex RISE above the rectangle's top edge. So
 # there is just one calibratable number per Domain.
 #
-# PLACEHOLDER rises (normalised, fraction of board height) — dial in via the
-# in-game calibration mode (FAB → "Arches pénitence") then freeze here.
+# Calibrated rises (normalised, fraction of board height) — set in-game via
+# FAB → "Arches pénitence" (drag the gold apex handle) and frozen here.
 const PENITENCE_ARCH_RISE := {
-	GameEnums.DomainId.AMBITION: 0.060,
-	GameEnums.DomainId.FOI:      0.060,
-	GameEnums.DomainId.VOLONTE:  0.060,
-	GameEnums.DomainId.DESIR:    0.060,
-	GameEnums.DomainId.PEUR:     0.060,
+	GameEnums.DomainId.AMBITION: 0.082,
+	GameEnums.DomainId.FOI:      0.078,
+	GameEnums.DomainId.VOLONTE:  0.087,
+	GameEnums.DomainId.DESIR:    0.078,
+	GameEnums.DomainId.PEUR:     0.040,
 }
 
 const ZOOM_MIN := 1.0
@@ -2707,10 +2707,13 @@ func _build_arch_handle(d_id: int) -> void:
 
 func _position_arch_handle(handle: Button, d_id: int) -> void:
 	var apex := _arch_apex_pos(d_id)
+	# Keep the handle on-board (grabbable) even if a tall rise pushes the true
+	# apex above the top edge — the arch itself is still drawn at the real apex.
+	var hy: float = maxf(apex.y, 0.015)
 	handle.anchor_left = apex.x
 	handle.anchor_right = apex.x
-	handle.anchor_top = apex.y
-	handle.anchor_bottom = apex.y
+	handle.anchor_top = hy
+	handle.anchor_bottom = hy
 	handle.offset_left = -_ARCH_HANDLE_SIZE / 2.0
 	handle.offset_top = -_ARCH_HANDLE_SIZE / 2.0
 	handle.offset_right = _ARCH_HANDLE_SIZE / 2.0
