@@ -1,0 +1,302 @@
+class_name DomainActionMenu
+extends Control
+# Custom replacement for the native PopupMenu opened on domain tap. A parchment
+# panel : header (name + yield pill + "why invest" line + control/transgression
+# meta), a 2x2 grid of the four base actions, and a list of dynamic
+# Provoquer/Amplifier entries below.
+#
+# Stateless re-population : open_for() rebuilds the body on every open. Cheap —
+# it's a tap-triggered modal, never refreshed per frame. Owns the action list
+# and label keys that used to live in Main.gd.
+
+signal action_chosen(payload: Dictionary)
+# payload variants :
+#   {"kind": Kind.BASE,    "action_id": int}                 # ActionId
+#   {"kind": Kind.PROVOKE, "tid": String, "origin": int}
+#   {"kind": Kind.AMPLIFY, "tid": String}
+
+enum Kind { BASE, PROVOKE, AMPLIFY }
+
+const ACTIONS := [
+	GameEnums.ActionId.INVESTIR,
+	GameEnums.ActionId.EXPLOITER,
+	GameEnums.ActionId.SCELLER,
+	GameEnums.ActionId.FISSURER,
+]
+const LABEL_KEYS := {
+	GameEnums.ActionId.INVESTIR:  "action.investir",
+	GameEnums.ActionId.EXPLOITER: "action.exploiter",
+	GameEnums.ActionId.SCELLER:   "action.sceller",
+	GameEnums.ActionId.FISSURER:  "action.fissurer",
+}
+
+const GOLD := Color(0.79, 0.63, 0.29)
+const VIOLET := Color(0.69, 0.42, 0.81)
+const TXT := Color(0.91, 0.84, 0.66)
+const TXT_DIM := Color(0.60, 0.54, 0.42)
+const GAIN := Color(0.62, 0.79, 0.54)
+const REFUSE := Color(0.79, 0.54, 0.54)
+
+var _panel: PanelContainer
+var _content: VBoxContainer
+var _pending_at: Vector2 = Vector2.ZERO
+
+func _init() -> void:
+	anchor_right = 1.0
+	anchor_bottom = 1.0
+	mouse_filter = Control.MOUSE_FILTER_IGNORE  # invisible/closed = pass-through
+	visible = false
+
+func _ready() -> void:
+	# Scrim : full-rect input catcher so a tap outside the panel closes it.
+	var scrim := Control.new()
+	scrim.anchor_right = 1.0
+	scrim.anchor_bottom = 1.0
+	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+	scrim.gui_input.connect(_on_scrim_input)
+	add_child(scrim)
+
+	_panel = PanelContainer.new()
+	_panel.add_theme_stylebox_override("panel", _panel_style())
+	_panel.custom_minimum_size = Vector2(320, 0)
+	add_child(_panel)
+
+	_content = VBoxContainer.new()
+	_content.add_theme_constant_override("separation", 0)
+	_panel.add_child(_content)
+
+func _panel_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.12, 0.09, 0.05, 0.99)
+	sb.border_color = GOLD
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(12)
+	sb.shadow_color = Color(0, 0, 0, 0.5)
+	sb.shadow_size = 16
+	return sb
+
+func _on_scrim_input(ev: InputEvent) -> void:
+	if (ev is InputEventMouseButton and ev.pressed) \
+			or (ev is InputEventScreenTouch and ev.pressed):
+		close()
+
+func close() -> void:
+	visible = false
+
+func open_for(d_id: int, state: GameState, player: int, at: Vector2) -> void:
+	_rebuild(d_id, state, player)
+	# Ensure we render on top of sibling Controls (board + HUD).
+	if get_parent() != null:
+		get_parent().move_child(self, -1)
+	visible = true
+	_pending_at = at
+	# Wait one frame so the panel's container layout (and thus its size) is
+	# resolved before we clamp it inside the viewport.
+	await get_tree().process_frame
+	_place_panel()
+
+func _place_panel() -> void:
+	var vp := get_viewport_rect().size
+	var ps := _panel.size
+	var p := _pending_at
+	p.x = clampf(p.x, 8.0, maxf(8.0, vp.x - ps.x - 8.0))
+	p.y = clampf(p.y, 8.0, maxf(8.0, vp.y - ps.y - 8.0))
+	_panel.position = p
+
+# ─── Build ────────────────────────────────────────────────────────────────
+
+func _rebuild(d_id: int, state: GameState, player: int) -> void:
+	for c in _content.get_children():
+		c.queue_free()
+	_content.add_child(_build_header(d_id, state))
+	_content.add_child(_build_grid(d_id, state, player))
+	var dyn := _build_dynamic(d_id, state, player)
+	if dyn != null:
+		_content.add_child(dyn)
+
+func _margins(node: Control, h: int, v: int) -> MarginContainer:
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left", h)
+	m.add_theme_constant_override("margin_right", h)
+	m.add_theme_constant_override("margin_top", v)
+	m.add_theme_constant_override("margin_bottom", v)
+	m.add_child(node)
+	return m
+
+func _build_header(d_id: int, state: GameState) -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 5)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var name_lbl := Label.new()
+	name_lbl.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
+	name_lbl.add_theme_font_override("font", Card.FONT_TITLE)
+	name_lbl.add_theme_font_size_override("font_size", 26)
+	name_lbl.add_theme_color_override("font_color", Color(0.95, 0.88, 0.65))
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(name_lbl)
+
+	var pill := Label.new()
+	pill.text = DomainData.chip_label(d_id)
+	pill.add_theme_font_size_override("font_size", 14)
+	pill.add_theme_color_override("font_color", Color(0.10, 0.07, 0.03))
+	pill.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var psb := StyleBoxFlat.new()
+	psb.bg_color = VIOLET if DomainData.is_victory_domain(d_id) else GOLD
+	psb.set_corner_radius_all(10)
+	psb.set_content_margin(SIDE_LEFT, 9)
+	psb.set_content_margin(SIDE_RIGHT, 9)
+	psb.set_content_margin(SIDE_TOP, 2)
+	psb.set_content_margin(SIDE_BOTTOM, 2)
+	pill.add_theme_stylebox_override("normal", psb)
+	row.add_child(pill)
+	box.add_child(row)
+
+	var adv := Label.new()
+	adv.text = DomainData.advantage_text(d_id)
+	adv.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	adv.add_theme_font_size_override("font_size", 14)
+	adv.add_theme_color_override("font_color", Color(0.76, 0.69, 0.52))
+	box.add_child(adv)
+
+	var meta := Label.new()
+	var ctrl: int = state.controller_of(d_id)
+	var ctrl_txt: String = (GameEnums.player_name(ctrl)
+		if ctrl != GameEnums.PlayerId.NONE else I18n.t("player.none"))
+	var dom: GameState.DomainState = state.domain(d_id)
+	var trans_n: int = dom.scandals.size() + dom.infamies.size()
+	meta.text = I18n.t("ui.menu.meta", [ctrl_txt, trans_n])
+	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_color_override("font_color", TXT_DIM)
+	box.add_child(meta)
+
+	return _margins(box, 12, 11)
+
+func _build_grid(d_id: int, state: GameState, player: int) -> Control:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	for aid in ACTIONS:
+		var why: String = _why_cannot(aid, state, player, d_id)
+		var enabled: bool = why == ""
+		var sub: String = ""
+		var sub_col: Color = GAIN
+		if aid == GameEnums.ActionId.EXPLOITER and enabled:
+			sub = I18n.t("ui.menu.gain", [GameRules.production_of(state, d_id, player)])
+		elif not enabled:
+			sub = why
+			sub_col = REFUSE
+		grid.add_child(_make_cell(I18n.t(String(LABEL_KEYS[aid])), sub, sub_col,
+			enabled, _emit_base.bind(aid)))
+	return _margins(grid, 10, 4)
+
+func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var added := false
+
+	# Provokable : any Transgression legally provocable with this domain as origin.
+	var prov := VBoxContainer.new()
+	prov.add_theme_constant_override("separation", 4)
+	for tid in TransgressionData.ALL_IDS:
+		if GameRules.why_cannot_provoquer(state, player, tid) != "":
+			continue
+		if d_id in GameRules.transgression_origin_options(player, tid):
+			var lbl := I18n.t("ui.popup.provoke_in",
+				[TransgressionData.name_of(tid), GameEnums.DOMAIN_NAMES[d_id]])
+			prov.add_child(_make_cell(lbl, "", GAIN, true, _emit_provoke.bind(tid, d_id)))
+			added = true
+	if prov.get_child_count() > 0:
+		box.add_child(_section_label("ui.menu.provoke_section"))
+		box.add_child(prov)
+
+	# Amplifiable : Scandales the player owns whose origin is this domain.
+	var amp := VBoxContainer.new()
+	amp.add_theme_constant_override("separation", 4)
+	var dom: GameState.DomainState = state.domain(d_id)
+	for ti in dom.scandals:
+		if ti.owner != player:
+			continue
+		if GameRules.why_cannot_amplifier(state, player, ti.def_id) != "":
+			continue
+		var lbl := I18n.t("ui.popup.amplify_in",
+			[TransgressionData.name_of(ti.def_id), GameEnums.DOMAIN_NAMES[d_id]])
+		amp.add_child(_make_cell(lbl, "", GAIN, true, _emit_amplify.bind(ti.def_id)))
+		added = true
+	if amp.get_child_count() > 0:
+		box.add_child(_section_label("ui.menu.amplify_section"))
+		box.add_child(amp)
+
+	if not added:
+		return null
+	return _margins(box, 10, 6)
+
+func _section_label(key: String) -> Label:
+	var l := Label.new()
+	l.text = I18n.t(key)
+	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_color_override("font_color", TXT_DIM)
+	return l
+
+func _make_cell(title: String, sub: String, sub_col: Color, enabled: bool,
+		on_tap: Callable) -> Control:
+	var pc := PanelContainer.new()
+	pc.add_theme_stylebox_override("panel", _cell_style(enabled))
+	pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 1)
+	var t := Label.new()
+	t.text = title
+	t.add_theme_font_size_override("font_size", 18)
+	t.add_theme_color_override("font_color", TXT if enabled else TXT_DIM)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	if sub != "":
+		var s := Label.new()
+		s.text = sub
+		s.add_theme_font_size_override("font_size", 12)
+		s.add_theme_color_override("font_color", sub_col)
+		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(s)
+	pc.add_child(_margins(v, 10, 8))
+	# Disabled cells swallow the tap (STOP, no handler) so poking them neither
+	# acts nor closes the menu.
+	pc.mouse_filter = Control.MOUSE_FILTER_STOP
+	if enabled:
+		pc.gui_input.connect(func(ev: InputEvent) -> void:
+			if (ev is InputEventMouseButton and ev.pressed) \
+					or (ev is InputEventScreenTouch and ev.pressed):
+				on_tap.call())
+	return pc
+
+func _cell_style(enabled: bool) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.17, 0.13, 0.08) if enabled else Color(0.13, 0.10, 0.07)
+	sb.border_color = GOLD if enabled else Color(0.35, 0.29, 0.18, 0.6)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(8)
+	return sb
+
+func _why_cannot(aid: int, state: GameState, player: int, d_id: int) -> String:
+	match aid:
+		GameEnums.ActionId.INVESTIR:  return GameRules.why_cannot_investir(state, player, d_id)
+		GameEnums.ActionId.EXPLOITER: return GameRules.why_cannot_exploiter(state, player, d_id)
+		GameEnums.ActionId.SCELLER:   return GameRules.why_cannot_sceller(state, player, d_id)
+		GameEnums.ActionId.FISSURER:  return GameRules.why_cannot_fissurer(state, player, d_id)
+	return ""
+
+func _emit_base(aid: int) -> void:
+	close()
+	action_chosen.emit({"kind": Kind.BASE, "action_id": aid})
+
+func _emit_provoke(tid: String, origin: int) -> void:
+	close()
+	action_chosen.emit({"kind": Kind.PROVOKE, "tid": tid, "origin": origin})
+
+func _emit_amplify(tid: String) -> void:
+	close()
+	action_chosen.emit({"kind": Kind.AMPLIFY, "tid": tid})
