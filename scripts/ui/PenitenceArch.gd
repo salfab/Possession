@@ -7,20 +7,22 @@ extends Control
 # coordinates → local pixels via its current size. Because it lives in the
 # ZoomLayer alongside the hotspots, it follows zoom / pan / resize for free.
 #
-# An arch is a rectangle whose top edge is replaced by an ogival / rounded
-# arc rising to an apex. It is drawn as a stroked polyline (no opaque fill)
-# so the niche artwork stays visible behind it. Accessibility : the golden
-# colour is paired with a non-colour cue — a small "+" keystone glyph at the
-# apex — so the marker reads even without colour perception.
+# The arch REUSES the Domain's existing zone rectangle (the hotspot bounds)
+# as its left / right / top / bottom box — Main feeds those in each refresh.
+# The only arch-specific parameter is `rise` : how far the curved apex sits
+# ABOVE the rectangle's top edge. So an arch = the zone rectangle with its
+# top edge replaced by an ogival curve peaking at (cx, top - rise).
+# Drawn as a stroked polyline (no opaque fill) so the niche art stays visible.
+# Accessibility : the golden colour is paired with a non-colour cue — a small
+# "+" keystone glyph at the apex — so the marker reads even without colour.
 #
-# Parameter schema (one entry per DomainId, normalised 0..1 board coords) :
-#   cx  : centre x of the arch
-#   cy  : centre y of the arch (vertical middle of the bounding box)
-#   hw  : half-width of the arch (left/right reach from cx)
-#   h   : total height of the arch (apex → base, full span)
-#   arc : apex rise as a fraction of total height (0 = flat top / plain
-#         rectangle, 1 = the whole height is the curved arch). Typical
-#         ogival niche ≈ 0.45.
+# Geometry schema (one entry per visible DomainId, normalised 0..1 coords) :
+#   cx     : centre x of the arch (= zone rectangle centre x)
+#   hw     : half-width (= zone rectangle half-width)
+#   top    : y of the rectangle's top edge (where the straight sides end and
+#            the curve springs from — the "shoulders")
+#   bottom : y of the rectangle's bottom edge
+#   rise   : apex height above `top` (0 = flat top, larger = taller arch)
 
 # Stroke colour — muted gold per the project's "accent muted" visual rule,
 # kept bright enough to read against the dark board art.
@@ -29,7 +31,7 @@ const ARCH_COLOR_HALO := Color(0.0, 0.0, 0.0, 0.5)  # dark halo for contrast
 const ARCH_WIDTH := 3.0
 const ARCH_SEGMENTS := 24   # polyline segments for the curved top
 
-# domain_id -> param Dictionary (cx, cy, hw, h, arc). Set by Main.
+# domain_id -> geometry Dictionary (cx, hw, top, bottom, rise). Set by Main.
 var arches: Dictionary = {}
 # Set of domain_ids currently visible (in penitence, or all in calib mode).
 var visible_ids: Dictionary = {}
@@ -70,43 +72,38 @@ func _draw_arch(p: Dictionary, sz: Vector2) -> void:
 	draw_polyline(pts, ARCH_COLOR, ARCH_WIDTH, true)
 	# Non-colour cue : a small "+" keystone at the apex.
 	var cx: float = float(p.get("cx", 0.5)) * sz.x
-	var cy: float = float(p.get("cy", 0.5)) * sz.y
-	var h: float = float(p.get("h", 0.2)) * sz.y
-	var apex := Vector2(cx, cy - h * 0.5)
-	_draw_keystone(apex)
+	var top: float = float(p.get("top", 0.4)) * sz.y
+	var rise: float = float(p.get("rise", 0.05)) * sz.y
+	_draw_keystone(Vector2(cx, top - rise))
 
 
-# Build the closed arch outline as a polyline : up the left side, around the
-# curved top (left base of arc → apex → right base of arc), down the right
-# side, across the flat bottom, back to start.
+# Build the closed arch outline as a polyline : up the left side from the
+# bottom to the shoulder (= rectangle top), around the curved top (left
+# shoulder → apex → right shoulder), down the right side, then close along
+# the flat bottom.
 func _arch_points(p: Dictionary, sz: Vector2) -> PackedVector2Array:
 	var cx: float = float(p.get("cx", 0.5)) * sz.x
-	var cy: float = float(p.get("cy", 0.5)) * sz.y
 	var hw: float = float(p.get("hw", 0.08)) * sz.x
-	var h: float = float(p.get("h", 0.2)) * sz.y
-	var arc: float = clampf(float(p.get("arc", 0.45)), 0.0, 1.0)
-
-	var top: float = cy - h * 0.5
-	var bottom: float = cy + h * 0.5
-	var arc_rise: float = h * arc            # vertical extent of the curved top
-	var shoulder: float = top + arc_rise     # y where the straight sides start
+	var top: float = float(p.get("top", 0.4)) * sz.y
+	var bottom: float = float(p.get("bottom", 0.6)) * sz.y
+	var rise: float = maxf(0.0, float(p.get("rise", 0.05))) * sz.y
 
 	var left: float = cx - hw
 	var right: float = cx + hw
 
 	var out := PackedVector2Array()
-	# Start at bottom-left, go up the left straight side to the shoulder.
+	# Start at bottom-left, go up the left straight side to the shoulder (top).
 	out.append(Vector2(left, bottom))
-	out.append(Vector2(left, shoulder))
-	# Curved top : a rounded arch from the left shoulder up to the apex and
-	# down to the right shoulder. Parametrised as a half-ellipse of width hw
-	# (per side) and height arc_rise, sampled across ARCH_SEGMENTS.
+	out.append(Vector2(left, top))
+	# Curved top : a rounded arch from the left shoulder up to the apex
+	# (cx, top - rise) and down to the right shoulder. Half-ellipse of width hw
+	# per side and height `rise`, sampled across ARCH_SEGMENTS.
 	for i in range(ARCH_SEGMENTS + 1):
 		var t: float = float(i) / float(ARCH_SEGMENTS)   # 0 → 1 left → right
 		# Angle sweeps PI (left) → 0 (right) over the top half of an ellipse.
 		var ang: float = PI * (1.0 - t)
 		var x: float = cx + cos(ang) * hw
-		var y: float = shoulder - sin(ang) * arc_rise
+		var y: float = top - sin(ang) * rise
 		out.append(Vector2(x, y))
 	# Down the right straight side, then close along the flat bottom.
 	out.append(Vector2(right, bottom))
