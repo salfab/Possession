@@ -30,6 +30,7 @@ const _CHIP_KEYS := {
 	GameEnums.DomainId.PEUR:     "domain.chip.peur",
 	GameEnums.DomainId.VOLONTE:  "domain.chip.volonte",
 }
+
 const _HINT_KEYS := {
 	GameEnums.DomainId.AMBITION: "domain.hint.ambition",
 	GameEnums.DomainId.DESIR:    "domain.hint.desir",

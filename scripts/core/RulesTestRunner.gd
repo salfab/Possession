@@ -1208,8 +1208,13 @@ func _test_domain_hint_strings() -> void:
 	# locale-agnostic, so this is safe).
 	I18n.set_locale("en")
 	for d in DomainData.DOMAINS:
-		_assert(DomainData.chip_label(d) != "" and not DomainData.chip_label(d).begins_with("domain.chip."),
+		var chip_en: String = DomainData.chip_label(d)
+		_assert(chip_en != "" and not chip_en.begins_with("domain.chip."),
 			"hint.chip_label.en[%d]" % d, "label EN manquant")
-		_assert(DomainData.advantage_text(d) != "" and not DomainData.advantage_text(d).begins_with("domain.hint."),
+		var adv_en: String = DomainData.advantage_text(d)
+		_assert(adv_en != "" and not adv_en.begins_with("domain.hint."),
 			"hint.advantage_text.en[%d]" % d, "texte EN manquant")
+	var vol_en: String = DomainData.advantage_text(GameEnums.DomainId.VOLONTE)
+	_assert(vol_en.to_lower().contains("victory"),
+		"hint.volonte_victory.en", "the EN Volonté line must mention victory")
 	I18n.set_locale("fr")
