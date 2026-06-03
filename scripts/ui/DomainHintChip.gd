@@ -41,6 +41,12 @@ func _star_size() -> float:
 
 func _update_min_size() -> void:
 	var f := ThemeDB.fallback_font
+	if f == null:
+		# Font not ready yet (early in the scene lifecycle) — fall back to a
+		# height-only minimum; queue_redraw() in set_domain() will repaint once
+		# a real layout pass runs.
+		custom_minimum_size = Vector2(0, FONT_SIZE + PAD_Y * 2.0)
+		return
 	var ts := f.get_string_size(_label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE)
 	var star_w := (_star_size() + STAR_GAP) if _is_victory else 0.0
 	custom_minimum_size = Vector2(ts.x + star_w + PAD_X * 2.0, FONT_SIZE + PAD_Y * 2.0)
@@ -51,6 +57,8 @@ func _draw() -> void:
 	var sz := size
 	draw_style_box(_style, Rect2(Vector2.ZERO, sz))
 	var f := ThemeDB.fallback_font
+	if f == null:
+		return
 	var x := PAD_X
 	var cy := sz.y * 0.5
 	if _is_victory:
