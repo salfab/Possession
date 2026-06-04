@@ -511,11 +511,6 @@ const STRINGS := {
 	"ui.fab.tooltip":                  {"fr": "Menu",         "en": "Menu"},
 	"ui.fab.label":                    {"fr": "Menu",         "en": "Menu"},
 
-	# DomainData yields (printed in domain tooltips/debug)
-	"domain.yield.transgressed_2_3":   {"fr": "2 (3 si transgressé)",             "en": "2 (3 if Transgressed)"},
-	"domain.yield.transgressed_1_2":   {"fr": "1 (2 si transgressé)",             "en": "1 (2 if Transgressed)"},
-	"domain.yield.cracked_1_2":        {"fr": "1 (2 si Domaine fissuré ce tour)", "en": "1 (2 if Domain cracked this turn)"},
-
 	# Glossary — surfaced via the FAB glossary item. One {name,def} pair
 	# per term, kept short enough to scan in a single modal scroll.
 	"glossary.domain.name":            {"fr": "Domaine",            "en": "Domain"},
