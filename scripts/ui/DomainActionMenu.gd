@@ -39,7 +39,6 @@ const REFUSE := Color(0.79, 0.54, 0.54)
 
 var _panel: PanelContainer
 var _content: VBoxContainer
-var _pending_at: Vector2 = Vector2.ZERO
 # Cached static styleboxes (built once) — the menu rebuilds its body on every
 # open, so creating these fresh each time was needless allocation churn.
 var _cell_style_on: StyleBoxFlat
@@ -54,8 +53,9 @@ func _init() -> void:
 	visible = false
 
 func _ready() -> void:
-	# Scrim : full-rect input catcher so a tap outside the panel closes it.
-	var scrim := Control.new()
+	# Dark backdrop : reads as a modal AND catches taps outside the panel to close.
+	var scrim := ColorRect.new()
+	scrim.color = Color(0, 0, 0, 0.45)
 	scrim.anchor_right = 1.0
 	scrim.anchor_bottom = 1.0
 	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -64,11 +64,11 @@ func _ready() -> void:
 
 	_panel = PanelContainer.new()
 	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_panel.custom_minimum_size = Vector2(320, 0)
+	_panel.custom_minimum_size = Vector2(520, 0)
 	add_child(_panel)
 
 	_content = VBoxContainer.new()
-	_content.add_theme_constant_override("separation", 0)
+	_content.add_theme_constant_override("separation", 2)
 	_panel.add_child(_content)
 
 func _panel_style() -> StyleBoxFlat:
@@ -76,9 +76,9 @@ func _panel_style() -> StyleBoxFlat:
 	sb.bg_color = Color(0.12, 0.09, 0.05, 0.99)
 	sb.border_color = GOLD
 	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(12)
-	sb.shadow_color = Color(0, 0, 0, 0.5)
-	sb.shadow_size = 16
+	sb.set_corner_radius_all(18)
+	sb.shadow_color = Color(0, 0, 0, 0.55)
+	sb.shadow_size = 24
 	return sb
 
 func _on_scrim_input(ev: InputEvent) -> void:
@@ -89,26 +89,29 @@ func _on_scrim_input(ev: InputEvent) -> void:
 func close() -> void:
 	visible = false
 
-func open_for(d_id: int, state: GameState, player: int, at: Vector2) -> void:
+func open_for(d_id: int, state: GameState, player: int, _at: Vector2 = Vector2.ZERO) -> void:
 	if not is_inside_tree():
 		return
 	_rebuild(d_id, state, player)
+	# Centred modal : wide enough to read comfortably on iPad, clamped so it
+	# never overflows a narrow viewport. (The tap position is ignored now.)
+	var vp := get_viewport_rect().size
+	_panel.custom_minimum_size.x = clampf(vp.x * 0.82, 380.0, 640.0)
 	# Ensure we render on top of sibling Controls (board + HUD).
 	if get_parent() != null:
 		get_parent().move_child(self, -1)
 	visible = true
-	_pending_at = at
 	# Wait one frame so the panel's container layout (and thus its size) is
-	# resolved before we clamp it inside the viewport.
+	# resolved before we centre it.
 	await get_tree().process_frame
-	_place_panel()
+	_center_panel()
 
-func _place_panel() -> void:
+func _center_panel() -> void:
 	var vp := get_viewport_rect().size
 	var ps := _panel.size
-	var p := _pending_at
-	p.x = clampf(p.x, 8.0, maxf(8.0, vp.x - ps.x - 8.0))
-	p.y = clampf(p.y, 8.0, maxf(8.0, vp.y - ps.y - 8.0))
+	var p := (vp - ps) * 0.5
+	p.x = maxf(8.0, p.x)
+	p.y = maxf(8.0, p.y)
 	_panel.position = p
 
 # ─── Build ────────────────────────────────────────────────────────────────
@@ -133,14 +136,14 @@ func _margins(node: Control, h: int, v: int) -> MarginContainer:
 
 func _build_header(d_id: int, state: GameState) -> Control:
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 5)
+	box.add_theme_constant_override("separation", 8)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 12)
 	var name_lbl := Label.new()
 	name_lbl.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
 	name_lbl.add_theme_font_override("font", Card.FONT_TITLE)
-	name_lbl.add_theme_font_size_override("font_size", 26)
+	name_lbl.add_theme_font_size_override("font_size", 34)
 	name_lbl.add_theme_color_override("font_color", Color(0.95, 0.88, 0.65))
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -148,7 +151,7 @@ func _build_header(d_id: int, state: GameState) -> Control:
 
 	var pill := Label.new()
 	pill.text = DomainData.chip_label(d_id)
-	pill.add_theme_font_size_override("font_size", 14)
+	pill.add_theme_font_size_override("font_size", 20)
 	pill.add_theme_color_override("font_color", Color(0.10, 0.07, 0.03))
 	pill.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pill.add_theme_stylebox_override("normal", _pill_style(DomainData.is_victory_domain(d_id)))
@@ -158,7 +161,7 @@ func _build_header(d_id: int, state: GameState) -> Control:
 	var adv := Label.new()
 	adv.text = DomainData.advantage_text(d_id)
 	adv.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	adv.add_theme_font_size_override("font_size", 14)
+	adv.add_theme_font_size_override("font_size", 19)
 	adv.add_theme_color_override("font_color", Color(0.76, 0.69, 0.52))
 	box.add_child(adv)
 
@@ -169,17 +172,17 @@ func _build_header(d_id: int, state: GameState) -> Control:
 	var dom: GameState.DomainState = state.domain(d_id)
 	var trans_n: int = dom.scandals.size() + dom.infamies.size()
 	meta.text = I18n.t("ui.menu.meta", [ctrl_txt, trans_n])
-	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_font_size_override("font_size", 16)
 	meta.add_theme_color_override("font_color", TXT_DIM)
 	box.add_child(meta)
 
-	return _margins(box, 12, 11)
+	return _margins(box, 22, 18)
 
 func _build_grid(d_id: int, state: GameState, player: int) -> Control:
 	var grid := GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
 	for aid in ACTIONS:
 		var why: String = _why_cannot(aid, state, player, d_id)
 		var enabled: bool = why == ""
@@ -192,16 +195,16 @@ func _build_grid(d_id: int, state: GameState, player: int) -> Control:
 			sub_col = REFUSE
 		grid.add_child(_make_cell(I18n.t(String(LABEL_KEYS[aid])), sub, sub_col,
 			enabled, _emit_base.bind(aid)))
-	return _margins(grid, 10, 4)
+	return _margins(grid, 18, 8)
 
 func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
+	box.add_theme_constant_override("separation", 10)
 	var added := false
 
 	# Provokable : any Transgression legally provocable with this domain as origin.
 	var prov := VBoxContainer.new()
-	prov.add_theme_constant_override("separation", 4)
+	prov.add_theme_constant_override("separation", 8)
 	for tid in TransgressionData.ALL_IDS:
 		if GameRules.why_cannot_provoquer(state, player, tid) != "":
 			continue
@@ -216,7 +219,7 @@ func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 
 	# Amplifiable : Scandales the player owns whose origin is this domain.
 	var amp := VBoxContainer.new()
-	amp.add_theme_constant_override("separation", 4)
+	amp.add_theme_constant_override("separation", 8)
 	var dom: GameState.DomainState = state.domain(d_id)
 	for ti in dom.scandals:
 		if ti.owner != player:
@@ -233,12 +236,12 @@ func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 
 	if not added:
 		return null
-	return _margins(box, 10, 6)
+	return _margins(box, 18, 10)
 
 func _section_label(key: String) -> Label:
 	var l := Label.new()
 	l.text = I18n.t(key)
-	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", TXT_DIM)
 	return l
 
@@ -247,23 +250,25 @@ func _make_cell(title: String, sub: String, sub_col: Color, enabled: bool,
 	var pc := PanelContainer.new()
 	pc.add_theme_stylebox_override("panel", _cell_style(enabled))
 	pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pc.custom_minimum_size = Vector2(0, 76)   # big tap target
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 1)
+	v.add_theme_constant_override("separation", 3)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER   # centre text block in the taller cell
 	var t := Label.new()
 	t.text = title
-	t.add_theme_font_size_override("font_size", 18)
+	t.add_theme_font_size_override("font_size", 26)
 	t.add_theme_color_override("font_color", TXT if enabled else TXT_DIM)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t)
 	if sub != "":
 		var s := Label.new()
 		s.text = sub
-		s.add_theme_font_size_override("font_size", 12)
+		s.add_theme_font_size_override("font_size", 17)
 		s.add_theme_color_override("font_color", sub_col)
 		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(s)
-	pc.add_child(_margins(v, 10, 8))
+	pc.add_child(_margins(v, 16, 14))
 	# Disabled cells swallow the tap (STOP, no handler) so poking them neither
 	# acts nor closes the menu.
 	pc.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -300,11 +305,11 @@ func _pill_style(victory: bool) -> StyleBoxFlat:
 func _make_pill_style(victory: bool) -> StyleBoxFlat:
 	var psb := StyleBoxFlat.new()
 	psb.bg_color = VIOLET if victory else GOLD
-	psb.set_corner_radius_all(10)
-	psb.set_content_margin(SIDE_LEFT, 9)
-	psb.set_content_margin(SIDE_RIGHT, 9)
-	psb.set_content_margin(SIDE_TOP, 2)
-	psb.set_content_margin(SIDE_BOTTOM, 2)
+	psb.set_corner_radius_all(14)
+	psb.set_content_margin(SIDE_LEFT, 13)
+	psb.set_content_margin(SIDE_RIGHT, 13)
+	psb.set_content_margin(SIDE_TOP, 5)
+	psb.set_content_margin(SIDE_BOTTOM, 5)
 	return psb
 
 func _why_cannot(aid: int, state: GameState, player: int, d_id: int) -> String:
