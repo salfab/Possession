@@ -5,3 +5,10 @@ export_presets.cfg.local
 *.translation
 .DS_Store
 /export/
+
+# Previews d'images générées (jetables, volumineuses)
+tools/previews/
+
+# Artefacts d'outils externes
+.codex-remote-attachments/
+.superpowers/

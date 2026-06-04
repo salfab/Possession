@@ -84,6 +84,8 @@ func close() -> void:
 	visible = false
 
 func open_for(d_id: int, state: GameState, player: int, at: Vector2) -> void:
+	if not is_inside_tree():
+		return
 	_rebuild(d_id, state, player)
 	# Ensure we render on top of sibling Controls (board + HUD).
 	if get_parent() != null:
