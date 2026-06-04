@@ -161,7 +161,7 @@ var _liturgy_banner_labels: Dictionary = {} # station_id -> Label (inside panel)
 var _domain_marker_rows: Dictionary = {} # domain_id -> HFlowContainer (owned-Transgression chips)
 var _status_label: Label
 var _ascendant_label: Label
-var _action_popup: PopupMenu
+var _action_menu: DomainActionMenu
 var _selected_domain: int = -1
 var _log_rtl: RichTextLabel
 var _log_panel: PanelContainer
@@ -650,12 +650,10 @@ func _build_overlays() -> void:
 	# is hidden by default so refusals would otherwise be invisible).
 	_build_action_toast()
 
-	# Action popup
-	_action_popup = PopupMenu.new()
-	for aid in POPUP_ACTIONS:
-		_action_popup.add_item(I18n.t(POPUP_LABEL_KEYS[aid]), aid)
-	_action_popup.id_pressed.connect(_on_popup_action)
-	add_child(_action_popup)
+	# Action menu (custom parchment panel, overlays the board + HUD)
+	_action_menu = DomainActionMenu.new()
+	_action_menu.action_chosen.connect(_on_menu_action)
+	add_child(_action_menu)
 
 	# Liturgy dialog (full-screen modal at end of station)
 	_build_liturgy_dialog()
@@ -1974,9 +1972,8 @@ func _scroll_log_to_bottom() -> void:
 # ─── INTERACTION ──────────────────────────────────────────────────────────────
 
 func _on_domain_clicked(d_id: int) -> void:
-	# Calibration mode swallows taps so a drag-to-move gesture doesn't
-	# also fire the action popup (we only want the gui_input drag handler
-	# to react). The cyan-overlay toggle (FAB → Hotspots) flips this flag.
+	# Calibration mode swallows taps so a drag-to-move gesture doesn't also
+	# fire the action menu (only the gui_input drag handler should react).
 	if _debug_hotspots:
 		return
 	if state.game_over:
@@ -1986,105 +1983,27 @@ func _on_domain_clicked(d_id: int) -> void:
 		_refresh_log()
 		return
 	_selected_domain = d_id
-	var p: int = state.active_player
-	# Build labels enriched with the legality reason if illegal.
-	for idx in POPUP_ACTIONS.size():
-		var aid: int = POPUP_ACTIONS[idx]
-		var why: String = ""
-		var label_str: String
-		if aid == GameEnums.ActionId.INVESTIR:
-			why = GameRules.why_cannot_investir(state, p, d_id)
-			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
-		elif aid == GameEnums.ActionId.EXPLOITER:
-			why = GameRules.why_cannot_exploiter(state, p, d_id)
-			# Show the actual gain so the player doesn't have to guess.
-			var gain: int = GameRules.production_of(state, d_id, p)
-			label_str = I18n.t("ui.popup.exploit_gain", [
-				GameEnums.DOMAIN_NAMES[d_id], gain, ("s" if gain != 1 else ""),
-			])
-		elif aid == GameEnums.ActionId.SCELLER:
-			why = GameRules.why_cannot_sceller(state, p, d_id)
-			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
-		elif aid == GameEnums.ActionId.FISSURER:
-			why = GameRules.why_cannot_fissurer(state, p, d_id)
-			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
-		else:
-			label_str = "%s %s" % [I18n.t(POPUP_LABEL_KEYS[aid]), GameEnums.DOMAIN_NAMES[d_id]]
-		if why != "":
-			label_str += "  —  " + why
-		_action_popup.set_item_text(idx, label_str)
-		_action_popup.set_item_disabled(idx, why != "")
-
-	# Append dynamic entries (Provoquer / Amplifier) below the four base
-	# actions. Item ids use distinct ranges to avoid colliding with the
-	# ActionId enum.
-	# Strip leftovers from a previous click first.
-	while _action_popup.get_item_count() > POPUP_ACTIONS.size():
-		_action_popup.remove_item(POPUP_ACTIONS.size())
-
-	# Provokable: any Transgression the active player can legally provoke
-	# using this domain as the origin.
-	var provokable_tids: Array = []
-	for tid in TransgressionData.ALL_IDS:
-		if GameRules.why_cannot_provoquer(state, p, tid) != "":
-			continue
-		var origins: Array = GameRules.transgression_origin_options(p, tid)
-		if d_id in origins:
-			provokable_tids.append(tid)
-	for i in provokable_tids.size():
-		var tid: String = provokable_tids[i]
-		var name_str: String = TransgressionData.name_of(tid)
-		var label: String = I18n.t("ui.popup.provoke_in", [name_str, GameEnums.DOMAIN_NAMES[d_id]])
-		_action_popup.add_item(label, PROVOKE_ITEM_ID_BASE + i)
-	_action_popup.set_meta("provokable_tids", provokable_tids)
-	_action_popup.set_meta("provoke_origin", d_id)
-
-	# Amplifiable: any Scandale instance the active player owns whose origin
-	# domain is this one and that's currently amplifiable (sealed by them,
-	# not in penitence, enough Corruption).
-	var amplifiable_tids: Array = []
-	var dom: GameState.DomainState = state.domain(d_id)
-	for ti in dom.scandals:
-		if ti.owner != p:
-			continue
-		if GameRules.why_cannot_amplifier(state, p, ti.def_id) != "":
-			continue
-		amplifiable_tids.append(ti.def_id)
-	for i in amplifiable_tids.size():
-		var tid: String = amplifiable_tids[i]
-		var name_str: String = TransgressionData.name_of(tid)
-		var label: String = I18n.t("ui.popup.amplify_in", [name_str, GameEnums.DOMAIN_NAMES[d_id]])
-		_action_popup.add_item(label, AMPLIFY_ITEM_ID_BASE + i)
-	_action_popup.set_meta("amplifiable_tids", amplifiable_tids)
-
-	# Position the popup near the touch
-	var mp: Vector2 = get_viewport().get_mouse_position()
-	_action_popup.position = Vector2i(int(mp.x), int(mp.y))
-	_action_popup.size = Vector2i(540, 0)
-	_action_popup.popup()
+	var at: Vector2 = get_viewport().get_mouse_position()
+	_action_menu.open_for(d_id, state, state.active_player, at)
 
 
-func _on_popup_action(action_id: int) -> void:
+func _on_menu_action(payload: Dictionary) -> void:
 	if _selected_domain < 0:
 		return
 	var result: Dictionary
-	if action_id >= AMPLIFY_ITEM_ID_BASE:
-		var idx: int = action_id - AMPLIFY_ITEM_ID_BASE
-		var tids: Array = _action_popup.get_meta("amplifiable_tids", [])
-		if idx < 0 or idx >= tids.size():
+	match int(payload.get("kind", -1)):
+		DomainActionMenu.Kind.BASE:
+			result = manager.perform_action(int(payload["action_id"]),
+				{"domain": _selected_domain})
+		DomainActionMenu.Kind.PROVOKE:
+			result = manager.perform_action(GameEnums.ActionId.PROVOQUER,
+				{"def_id": String(payload["tid"]), "origin": int(payload["origin"])})
+		DomainActionMenu.Kind.AMPLIFY:
+			result = manager.perform_action(GameEnums.ActionId.AMPLIFIER,
+				{"def_id": String(payload["tid"])})
+		_:
 			_selected_domain = -1
 			return
-		result = manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": String(tids[idx])})
-	elif action_id >= PROVOKE_ITEM_ID_BASE:
-		var idx: int = action_id - PROVOKE_ITEM_ID_BASE
-		var tids: Array = _action_popup.get_meta("provokable_tids", [])
-		var origin: int = int(_action_popup.get_meta("provoke_origin", -1))
-		if idx < 0 or idx >= tids.size() or origin < 0:
-			_selected_domain = -1
-			return
-		result = manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": String(tids[idx]), "origin": origin})
-	else:
-		result = manager.perform_action(action_id, {"domain": _selected_domain})
 	_handle_action_result(result)
 	_selected_domain = -1
 	_refresh_all()
@@ -4248,11 +4167,6 @@ func _relocalize() -> void:
 		var tk: String = _fab.get_meta("i18n_tooltip_key", "")
 		if tk != "":
 			_fab.tooltip_text = I18n.t(tk)
-	# Action popup
-	if _action_popup != null:
-		for idx in POPUP_ACTIONS.size():
-			var aid: int = POPUP_ACTIONS[idx]
-			_action_popup.set_item_text(idx, I18n.t(POPUP_LABEL_KEYS[aid]))
 	# Static dialog titles + ok button text
 	if _liturgy_dialog != null:
 		_liturgy_dialog.title = I18n.t("ui.dialog.title.liturgy")
