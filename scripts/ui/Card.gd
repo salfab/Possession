@@ -55,6 +55,7 @@ const COL_LIGHT_PLATE_INK := Color(0.94, 0.86, 0.60)
 var _kind: String = ""           # "transgression" | "liturgy"
 var _tid: String = ""            # transgression def_id
 var _face: int = GameEnums.TransgressionFace.SCANDALE
+var _bound: bool = false          # true once _apply_binding has run at least once
 var _station: int = -1
 var _impedita: bool = false
 # Liturgy target — caller supplies one of these (the picker logic lives in
@@ -248,6 +249,12 @@ func _apply_scaled_label_size(lbl: Label, base: int) -> void:
 # ─── Public setup methods ─────────────────────────────────────────────────────
 
 func setup_transgression(tid: String, face: int) -> void:
+	# Pooled cards are re-setup on every dialog open ; skip the (expensive)
+	# texture rebind + text reshape when nothing changed. Locale changes go
+	# through I18n.locale_changed → _refresh_text, so this guard can't stale
+	# the language.
+	if _bound and _kind == "transgression" and _tid == tid and _face == face:
+		return
 	_kind = "transgression"
 	_tid = tid
 	_face = face
@@ -352,6 +359,7 @@ func _apply_binding() -> void:
 		if _effect_btn.visible:
 			_effect_btn.tooltip_text = I18n.t("ui.tooltip.tap_for_effect_detail")
 	_refresh_text()
+	_bound = true
 
 
 # Re-renders all the text labels in the current locale without touching the
