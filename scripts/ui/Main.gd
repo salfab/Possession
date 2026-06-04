@@ -574,7 +574,13 @@ func _build_overlays() -> void:
 		chip_row.alignment = HFlowContainer.ALIGNMENT_CENTER
 		chip_row.add_theme_constant_override("h_separation", 4)
 		chip_row.add_theme_constant_override("v_separation", 2)
-		chip_row.mouse_filter = Control.MOUSE_FILTER_PASS
+		# IGNORE (not PASS) : on small domains this row overlaps the hotspot's
+		# vertical centre. PASS forwards to the parent, not to the sibling
+		# hotspot Button behind it, so a tap on the row's empty space / dots was
+		# swallowed (most visible on Peur, the narrowest zone). With IGNORE the
+		# tap falls through to the hotspot ; the transgression markers stay
+		# clickable since they are independent STOP controls.
+		chip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_zoom_layer.add_child(chip_row)
 		_domain_marker_rows[d_id] = chip_row
 
