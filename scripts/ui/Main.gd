@@ -91,6 +91,18 @@ const PENITENCE_ARCH_RISE := {
 	GameEnums.DomainId.PEUR:     0.040,
 }
 
+# Ascendant track painted on the bottom board band. The printed track is a
+# very slight "smile" (curve), so it's defined by THREE on-curve points
+# calibrated against the printed pips : left (-10), apex (0), right (+10).
+# The pawn is placed by sampling the quadratic Bézier through them. All
+# normalised board coordinates. Drag-calibrated via FAB → Hotspots.
+const ASCENDANT_TRACK_LIMIT := 10
+const ASCENDANT_TRACK_LEFT  := Vector2(0.178, 0.935)   # value -10
+const ASCENDANT_TRACK_APEX  := Vector2(0.495, 0.935)   # value 0 (curve apex)
+const ASCENDANT_TRACK_RIGHT := Vector2(0.812, 0.935)   # value +10
+const ASCENDANT_PAWN_SIZE := Vector2(42, 52)
+const _ASC_HANDLE_SIZE := 22.0
+
 const ZOOM_MIN := 1.0
 const ZOOM_MAX := 4.0
 const ZOOM_STEP := 1.25
@@ -159,6 +171,15 @@ var _domain_dots: Dictionary = {}   # domain_id -> CorruptionDots
 var _liturgy_banners: Dictionary = {}       # station_id -> PanelContainer (placeholder)
 var _liturgy_banner_labels: Dictionary = {} # station_id -> Label (inside panel)
 var _domain_marker_rows: Dictionary = {} # domain_id -> HFlowContainer (owned-Transgression chips)
+var _ascendant_pawn: AscendantPawn
+# Live (drag-calibrated) copies of the three track points, seeded from the
+# consts. _position_ascendant_pawn reads these so the curve updates live while
+# calibrating. Persisted back to source via the FAB → Hotspots dump.
+var _asc_left: Vector2 = ASCENDANT_TRACK_LEFT
+var _asc_apex: Vector2 = ASCENDANT_TRACK_APEX
+var _asc_right: Vector2 = ASCENDANT_TRACK_RIGHT
+var _asc_handles: Dictionary = {}   # "left"/"apex"/"right" -> Button
+var _asc_pips: Array = []           # preview dots, one per integer value
 var _status_label: Label
 var _ascendant_label: Label
 var _action_menu: DomainActionMenu
@@ -573,6 +594,11 @@ func _build_overlays() -> void:
 	_arch_overlay = PenitenceArch.new()
 	_arch_overlay.name = "PenitenceArchOverlay"
 	_zoom_layer.add_child(_arch_overlay)
+
+	_ascendant_pawn = AscendantPawn.new()
+	_ascendant_pawn.name = "AscendantPawn"
+	_zoom_layer.add_child(_ascendant_pawn)
+	_position_ascendant_pawn(0)
 
 	# Domain name caption labels — own POS / HALF, calibratable as
 	# independent zones via FAB → Hotspots.
@@ -1277,8 +1303,179 @@ func _refresh_overlays() -> void:
 	# Ascendant only (per-player Corruption pool now shown inside each
 	# coloured player panel).
 	_ascendant_label.text = "Asc %+d" % state.ascendant
+	_refresh_ascendant_pawn()
 	_refresh_liturgy_banners()
 	_refresh_penitence_arches()
+
+
+func _refresh_ascendant_pawn() -> void:
+	if _ascendant_pawn == null or not is_instance_valid(_ascendant_pawn):
+		return
+	_ascendant_pawn.set_value(state.ascendant)
+	_position_ascendant_pawn(state.ascendant)
+
+
+# Quadratic Bézier through the three track points : left at t=0, apex at
+# t=0.5, right at t=1. The control point is derived so the apex lies exactly
+# on the curve at its midpoint (so the value-0 pawn sits on the apex handle).
+func _asc_curve_point(t: float) -> Vector2:
+	var ctrl: Vector2 = _asc_apex * 2.0 - (_asc_left + _asc_right) * 0.5
+	var u: float = 1.0 - t
+	return _asc_left * (u * u) + ctrl * (2.0 * u * t) + _asc_right * (t * t)
+
+
+func _ascendant_t_for(value: int) -> float:
+	var clamped := clampi(value, -ASCENDANT_TRACK_LIMIT, ASCENDANT_TRACK_LIMIT)
+	return (float(clamped) + float(ASCENDANT_TRACK_LIMIT)) / float(ASCENDANT_TRACK_LIMIT * 2)
+
+
+func _position_ascendant_pawn(value: int) -> void:
+	if _ascendant_pawn == null:
+		return
+	var p := _asc_curve_point(_ascendant_t_for(value))
+	_ascendant_pawn.anchor_left = p.x
+	_ascendant_pawn.anchor_right = p.x
+	_ascendant_pawn.anchor_top = p.y
+	_ascendant_pawn.anchor_bottom = p.y
+	_ascendant_pawn.offset_left = -ASCENDANT_PAWN_SIZE.x * 0.5
+	_ascendant_pawn.offset_right = ASCENDANT_PAWN_SIZE.x * 0.5
+	# Bottom point sits on the painted track pip.
+	_ascendant_pawn.offset_top = -ASCENDANT_PAWN_SIZE.y
+	_ascendant_pawn.offset_bottom = 0
+	_ascendant_pawn.queue_redraw()
+
+
+# ─── Ascendant track calibration (hooked into FAB → Hotspots) ─────────────────
+# Three draggable handles (left / apex / right) reshape the live curve; a row
+# of preview pips shows where each integer value lands so the user can match
+# the printed "smile". The three points are dumped with the zone calibration.
+
+func _asc_point(key: String) -> Vector2:
+	match key:
+		"left":  return _asc_left
+		"apex":  return _asc_apex
+		"right": return _asc_right
+	return Vector2.ZERO
+
+
+func _asc_set_point(key: String, v: Vector2) -> void:
+	match key:
+		"left":  _asc_left = v
+		"apex":  _asc_apex = v
+		"right": _asc_right = v
+
+
+func _build_ascendant_calibration() -> void:
+	for key in ["left", "apex", "right"]:
+		_build_asc_handle(key)
+	# One preview pip per integer value (-10..+10).
+	if _asc_pips.is_empty():
+		for i in (ASCENDANT_TRACK_LIMIT * 2 + 1):
+			var dot := Panel.new()
+			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var dsb := StyleBoxFlat.new()
+			dsb.bg_color = Color(1.0, 0.95, 0.55, 0.85)
+			dsb.border_color = Color(0, 0, 0, 0.7)
+			dsb.set_border_width_all(1)
+			dsb.set_corner_radius_all(3)
+			dot.add_theme_stylebox_override("panel", dsb)
+			_zoom_layer.add_child(dot)
+			_asc_pips.append(dot)
+	_refresh_ascendant_calibration()
+
+
+func _build_asc_handle(key: String) -> void:
+	if _asc_handles.has(key):
+		return
+	var handle := Button.new()
+	handle.text = ""
+	handle.custom_minimum_size = Vector2(_ASC_HANDLE_SIZE, _ASC_HANDLE_SIZE)
+	handle.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Round handle ; apex is violet (the victory accent), endpoints cyan — shape
+	# is identical so the colour is the only cue, but they sit far apart.
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = (Color(0.69, 0.42, 0.81, 0.95) if key == "apex"
+		else Color(0.20, 1.0, 1.0, 0.90))
+	sb.border_color = Color(0, 0, 0, 0.9)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(int(_ASC_HANDLE_SIZE))
+	handle.add_theme_stylebox_override("normal",  sb)
+	handle.add_theme_stylebox_override("hover",   sb)
+	handle.add_theme_stylebox_override("pressed", sb)
+	handle.add_theme_stylebox_override("focus",   sb)
+	handle.gui_input.connect(_on_asc_handle_input.bind(key))
+	_zoom_layer.add_child(handle)
+	_asc_handles[key] = handle
+
+
+func _refresh_ascendant_calibration() -> void:
+	for key in _asc_handles.keys():
+		var h: Button = _asc_handles[key]
+		if h == null or not is_instance_valid(h):
+			continue
+		var p := _asc_point(key)
+		h.anchor_left = p.x
+		h.anchor_right = p.x
+		h.anchor_top = p.y
+		h.anchor_bottom = p.y
+		h.offset_left = -_ASC_HANDLE_SIZE / 2.0
+		h.offset_top = -_ASC_HANDLE_SIZE / 2.0
+		h.offset_right = _ASC_HANDLE_SIZE / 2.0
+		h.offset_bottom = _ASC_HANDLE_SIZE / 2.0
+	var n: int = _asc_pips.size()
+	for i in n:
+		var dot: Panel = _asc_pips[i]
+		if dot == null or not is_instance_valid(dot):
+			continue
+		var pp := _asc_curve_point(float(i) / float(maxi(1, n - 1)))
+		dot.anchor_left = pp.x
+		dot.anchor_right = pp.x
+		dot.anchor_top = pp.y
+		dot.anchor_bottom = pp.y
+		dot.offset_left = -3.0
+		dot.offset_top = -3.0
+		dot.offset_right = 3.0
+		dot.offset_bottom = 3.0
+	# Preview the pawn at its live value on the reshaped curve.
+	if _ascendant_pawn != null and is_instance_valid(_ascendant_pawn) and state != null:
+		_position_ascendant_pawn(state.ascendant)
+
+
+func _teardown_ascendant_calibration() -> void:
+	for key in _asc_handles.keys():
+		var h: Button = _asc_handles[key]
+		if h != null and is_instance_valid(h):
+			h.queue_free()
+	_asc_handles.clear()
+	for dot in _asc_pips:
+		if dot != null and is_instance_valid(dot):
+			dot.queue_free()
+	_asc_pips.clear()
+	if _ascendant_pawn != null and is_instance_valid(_ascendant_pawn) and state != null:
+		_position_ascendant_pawn(state.ascendant)
+
+
+func _on_asc_handle_input(event: InputEvent, key: String) -> void:
+	if not _debug_hotspots:
+		return
+	var delta: Vector2 = Vector2.ZERO
+	if event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		if (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+			return
+		delta = mm.relative
+	elif event is InputEventScreenDrag:
+		delta = (event as InputEventScreenDrag).relative
+	else:
+		return
+	if delta == Vector2.ZERO:
+		return
+	var screen_size: Vector2 = _zoom_layer.size * _zoom_layer.scale
+	if screen_size.x <= 0 or screen_size.y <= 0:
+		return
+	var d := Vector2(delta.x / screen_size.x, delta.y / screen_size.y)
+	_asc_set_point(key, _asc_point(key) + d)
+	_refresh_ascendant_calibration()
 
 
 # ─── Domain transgression markers ─────────────────────────────────────────────
@@ -2169,7 +2366,10 @@ func _on_btn_toggle_hotspots() -> void:
 			_remove_zone_overlay(node)
 			_remove_calibration_label(kind, id)
 			_destroy_corner_handles(kind, id)
-	if not _debug_hotspots:
+	if _debug_hotspots:
+		_build_ascendant_calibration()
+	else:
+		_teardown_ascendant_calibration()
 		_dump_calibration_for_paste()
 
 
@@ -2567,6 +2767,10 @@ func _dump_calibration_for_paste() -> void:
 		lines.append("\tGameEnums.StationId.%s: Vector2(%.3f, %.3f)," %
 			[_station_id_to_enum_name(st), half2.x, half2.y])
 	lines.append("}")
+	lines.append("")
+	lines.append("const ASCENDANT_TRACK_LEFT  := Vector2(%.3f, %.3f)" % [_asc_left.x, _asc_left.y])
+	lines.append("const ASCENDANT_TRACK_APEX  := Vector2(%.3f, %.3f)" % [_asc_apex.x, _asc_apex.y])
+	lines.append("const ASCENDANT_TRACK_RIGHT := Vector2(%.3f, %.3f)" % [_asc_right.x, _asc_right.y])
 
 	var block: String = ""
 	for ln in lines:
