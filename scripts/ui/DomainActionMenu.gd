@@ -40,6 +40,12 @@ const REFUSE := Color(0.79, 0.54, 0.54)
 var _panel: PanelContainer
 var _content: VBoxContainer
 var _pending_at: Vector2 = Vector2.ZERO
+# Cached static styleboxes (built once) — the menu rebuilds its body on every
+# open, so creating these fresh each time was needless allocation churn.
+var _cell_style_on: StyleBoxFlat
+var _cell_style_off: StyleBoxFlat
+var _pill_gold: StyleBoxFlat
+var _pill_violet: StyleBoxFlat
 
 func _init() -> void:
 	anchor_right = 1.0
@@ -145,14 +151,7 @@ func _build_header(d_id: int, state: GameState) -> Control:
 	pill.add_theme_font_size_override("font_size", 14)
 	pill.add_theme_color_override("font_color", Color(0.10, 0.07, 0.03))
 	pill.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	var psb := StyleBoxFlat.new()
-	psb.bg_color = VIOLET if DomainData.is_victory_domain(d_id) else GOLD
-	psb.set_corner_radius_all(10)
-	psb.set_content_margin(SIDE_LEFT, 9)
-	psb.set_content_margin(SIDE_RIGHT, 9)
-	psb.set_content_margin(SIDE_TOP, 2)
-	psb.set_content_margin(SIDE_BOTTOM, 2)
-	pill.add_theme_stylebox_override("normal", psb)
+	pill.add_theme_stylebox_override("normal", _pill_style(DomainData.is_victory_domain(d_id)))
 	row.add_child(pill)
 	box.add_child(row)
 
@@ -276,12 +275,37 @@ func _make_cell(title: String, sub: String, sub_col: Color, enabled: bool,
 	return pc
 
 func _cell_style(enabled: bool) -> StyleBoxFlat:
+	if _cell_style_on == null:
+		_cell_style_on = _make_cell_style(true)
+		_cell_style_off = _make_cell_style(false)
+	return _cell_style_on if enabled else _cell_style_off
+
+
+func _make_cell_style(enabled: bool) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.17, 0.13, 0.08) if enabled else Color(0.13, 0.10, 0.07)
 	sb.border_color = GOLD if enabled else Color(0.35, 0.29, 0.18, 0.6)
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(8)
 	return sb
+
+
+func _pill_style(victory: bool) -> StyleBoxFlat:
+	if _pill_gold == null:
+		_pill_gold = _make_pill_style(false)
+		_pill_violet = _make_pill_style(true)
+	return _pill_violet if victory else _pill_gold
+
+
+func _make_pill_style(victory: bool) -> StyleBoxFlat:
+	var psb := StyleBoxFlat.new()
+	psb.bg_color = VIOLET if victory else GOLD
+	psb.set_corner_radius_all(10)
+	psb.set_content_margin(SIDE_LEFT, 9)
+	psb.set_content_margin(SIDE_RIGHT, 9)
+	psb.set_content_margin(SIDE_TOP, 2)
+	psb.set_content_margin(SIDE_BOTTOM, 2)
+	return psb
 
 func _why_cannot(aid: int, state: GameState, player: int, d_id: int) -> String:
 	match aid:

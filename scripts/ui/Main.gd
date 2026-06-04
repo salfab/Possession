@@ -180,6 +180,12 @@ var _asc_apex: Vector2 = ASCENDANT_TRACK_APEX
 var _asc_right: Vector2 = ASCENDANT_TRACK_RIGHT
 var _asc_handles: Dictionary = {}   # "left"/"apex"/"right" -> Button
 var _asc_pips: Array = []           # preview dots, one per integer value
+# Cached static StyleBoxFlat (built once, reused) — avoids per-refresh /
+# per-open allocation churn in the hot UI-refresh paths.
+var _player_panel_styles: Dictionary = {}   # "pid_active" -> StyleBoxFlat
+var _fab_style_on: StyleBoxFlat
+var _fab_style_off: StyleBoxFlat
+var _trans_card_style: StyleBoxFlat
 var _status_label: Label
 var _ascendant_label: Label
 var _action_menu: DomainActionMenu
@@ -1170,6 +1176,16 @@ func _refresh_active_player_highlight() -> void:
 
 
 func _apply_player_panel_style(panel: PanelContainer, pid: int, is_active: bool) -> void:
+	# Style depends only on (pid, is_active) — 4 possible boxes, cached once.
+	var key: String = "%d_%s" % [pid, is_active]
+	var sb: StyleBoxFlat = _player_panel_styles.get(key)
+	if sb == null:
+		sb = _build_player_panel_style(pid, is_active)
+		_player_panel_styles[key] = sb
+	panel.add_theme_stylebox_override("panel", sb)
+
+
+func _build_player_panel_style(pid: int, is_active: bool) -> StyleBoxFlat:
 	var accent: Color = GameEnums.player_color_light(pid)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.04, 0.02, 0.08, 0.95)
@@ -1185,7 +1201,7 @@ func _apply_player_panel_style(panel: PanelContainer, pid: int, is_active: bool)
 		sb.shadow_size = 4
 	sb.set_corner_radius_all(8)
 	sb.set_content_margin_all(6)
-	panel.add_theme_stylebox_override("panel", sb)
+	return sb
 
 
 # When Puiser dans l'Ombre is the active player's only legal action (Réserve
@@ -1197,6 +1213,20 @@ func _refresh_fab_highlight() -> void:
 	var puiser_legal: bool = (not state.game_over) \
 		and (not state.has_pending_decisions()) \
 		and GameRules.can_puiser(state, state.active_player)
+	# Two fixed styles (forced-action vs idle) — cached once, swapped by state.
+	if _fab_style_on == null:
+		_fab_style_on = _build_fab_style(true)
+		_fab_style_off = _build_fab_style(false)
+	if puiser_legal:
+		_fab.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+	else:
+		_fab.remove_theme_color_override("font_color")
+	var sb: StyleBoxFlat = _fab_style_on if puiser_legal else _fab_style_off
+	for state_name in ["normal", "hover", "pressed", "focus"]:
+		_fab.add_theme_stylebox_override(state_name, sb)
+
+
+func _build_fab_style(puiser_legal: bool) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.set_corner_radius_all(32)
 	sb.set_border_width_all(2)
@@ -1206,14 +1236,11 @@ func _refresh_fab_highlight() -> void:
 		sb.bg_color = Color(0.30, 0.06, 0.12, 0.95)
 		sb.border_color = Color(0.95, 0.55, 0.20)
 		sb.shadow_color = Color(0.95, 0.55, 0.20, 0.55)
-		_fab.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
 	else:
 		sb.bg_color = Color(0.18, 0.06, 0.22, 0.95)
 		sb.border_color = Color(0.85, 0.65, 0.30)
 		sb.shadow_color = Color(0, 0, 0, 0.55)
-		_fab.remove_theme_color_override("font_color")
-	for state_name in ["normal", "hover", "pressed", "focus"]:
-		_fab.add_theme_stylebox_override(state_name, sb)
+	return sb
 
 
 func _refresh_status() -> void:
@@ -1961,7 +1988,6 @@ func _build_player_transgression_panels() -> void:
 	# React to viewport rotation / window resize
 	get_viewport().size_changed.connect(_layout_player_transgression_panels)
 	_layout_player_transgression_panels()
-	print("[panels] Built Red+Blue transgression panels")
 
 
 func _build_player_panel(pid: int, accent: Color) -> Dictionary:
@@ -2060,7 +2086,6 @@ func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
 
 func _refresh_player_transgression_panels() -> void:
 	if _player_list_red == null or _player_list_blue == null:
-		print("[panels] refresh skipped (lists null)")
 		return
 	for c in _player_list_red.get_children():
 		c.queue_free()
@@ -2105,7 +2130,6 @@ func _refresh_player_transgression_panels() -> void:
 		_player_list_red.add_child(_make_empty_hint())
 	if _player_list_blue.get_child_count() == 0:
 		_player_list_blue.add_child(_make_empty_hint())
-	print("[panels] refresh: Red=%d Blue=%d" % [n_red, n_blue])
 
 
 func _make_empty_hint() -> Label:
@@ -3431,13 +3455,15 @@ func _populate_transgressions_dialog() -> void:
 
 func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Control:
 	var panel := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.10, 0.10, 0.16, 0.95)
-	sb.border_color = Color(0.55, 0.45, 0.20)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(10)
-	panel.add_theme_stylebox_override("panel", sb)
+	if _trans_card_style == null:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.10, 0.10, 0.16, 0.95)
+		sb.border_color = Color(0.55, 0.45, 0.20)
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(8)
+		sb.set_content_margin_all(10)
+		_trans_card_style = sb
+	panel.add_theme_stylebox_override("panel", _trans_card_style)
 
 	# Outer layout: top row (card image + status / flip), then a wide
 	# action row at the bottom of the item.
