@@ -16,6 +16,21 @@ var _pending_advance_to_station: int = -1   # set when waiting for Confession de
 var pending_liturgy: Dictionary = {}
 var _bot_running: bool = false
 
+# When true (headless tests / bot-vs-bot benchmarks), perform_action()
+# drives the whole bot turn synchronously inside _check_bot_turn(). The
+# Godot UI sets this to false so it can step the bot ONE action at a time
+# (see step_bot_once()), pacing each move through a timer + refresh so the
+# player can watch the AI play. Default true preserves headless behaviour.
+var auto_bot: bool = true
+
+# Last successful action applied via perform_action(), exposed so the UI's
+# animation dispatcher can replay a tailored visual for it on the next
+# refresh — works identically whether the action came from a human tap or
+# from a bot's step_bot_once(). last_action is -1 when nothing is pending.
+var last_action: int = -1
+var last_kwargs: Dictionary = {}
+var last_action_player: int = GameEnums.PlayerId.NONE
+
 func _init(s: GameState, fresh_game: bool = true) -> void:
 	state = s
 	if fresh_game:
@@ -63,9 +78,21 @@ func perform_action(action: int, kwargs: Dictionary = {}) -> Dictionary:
 		_:
 			result = ActionResolver.fail("Action inconnue.")
 	if result.get("ok", false):
+		last_action = action
+		last_kwargs = kwargs.duplicate(true)
+		last_action_player = p
 		_pulse_actions_done[p] = true
 		_advance_after_action()
 	return result
+
+
+# Clears the last-action record so a subsequent refresh that isn't tied to
+# a fresh action won't replay its animation. The UI calls this once it has
+# consumed last_action via its animation dispatcher.
+func consume_last_action() -> void:
+	last_action = -1
+	last_kwargs = {}
+	last_action_player = GameEnums.PlayerId.NONE
 
 
 func _advance_after_action() -> void:
@@ -305,28 +332,57 @@ func _drain_pending_decisions() -> void:
 
 
 func _check_bot_turn() -> void:
+	# Headless / bot-vs-bot path: drive the whole bot turn synchronously.
+	# The Godot UI sets auto_bot = false and instead calls step_bot_once()
+	# itself, one move per timer tick, so each move can be animated.
+	if not auto_bot:
+		return
 	if _bot_running:
 		return
 	_bot_running = true
-	while true:
-		if state.has_pending_decisions():
-			var dec: GameState.PendingDecision = state.pending_decisions[0]
-			if not state.bot_for_player.has(dec.player):
-				break
-			_drain_one_for_bot(dec)
-			continue
-		if state.game_over or not pending_liturgy.is_empty():
-			break
-		if not active_player_must_act():
-			break
-		if not state.bot_for_player.has(state.active_player):
-			break
-		var bot: BotBase = state.bot_for_player[state.active_player]
-		var decision := bot.pick_action(state, state.active_player)
-		var result := perform_action(decision["action_id"], decision.get("kwargs", {}))
-		if not result.get("ok", false):
-			break
+	while step_bot_once():
+		pass
 	_bot_running = false
+
+
+# True when the next thing the engine is waiting on is a bot's move (an
+# action by a bot-controlled active player, or a pending decision owned by
+# a bot). Side-effect-free — the UI uses it to decide whether to arm its
+# step timer without actually mutating state.
+func bot_should_act() -> bool:
+	if state.has_pending_decisions():
+		return state.bot_for_player.has(state.pending_decisions[0].player)
+	if state.game_over or not pending_liturgy.is_empty():
+		return false
+	if not active_player_must_act():
+		return false
+	return state.bot_for_player.has(state.active_player)
+
+
+# Applies exactly ONE bot move (one drained decision, or one chosen action)
+# and returns true if it did something. Returns false when it's not a bot's
+# turn / nothing is actionable — the single source of truth for bot play,
+# shared by the synchronous _check_bot_turn() loop above and the UI's paced
+# stepping. Re-entrancy from perform_action() -> _check_bot_turn() is a
+# no-op here because auto_bot is false in the UI and _bot_running guards
+# the headless loop.
+func step_bot_once() -> bool:
+	if state.has_pending_decisions():
+		var dec: GameState.PendingDecision = state.pending_decisions[0]
+		if not state.bot_for_player.has(dec.player):
+			return false
+		_drain_one_for_bot(dec)
+		return true
+	if state.game_over or not pending_liturgy.is_empty():
+		return false
+	if not active_player_must_act():
+		return false
+	if not state.bot_for_player.has(state.active_player):
+		return false
+	var bot: BotBase = state.bot_for_player[state.active_player]
+	var decision := bot.pick_action(state, state.active_player)
+	var result := perform_action(decision["action_id"], decision.get("kwargs", {}))
+	return result.get("ok", false)
 
 
 func _drain_one_for_bot(dec: GameState.PendingDecision) -> void:
