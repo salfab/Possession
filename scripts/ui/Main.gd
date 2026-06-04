@@ -97,9 +97,9 @@ const PENITENCE_ARCH_RISE := {
 # The pawn is placed by sampling the quadratic Bézier through them. All
 # normalised board coordinates. Drag-calibrated via FAB → Hotspots.
 const ASCENDANT_TRACK_LIMIT := 10
-const ASCENDANT_TRACK_LEFT  := Vector2(0.178, 0.935)   # value -10
-const ASCENDANT_TRACK_APEX  := Vector2(0.495, 0.935)   # value 0 (curve apex)
-const ASCENDANT_TRACK_RIGHT := Vector2(0.812, 0.935)   # value +10
+const ASCENDANT_TRACK_LEFT  := Vector2(0.178, 0.912)   # value -10
+const ASCENDANT_TRACK_APEX  := Vector2(0.498, 0.937)   # value 0 (curve apex)
+const ASCENDANT_TRACK_RIGHT := Vector2(0.812, 0.912)   # value +10
 const ASCENDANT_PAWN_SIZE := Vector2(42, 52)
 const _ASC_HANDLE_SIZE := 22.0
 
