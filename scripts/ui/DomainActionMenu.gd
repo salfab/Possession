@@ -96,7 +96,7 @@ func open_for(d_id: int, state: GameState, player: int, _at: Vector2 = Vector2.Z
 	# Centred modal : wide enough to read comfortably on iPad, clamped so it
 	# never overflows a narrow viewport. (The tap position is ignored now.)
 	var vp := get_viewport_rect().size
-	_panel.custom_minimum_size.x = clampf(vp.x * 0.82, 380.0, 640.0)
+	_panel.custom_minimum_size.x = clampf(vp.x * 0.86, 560.0, 1040.0)
 	# Ensure we render on top of sibling Controls (board + HUD).
 	if get_parent() != null:
 		get_parent().move_child(self, -1)
@@ -143,7 +143,7 @@ func _build_header(d_id: int, state: GameState) -> Control:
 	var name_lbl := Label.new()
 	name_lbl.text = String(GameEnums.DOMAIN_NAMES.get(d_id, ""))
 	name_lbl.add_theme_font_override("font", Card.FONT_TITLE)
-	name_lbl.add_theme_font_size_override("font_size", 34)
+	name_lbl.add_theme_font_size_override("font_size", 64)
 	name_lbl.add_theme_color_override("font_color", Color(0.95, 0.88, 0.65))
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -151,7 +151,7 @@ func _build_header(d_id: int, state: GameState) -> Control:
 
 	var pill := Label.new()
 	pill.text = DomainData.chip_label(d_id)
-	pill.add_theme_font_size_override("font_size", 20)
+	pill.add_theme_font_size_override("font_size", 40)
 	pill.add_theme_color_override("font_color", Color(0.10, 0.07, 0.03))
 	pill.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pill.add_theme_stylebox_override("normal", _pill_style(DomainData.is_victory_domain(d_id)))
@@ -161,7 +161,7 @@ func _build_header(d_id: int, state: GameState) -> Control:
 	var adv := Label.new()
 	adv.text = DomainData.advantage_text(d_id)
 	adv.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	adv.add_theme_font_size_override("font_size", 19)
+	adv.add_theme_font_size_override("font_size", 38)
 	adv.add_theme_color_override("font_color", Color(0.76, 0.69, 0.52))
 	box.add_child(adv)
 
@@ -172,17 +172,17 @@ func _build_header(d_id: int, state: GameState) -> Control:
 	var dom: GameState.DomainState = state.domain(d_id)
 	var trans_n: int = dom.scandals.size() + dom.infamies.size()
 	meta.text = I18n.t("ui.menu.meta", [ctrl_txt, trans_n])
-	meta.add_theme_font_size_override("font_size", 16)
+	meta.add_theme_font_size_override("font_size", 32)
 	meta.add_theme_color_override("font_color", TXT_DIM)
 	box.add_child(meta)
 
-	return _margins(box, 22, 18)
+	return _margins(box, 32, 26)
 
 func _build_grid(d_id: int, state: GameState, player: int) -> Control:
 	var grid := GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 16)
 	for aid in ACTIONS:
 		var why: String = _why_cannot(aid, state, player, d_id)
 		var enabled: bool = why == ""
@@ -241,7 +241,7 @@ func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 func _section_label(key: String) -> Label:
 	var l := Label.new()
 	l.text = I18n.t(key)
-	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_font_size_override("font_size", 30)
 	l.add_theme_color_override("font_color", TXT_DIM)
 	return l
 
@@ -250,25 +250,25 @@ func _make_cell(title: String, sub: String, sub_col: Color, enabled: bool,
 	var pc := PanelContainer.new()
 	pc.add_theme_stylebox_override("panel", _cell_style(enabled))
 	pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pc.custom_minimum_size = Vector2(0, 76)   # big tap target
+	pc.custom_minimum_size = Vector2(0, 132)   # big tap target
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER   # centre text block in the taller cell
 	var t := Label.new()
 	t.text = title
-	t.add_theme_font_size_override("font_size", 26)
+	t.add_theme_font_size_override("font_size", 52)
 	t.add_theme_color_override("font_color", TXT if enabled else TXT_DIM)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t)
 	if sub != "":
 		var s := Label.new()
 		s.text = sub
-		s.add_theme_font_size_override("font_size", 17)
+		s.add_theme_font_size_override("font_size", 34)
 		s.add_theme_color_override("font_color", sub_col)
 		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(s)
-	pc.add_child(_margins(v, 16, 14))
+	pc.add_child(_margins(v, 24, 18))
 	# Disabled cells swallow the tap (STOP, no handler) so poking them neither
 	# acts nor closes the menu.
 	pc.mouse_filter = Control.MOUSE_FILTER_STOP
