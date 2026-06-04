@@ -251,27 +251,6 @@ var _pan_last: Vector2 = Vector2.ZERO
 var _touches: Dictionary = {}       # event.index -> position
 var _pinch_prev_dist: float = 0.0
 
-# Action ids exposed in the popup
-const POPUP_ACTIONS := [
-	GameEnums.ActionId.INVESTIR,
-	GameEnums.ActionId.EXPLOITER,
-	GameEnums.ActionId.SCELLER,
-	GameEnums.ActionId.FISSURER,
-]
-const POPUP_LABEL_KEYS := {
-	GameEnums.ActionId.INVESTIR:  "action.investir",
-	GameEnums.ActionId.EXPLOITER: "action.exploiter",
-	GameEnums.ActionId.SCELLER:   "action.sceller",
-	GameEnums.ActionId.FISSURER:  "action.fissurer",
-}
-
-# Domain-popup item ids ≥ these offsets are dynamic entries appended each
-# time the popup opens. Both ranges sit well above the ActionId enum (0-7)
-# to avoid collisions. We reserve 100 ids per kind, which is plenty (the
-# game has 10 transgressions max).
-const PROVOKE_ITEM_ID_BASE := 100
-const AMPLIFY_ITEM_ID_BASE := 200
-
 
 func _ready() -> void:
 	# Force the Card.FONT_* resources into their configured state (MSDF +
@@ -753,9 +732,8 @@ func _build_debug_bar() -> void:
 	add_child(_fab_menu)
 
 
-# Stable item ids for the FAB popup. Same range as the popup at the top of
-# the file (PROVOKE_ITEM_ID_BASE = 100), but we use 1000+ here so they
-# never collide with anything else.
+# Stable item ids for the FAB popup — 1000+ so they never collide with the
+# ActionId enum or any other id range in this file.
 const FAB_ZOOM_OUT   := 1000
 const FAB_ZOOM_RESET := 1001
 const FAB_ZOOM_IN    := 1002
