@@ -186,6 +186,11 @@ var _player_panel_styles: Dictionary = {}   # "pid_active" -> StyleBoxFlat
 var _fab_style_on: StyleBoxFlat
 var _fab_style_off: StyleBoxFlat
 var _trans_card_style: StyleBoxFlat
+# Signatures of the last-rendered marker / panel sets — skip the teardown +
+# rebuild when nothing changed (the heavy part is node creation + signal
+# reconnection, not the data read). Invalidated on new_game / load.
+var _domain_marker_sig: Dictionary = {}   # domain_id -> String
+var _panel_sig: String = ""
 var _status_label: Label
 var _ascendant_label: Label
 var _action_menu: DomainActionMenu
@@ -360,6 +365,9 @@ func _load_game() -> bool:
 			GameEnums.PlayerId.PURPLE: PLAYER_HUMAN,
 		}
 	state.from_dict(state_dict)
+	# Loaded board replaces the current one : invalidate render caches.
+	_domain_marker_sig.clear()
+	_panel_sig = ""
 	_apply_player_config()
 	return true
 
@@ -420,6 +428,10 @@ func new_game(config: Dictionary = {}) -> void:
 	# Reset the station-intro latch so the splash doesn't fire when starting
 	# a fresh game from mid-Exorcisme.
 	_last_seen_station = -1
+	# Fresh board : drop the marker/panel render-signature caches so the first
+	# refresh rebuilds from scratch instead of matching a stale prior game.
+	_domain_marker_sig.clear()
+	_panel_sig = ""
 	_refresh_all()
 	# AI may hold the initiative on the very first pulse — kick the stepper.
 	_maybe_resume_ai()
@@ -1512,16 +1524,23 @@ func _refresh_domain_markers(d_id: int) -> void:
 	var dots: CorruptionDots = _domain_dots.get(d_id)
 	if row == null or dots == null:
 		return
+	if state == null:
+		return
+	var d := state.domain(d_id)
+	# Corruption dot counts update in place (cheap) — always.
+	dots.set_counts(d.red_corruption, d.purple_corruption)
+	# Markers (one node + a signal connection each) are the costly part :
+	# rebuild only when the transgression set actually changed.
+	var sig := _domain_markers_sig(d)
+	if _domain_marker_sig.get(d_id, "") == sig:
+		return
+	_domain_marker_sig[d_id] = sig
 	# Detach the persistent CorruptionDots so it isn't queue_freed alongside
 	# the transgression markers.
 	if dots.get_parent() == row:
 		row.remove_child(dots)
 	for c in row.get_children():
 		c.queue_free()
-	if state == null:
-		row.add_child(dots)
-		return
-	var d := state.domain(d_id)
 	# Order : Scandale circles, then Infamie diamonds, then the corruption
 	# squares at the very end — matches the user's preference for one row of
 	# circles + diamonds + colour-tinted squares.
@@ -1529,8 +1548,17 @@ func _refresh_domain_markers(d_id: int) -> void:
 		row.add_child(_make_transgression_marker(ti, false))
 	for ti in d.infamies:
 		row.add_child(_make_transgression_marker(ti, true))
-	dots.set_counts(d.red_corruption, d.purple_corruption)
 	row.add_child(dots)
+
+
+func _domain_markers_sig(d) -> String:
+	var parts := PackedStringArray()
+	parts.append(I18n.current_locale)
+	for ti in d.scandals:
+		parts.append("s%s:%d" % [ti.def_id, ti.owner])
+	for ti in d.infamies:
+		parts.append("i%s:%d" % [ti.def_id, ti.owner])
+	return "|".join(parts)
 
 
 func _make_transgression_marker(ti: GameState.TransgressionInstance, infamy: bool) -> Control:
@@ -2087,21 +2115,25 @@ func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
 func _refresh_player_transgression_panels() -> void:
 	if _player_list_red == null or _player_list_blue == null:
 		return
-	for c in _player_list_red.get_children():
-		c.queue_free()
-	for c in _player_list_blue.get_children():
-		c.queue_free()
 	if state == null:
 		return
-	# Available-Corruption pool, displayed inside each player's coloured panel.
+	# Available-Corruption pool — labels update in place (cheap), always.
 	if _player_reserve_red != null:
 		var n_r: int = state.available_corruption[GameEnums.PlayerId.RED]
 		_player_reserve_red.text = I18n.t("ui.player_panel.reserve", [n_r, ("s" if n_r != 1 else "")])
 	if _player_reserve_blue != null:
 		var n_b: int = state.available_corruption[GameEnums.PlayerId.PURPLE]
 		_player_reserve_blue.text = I18n.t("ui.player_panel.reserve", [n_b, ("s" if n_b != 1 else "")])
-	var n_red := 0
-	var n_blue := 0
+	# The owned-transgression button lists are the costly rebuild (a Button +
+	# theme overrides + a signal per entry) — skip when the set is unchanged.
+	var sig := _panels_sig()
+	if sig == _panel_sig:
+		return
+	_panel_sig = sig
+	for c in _player_list_red.get_children():
+		c.queue_free()
+	for c in _player_list_blue.get_children():
+		c.queue_free()
 	for tid in TransgressionData.ALL_IDS:
 		var owner: int = state.transgression_owner(tid)
 		if owner == GameEnums.PlayerId.NONE:
@@ -2121,15 +2153,26 @@ func _refresh_player_transgression_panels() -> void:
 		btn.pressed.connect(_on_player_transgression_clicked.bind(String(tid), face, name_str))
 		if owner == GameEnums.PlayerId.RED:
 			_player_list_red.add_child(btn)
-			n_red += 1
 		else:
 			_player_list_blue.add_child(btn)
-			n_blue += 1
 	# Show "(aucune)" hint when empty so players know the panel is theirs.
 	if _player_list_red.get_child_count() == 0:
 		_player_list_red.add_child(_make_empty_hint())
 	if _player_list_blue.get_child_count() == 0:
 		_player_list_blue.add_child(_make_empty_hint())
+
+
+func _panels_sig() -> String:
+	var parts := PackedStringArray()
+	parts.append(I18n.current_locale)
+	for tid in TransgressionData.ALL_IDS:
+		var owner: int = state.transgression_owner(tid)
+		if owner == GameEnums.PlayerId.NONE:
+			continue
+		var inf: GameState.TransgressionInstance = state.find_transgression_instance(owner, tid, GameEnums.TransgressionFace.INFAMIE)
+		var face: int = GameEnums.TransgressionFace.INFAMIE if inf != null else GameEnums.TransgressionFace.SCANDALE
+		parts.append("%s:%d:%d" % [tid, owner, face])
+	return "|".join(parts)
 
 
 func _make_empty_hint() -> Label:
