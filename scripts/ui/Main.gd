@@ -981,6 +981,10 @@ func _refresh_all() -> void:
 # Per-domain board snapshot kept between refreshes so _animate_state_deltas
 # can spot what actually changed and flash only the affected slots.
 var _prev_board_state: Dictionary = {}
+# Domains whose snapshot changed in the most recent _animate_state_deltas
+# pass. _animate_action_feedback reads it to anchor effects for actions whose
+# kwargs don't carry an explicit domain (e.g. Amplifier).
+var _last_changed_domains: Array = []
 
 
 func _snapshot_board_state() -> Dictionary:
@@ -1011,12 +1015,19 @@ func _animate_state_deltas() -> void:
 	if state == null:
 		return
 	var curr: Dictionary = _snapshot_board_state()
+	_last_changed_domains = []
 	if not _prev_board_state.is_empty():
 		for d_id in curr.keys():
 			if not _prev_board_state.has(d_id):
 				continue
 			if _prev_board_state[d_id] != curr[d_id]:
+				_last_changed_domains.append(d_id)
 				_flash_domain(d_id)
+				# Domain just entered Penitence → trace its golden arch in.
+				var was_pen: bool = bool((_prev_board_state[d_id] as Dictionary).get("penitence", false))
+				var now_pen: bool = bool((curr[d_id] as Dictionary).get("penitence", false))
+				if now_pen and not was_pen:
+					_spawn_penitence_reveal(d_id)
 	_prev_board_state = curr
 
 
@@ -1037,13 +1048,53 @@ func _flash_domain(d_id: int) -> void:
 			.set_ease(Tween.EASE_OUT)
 
 
-# Per-action visual cue, replayed once per accepted move. Reads the record
-# TurnManager stamps on perform_action() so it fires identically for human
-# taps and for bot moves applied via step_bot_once(). Phase 1 keeps this
-# lightweight (targeted domain flash + a toast that names bot moves so a
-# watching human can follow the AI); richer per-action-type signatures are
-# the next milestone. Consumes the record so unrelated refreshes don't
-# replay it.
+# Normalised board centre of a Domain (live hotspot bounds, falls back to the
+# DOMAIN_POS const) — used to anchor action effects on the board.
+func _domain_center(d_id: int) -> Vector2:
+	var btn: Button = _hotspots.get(d_id)
+	if btn != null and is_instance_valid(btn):
+		return Vector2((btn.anchor_left + btn.anchor_right) * 0.5, (btn.anchor_top + btn.anchor_bottom) * 0.5)
+	return DOMAIN_POS.get(d_id, Vector2(0.5, 0.5))
+
+
+func _banner_center(st: int) -> Vector2:
+	return LITURGY_BANNER_POS.get(st, Vector2(0.9, 0.5))
+
+
+# Spawn a short, self-freeing ActionEffect at a normalised board position.
+func _spawn_action_effect(center_norm: Vector2, kind: String, col: Color) -> void:
+	if _zoom_layer == null:
+		return
+	var fx := ActionEffect.new()
+	fx.center = center_norm
+	fx.kind = kind
+	fx.color = col
+	_zoom_layer.add_child(fx)
+	fx.play()
+
+
+# Trace the Domain's golden arch contour as it enters Penitence (a brilliant
+# gold reveal that fades to the steady PenitenceArch underneath). Reuses the
+# live arch geometry, so it follows the calibrated zone rectangle + rise.
+func _spawn_penitence_reveal(d_id: int) -> void:
+	if _zoom_layer == null:
+		return
+	var g := _arch_geom(d_id)
+	if g.is_empty():
+		return
+	var fx := ActionEffect.new()
+	fx.kind = "penitence"
+	fx.arch = g
+	_zoom_layer.add_child(fx)
+	fx.play(0.85)
+
+
+# Per-action visual signature, replayed once per accepted move. Reads the
+# record TurnManager stamps on perform_action() so it fires identically for
+# human taps and for bot moves applied via step_bot_once(). Each action type
+# gets its own ActionEffect (drawn shape + colour) anchored on the board ;
+# the changed-domain flash from _animate_state_deltas runs alongside. Consumes
+# the record so unrelated refreshes don't replay it.
 func _animate_action_feedback() -> void:
 	if manager == null:
 		return
@@ -1053,11 +1104,38 @@ func _animate_action_feedback() -> void:
 	var who: int = manager.last_action_player
 	var kwargs: Dictionary = manager.last_kwargs
 	manager.consume_last_action()
-	# Domain-targeted actions: flash the affected domain even when the net
-	# board delta is subtle (e.g. an Investir that only bumps one counter).
+	var col: Color = GameEnums.player_color_light(who) if who != GameEnums.PlayerId.NONE else Color.WHITE
 	var d: int = int(kwargs.get("domain", -1))
-	if d >= 0:
-		_flash_domain(d)
+	match action:
+		GameEnums.ActionId.INVESTIR:
+			if d >= 0:
+				_spawn_action_effect(_domain_center(d), "place", col)
+		GameEnums.ActionId.EXPLOITER:
+			if d >= 0:
+				_spawn_action_effect(_domain_center(d), "exploit", col)
+		GameEnums.ActionId.SCELLER:
+			if d >= 0:
+				_spawn_action_effect(_domain_center(d), "seal", Color(0.92, 0.78, 0.35, 1.0))
+		GameEnums.ActionId.FISSURER:
+			if d >= 0:
+				_spawn_action_effect(_domain_center(d), "crack", Color(0.85, 0.80, 0.72, 1.0))
+		GameEnums.ActionId.PROVOQUER:
+			var pd: int = int(kwargs.get("origin", kwargs.get("target_domain", -1)))
+			if pd < 0 and not _last_changed_domains.is_empty():
+				pd = int(_last_changed_domains[0])
+			if pd >= 0:
+				_spawn_action_effect(_domain_center(pd), "spike", col)
+		GameEnums.ActionId.AMPLIFIER:
+			if not _last_changed_domains.is_empty():
+				_spawn_action_effect(_domain_center(int(_last_changed_domains[0])), "amplify", col)
+		GameEnums.ActionId.ENTRAVER:
+			var st: int = int(kwargs.get("station", -1))
+			if st >= 0:
+				_spawn_action_effect(_banner_center(st), "hinder", col)
+		GameEnums.ActionId.PUISER:
+			_spawn_action_effect(Vector2(0.5, 0.92), "shadow", Color(0.45, 0.30, 0.55, 1.0))
+		_:
+			pass
 	# Announce bot moves so a watching human knows what the AI just played.
 	# Human moves stay silent on success (the board change is the feedback)
 	# per the project's no-success-toast rule.

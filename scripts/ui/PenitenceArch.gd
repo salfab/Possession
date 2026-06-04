@@ -64,7 +64,7 @@ func _draw() -> void:
 
 
 func _draw_arch(p: Dictionary, sz: Vector2) -> void:
-	var pts := _arch_points(p, sz)
+	var pts := outline(p, sz)
 	if pts.size() < 2:
 		return
 	# Dark halo underneath for legibility on light niche art, then the gold.
@@ -80,8 +80,9 @@ func _draw_arch(p: Dictionary, sz: Vector2) -> void:
 # Build the closed arch outline as a polyline : up the left side from the
 # bottom to the shoulder (= rectangle top), around the curved top (left
 # shoulder → apex → right shoulder), down the right side, then close along
-# the flat bottom.
-func _arch_points(p: Dictionary, sz: Vector2) -> PackedVector2Array:
+# the flat bottom. Static so the penitence-reveal animation (ActionEffect)
+# can trace the exact same contour.
+static func outline(p: Dictionary, sz: Vector2) -> PackedVector2Array:
 	var cx: float = float(p.get("cx", 0.5)) * sz.x
 	var hw: float = float(p.get("hw", 0.08)) * sz.x
 	var top: float = float(p.get("top", 0.4)) * sz.y
