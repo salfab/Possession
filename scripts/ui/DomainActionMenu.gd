@@ -221,7 +221,7 @@ func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 	for ti in dom.scandals:
 		if ti.owner != player:
 			continue
-		if GameRules.why_cannot_amplifier(state, player, ti.def_id) != "":
+		if GameRules.why_cannot_amplifier(state, player, ti.def_id, ti) != "":
 			continue
 		var lbl := I18n.t("ui.popup.amplify_in",
 			[TransgressionData.name_of(ti.def_id), GameEnums.DOMAIN_NAMES[d_id]])

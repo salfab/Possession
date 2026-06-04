@@ -318,8 +318,11 @@ static func why_cannot_provoquer(state: GameState, player: int, def_id: String) 
 	return ""
 
 
-static func why_cannot_amplifier(state: GameState, player: int, def_id: String) -> String:
-	var ti: GameState.TransgressionInstance = state.find_transgression_instance(player, def_id, GameEnums.TransgressionFace.SCANDALE)
+static func why_cannot_amplifier(state: GameState, player: int, def_id: String, cached_ti: GameState.TransgressionInstance = null) -> String:
+	# cached_ti lets callers that already hold the player's Scandale instance
+	# (e.g. iterating a domain's scandals) skip the find_transgression_instance
+	# scan — same result, no O(domains×transgressions) lookup.
+	var ti: GameState.TransgressionInstance = cached_ti if cached_ti != null else state.find_transgression_instance(player, def_id, GameEnums.TransgressionFace.SCANDALE)
 	if ti == null:
 		return I18n.t("err.no_scandale_owned")
 	var origin: int = ti.origin_domain
