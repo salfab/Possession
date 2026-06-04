@@ -1023,6 +1023,11 @@ func _animate_state_deltas() -> void:
 			if _prev_board_state[d_id] != curr[d_id]:
 				_last_changed_domains.append(d_id)
 				_flash_domain(d_id)
+				# Domain just entered Penitence → trace its golden arch in.
+				var was_pen: bool = bool((_prev_board_state[d_id] as Dictionary).get("penitence", false))
+				var now_pen: bool = bool((curr[d_id] as Dictionary).get("penitence", false))
+				if now_pen and not was_pen:
+					_spawn_penitence_reveal(d_id)
 	_prev_board_state = curr
 
 
@@ -1066,6 +1071,22 @@ func _spawn_action_effect(center_norm: Vector2, kind: String, col: Color) -> voi
 	fx.color = col
 	_zoom_layer.add_child(fx)
 	fx.play()
+
+
+# Trace the Domain's golden arch contour as it enters Penitence (a brilliant
+# gold reveal that fades to the steady PenitenceArch underneath). Reuses the
+# live arch geometry, so it follows the calibrated zone rectangle + rise.
+func _spawn_penitence_reveal(d_id: int) -> void:
+	if _zoom_layer == null:
+		return
+	var g := _arch_geom(d_id)
+	if g.is_empty():
+		return
+	var fx := ActionEffect.new()
+	fx.kind = "penitence"
+	fx.arch = g
+	_zoom_layer.add_child(fx)
+	fx.play(0.85)
 
 
 # Per-action visual signature, replayed once per accepted move. Reads the

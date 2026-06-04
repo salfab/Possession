@@ -220,3 +220,10 @@ Point clé d'archi : tout passe par le MÊME hook `_animate_action_feedback()` b
 queue de `_refresh_all()`, qui lit `manager.last_action`. Donc un coup humain et un coup
 bot déclenchent exactement la même animation — zéro code spécifique au bot dans l'UI.
 C'est le payoff du `last_action` posé en Phase 1.
+
+Ajout : animation de **pénitence**. Quand un domaine entre en pénitence, on trace son
+contour d'arche en or brillant (révélation qui s'estompe vers l'arche statique muette).
+Réutilise EXACTEMENT les points de l'arche calibrée (`PenitenceArch.outline()` rendue
+statique) — donc l'animation suit le rectangle de zone + le `rise` calibrés. Détecté via
+la transition `penitence` false→true dans le snapshot de `_animate_state_deltas`, donc
+ça marche que le changement vienne d'un coup humain, d'un coup bot ou d'une liturgie.

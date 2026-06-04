@@ -14,6 +14,9 @@ extends Control
 var center: Vector2 = Vector2(0.5, 0.5)   # normalised board position
 var color: Color = Color.WHITE
 var kind: String = "place"
+# For kind == "penitence" : the arch geometry {cx, hw, top, bottom, rise} to
+# trace (same schema PenitenceArch consumes).
+var arch: Dictionary = {}
 var _progress: float = 0.0:
 	set(v):
 		_progress = v
@@ -36,6 +39,9 @@ func play(duration: float = 0.55) -> void:
 func _draw() -> void:
 	var sz := size
 	if sz.x <= 0.0 or sz.y <= 0.0:
+		return
+	if kind == "penitence":
+		_draw_penitence(sz)
 		return
 	var c := Vector2(center.x * sz.x, center.y * sz.y)
 	var base := sz.y * 0.055
@@ -136,6 +142,27 @@ func _draw_hinder(c: Vector2, base: float) -> void:
 	var s := base * 0.5
 	draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(color.r, color.g, color.b, a), 3.0, true)
 	draw_line(c + Vector2(-s, s), c + Vector2(s, -s), Color(color.r, color.g, color.b, a), 3.0, true)
+
+
+# PÉNITENCE — trace the Domain's arch contour in brilliant gold as the
+# Domain enters Penitence, then fade out so the steady (muted) PenitenceArch
+# underneath takes over. Reuses the exact same outline points.
+func _draw_penitence(sz: Vector2) -> void:
+	if arch.is_empty():
+		return
+	var pts := PenitenceArch.outline(arch, sz)
+	if pts.size() < 2:
+		return
+	# Trace the outline in over the first half ; hold full + fade the bright
+	# overlay out over the second half.
+	var trace := clampf(_progress / 0.5, 0.0, 1.0)
+	var fade := 1.0 if _progress < 0.5 else clampf(1.0 - (_progress - 0.5) / 0.5, 0.0, 1.0)
+	var shown: int = maxi(2, int(ceil(pts.size() * trace)))
+	var sub := pts.slice(0, shown)
+	var bright := Color(1.0, 0.92, 0.55)
+	# Glow halo, then the bright gold stroke.
+	draw_polyline(sub, Color(bright.r, bright.g, bright.b, 0.35 * fade), 8.0, true)
+	draw_polyline(sub, Color(bright.r, bright.g, bright.b, 0.98 * fade), 3.5, true)
 
 
 # PUISER — dark wisps rising from the bottom (drawing from the Shadow).
