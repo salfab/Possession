@@ -195,3 +195,28 @@ Côté UI (`Main.gd`) :
 Prochain jalon : une signature visuelle dédiée par type d'action (pose corruption,
 entraver, provoquer, amplifier, puiser…) — le hook `_animate_action_feedback()` est
 déjà le point d'accroche.
+
+---
+
+## Étape — Animations par type d'action (rendre les coups lisibles)
+
+Phase 2 du même chantier : maintenant que l'IA joue dans l'UI avec un cadencement,
+chaque coup mérite une signature visuelle — sinon on voit le plateau changer sans
+savoir CE QUI s'est passé. Surtout en IA vs IA où ça défile.
+
+`ActionEffect.gd` : un petit Control transitoire (plein-board dans le ZoomLayer, comme
+les arches), qui se dessine en `_draw()` selon un `kind` et s'auto-détruit après ~0.55 s
+(une tween anime `progress` 0→1). Une signature par action :
+- Investir → corruption qui éclot (anneaux + points radiants) ;
+- Exploiter → anneau qui converge vers l'intérieur ;
+- Sceller → arc doré qui se referme en anneau plein ;
+- Fissurer → éclats qui rayonnent ;
+- Provoquer → salve de pointes ;
+- Amplifier → deux anneaux d'écho déphasés ;
+- Entraver → barre horizontale qui barre la bannière de Station ;
+- Puiser → volutes sombres qui montent.
+
+Point clé d'archi : tout passe par le MÊME hook `_animate_action_feedback()` branché en
+queue de `_refresh_all()`, qui lit `manager.last_action`. Donc un coup humain et un coup
+bot déclenchent exactement la même animation — zéro code spécifique au bot dans l'UI.
+C'est le payoff du `last_action` posé en Phase 1.
