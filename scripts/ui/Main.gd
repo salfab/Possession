@@ -185,6 +185,15 @@ var _endgame_shown: bool = false
 var _trans_dialog: AcceptDialog
 var _trans_content: VBoxContainer
 var _trans_scroll: ScrollContainer
+# Card thumbnails (Card.tscn wrappers) keyed by transgression id. The
+# Transgressions dialog rebuilds its item rows on every open because their
+# state — face, provoke/amplify legality, hints — changes each turn. But the
+# expensive part is instantiating Card.tscn (8 nodes + MSDF font config + text
+# shaping), and that depends only on tid + face. So we keep the thumbnails
+# alive across opens : _populate detaches them before freeing the old rows,
+# then reattaches them into the freshly rebuilt rows. Eliminates ~10
+# Card.tscn.instantiate() + _ready() per open — the hitch before the list shows.
+var _trans_thumb_pool: Dictionary = {}
 
 # "Placed transgressions" summary dialog — opened by tapping any marker on
 # a domain. Two columns, one per demon, listing every Transgression they
@@ -3302,6 +3311,13 @@ func _on_btn_transgressions() -> void:
 
 
 func _populate_transgressions_dialog() -> void:
+	# Detach the pooled thumbnails first so the queue_free below frees the old
+	# item rows WITHOUT taking the (reusable) Card thumbnails down with them.
+	# They get reparented into the freshly built rows by _make_transgression_card.
+	for tid in _trans_thumb_pool:
+		var thumb: Control = _trans_thumb_pool[tid]
+		if is_instance_valid(thumb) and thumb.get_parent() != null:
+			thumb.get_parent().remove_child(thumb)
 	for c in _trans_content.get_children():
 		c.queue_free()
 	var p: int = state.active_player
@@ -3342,15 +3358,11 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 		if inf_inst != null:
 			face = GameEnums.TransgressionFace.INFAMIE
 
-	# Card thumbnail — composed at runtime so text follows the locale.
-	var captured_name: String = String(def.get("name", ""))
-	var captured_tid: String = tid
-	var img: Control = _make_card_thumb(Vector2(240, 336))
+	# Card thumbnail — pooled across dialog opens (see _trans_thumb_pool) and
+	# re-bound to the current face. Composed at runtime so text follows locale.
+	var img: Control = _get_or_make_trans_thumb(tid)
 	img.set_meta("face", face)
-	img.set_meta("tid", tid)
 	(img.get_meta("card_node") as Card).setup_transgression(tid, face)
-	(img.get_meta("click_btn") as Button).pressed.connect(
-		_on_transgression_image_clicked.bind(img, captured_tid, captured_name))
 	top_row.add_child(img)
 
 	# Right column next to the image: status badge + flip button + (if any)
@@ -3449,6 +3461,23 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	_set_pass_through(panel)
 
 	return panel
+
+
+# Returns the pooled card thumbnail for `tid`, building it on first request.
+# The thumbnail (a Card.tscn wrapper from _make_card_thumb) is expensive to
+# build and depends only on tid, so it survives across Transgressions-dialog
+# opens. The click→zoom handler is wired once here ; it re-derives the card
+# name from `tid` at click time, so a locale switch between opens can't leave
+# a stale window title bound into the connection.
+func _get_or_make_trans_thumb(tid: String) -> Control:
+	if _trans_thumb_pool.has(tid):
+		return _trans_thumb_pool[tid]
+	var img: Control = _make_card_thumb(Vector2(240, 336))
+	img.set_meta("tid", tid)
+	(img.get_meta("click_btn") as Button).pressed.connect(
+		_on_transgression_image_clicked.bind(img, tid))
+	_trans_thumb_pool[tid] = img
+	return img
 
 
 # Builds a clickable card thumbnail at the given minimum size: AspectRatio-
@@ -4063,8 +4092,9 @@ func _on_transgression_flip_pressed(img: Control, btn: Button, tid: String) -> v
 	btn.text = _flip_button_label(nxt)
 
 
-func _on_transgression_image_clicked(img: Control, tid: String, name_str: String) -> void:
+func _on_transgression_image_clicked(img: Control, tid: String) -> void:
 	var cur: int = img.get_meta("face", GameEnums.TransgressionFace.SCANDALE)
+	var name_str: String = String(TransgressionData.get_def(tid).get("name", ""))
 	_show_fullscreen_transgression(tid, cur, name_str)
 
 
