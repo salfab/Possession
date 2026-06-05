@@ -2274,9 +2274,15 @@ func _show_new_game_dialog() -> void:
 	dlg.title = I18n.t("ui.dialog.title.new_game")
 	dlg.ok_button_text = I18n.t("ui.dialog.start")
 	dlg.add_cancel_button(I18n.t("ui.dialog.cancel"))
+	# Retina (stretch=disabled) : dialogs render at the small project default
+	# font → the Human/AI picker was barely visible. Bump the whole dialog's
+	# font so the selector is legible and tappable.
+	var dlg_theme := Theme.new()
+	dlg_theme.default_font_size = 40
+	dlg.theme = dlg_theme
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
+	box.add_theme_constant_override("separation", 28)
 	dlg.add_child(box)
 
 	var picks: Dictionary = {}
@@ -2285,10 +2291,11 @@ func _show_new_game_dialog() -> void:
 		row.add_theme_constant_override("separation", 12)
 		var name_lbl := Label.new()
 		name_lbl.text = GameEnums.player_name(pid)
-		name_lbl.custom_minimum_size = Vector2(160, 0)
+		name_lbl.custom_minimum_size = Vector2(240, 0)
 		name_lbl.add_theme_color_override("font_color", GameEnums.player_color_light(pid))
 		row.add_child(name_lbl)
 		var opt := OptionButton.new()
+		opt.custom_minimum_size = Vector2(300, 70)
 		opt.add_item(I18n.t("ui.player.human"), 0)   # idx 0 -> PLAYER_HUMAN
 		opt.add_item(I18n.t("ui.player.ai"), 1)       # idx 1 -> PLAYER_AI
 		opt.selected = 1 if _player_config.get(pid, PLAYER_HUMAN) == PLAYER_AI else 0
