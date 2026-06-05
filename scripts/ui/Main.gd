@@ -399,6 +399,7 @@ func _maybe_offer_resume() -> void:
 		_delete_save()
 		dlg.queue_free()
 	)
+	_hide_other_exclusive_dialogs(dlg)
 	dlg.popup_centered()
 
 
@@ -594,7 +595,7 @@ func _build_overlays() -> void:
 		var badges_row := HBoxContainer.new()
 		badges_row.anchor_left = pos.x - dh.x
 		badges_row.anchor_right = pos.x + dh.x
-		badges_row.anchor_top = pos.y + dh.y - 0.04
+		badges_row.anchor_top = pos.y + dh.y - 0.065
 		badges_row.anchor_bottom = pos.y + dh.y
 		badges_row.offset_left = 0
 		badges_row.offset_right = 0
@@ -2312,6 +2313,7 @@ func _show_new_game_dialog() -> void:
 		dlg.queue_free()
 	)
 	dlg.canceled.connect(func(): dlg.queue_free())
+	_hide_other_exclusive_dialogs(dlg)
 	dlg.popup_centered()
 
 
@@ -4254,7 +4256,27 @@ func _flip_static_card() -> void:
 	tw.tween_callback(func(): _static_is_flipping = false)
 
 
+# Godot enforces a single exclusive child window per parent. We keep every
+# dialog exclusive for modality, so before showing one we dismiss any other
+# exclusive dialog still visible. Hide (not free) — persistent dialogs are
+# reused ; ephemeral ones free themselves on their own confirmed/canceled.
+# The targeting / effect-detail dialogs (popup_centered_clamped over the
+# fullscreen card) are intentionally stacked (see CLAUDE.md) and don't go
+# through here, so they're left untouched.
+func _hide_other_exclusive_dialogs(keep: Window) -> void:
+	for child in get_children():
+		if child is AcceptDialog and child != keep:
+			var w := child as Window
+			if w.exclusive and w.visible:
+				w.hide()
+
+
 func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
+	# Godot allows only ONE exclusive child window per parent. Hide any other
+	# exclusive dialog still up before popping this one, otherwise
+	# _set_transient_exclusive_child errors (e.g. the boot resume prompt over a
+	# refresh-spawned liturgy/decision/endgame dialog).
+	_hide_other_exclusive_dialogs(dlg)
 	# Make sure no static min_size held over from the build pushes the
 	# window past the viewport.
 	dlg.min_size = Vector2i.ZERO

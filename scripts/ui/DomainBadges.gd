@@ -14,8 +14,8 @@ extends Control
 #   • Sealed     : padlock — filled square with an inverted-U shackle
 #   • Penitence  : a + sign (cross) drawn from two thick rectangles
 
-const BADGE_SIZE := 18.0
-const BADGE_GAP  := 6.0
+const BADGE_SIZE := 26.0
+const BADGE_GAP  := 5.0
 
 var controller_color: Color = Color(0, 0, 0, 0)  # alpha=0 means "no controller"
 var controller_letter: String = ""
@@ -102,6 +102,10 @@ func _draw_padlock(top_left: Vector2) -> void:
 	# (otherwise the legacy muted-gold default). Shackle : inverted U arc
 	# at top in dark ink.
 	var dark := Color(0, 0, 0, 0.85)
+	# Backing disc so the padlock reads against busy board art and stands out
+	# from the controller shield / penitence cross as the strong "sealed" cue.
+	var center := top_left + Vector2(BADGE_SIZE * 0.5, BADGE_SIZE * 0.5)
+	draw_circle(center, BADGE_SIZE * 0.52, Color(0, 0, 0, 0.45))
 	var body_top: float = top_left.y + BADGE_SIZE * 0.42
 	var body_h: float = BADGE_SIZE * 0.55
 	var body_x: float = top_left.x + BADGE_SIZE * 0.18
