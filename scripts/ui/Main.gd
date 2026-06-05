@@ -246,6 +246,7 @@ var _player_list_red: HFlowContainer
 var _player_list_blue: HFlowContainer
 var _player_reserve_red: Label
 var _player_reserve_blue: Label
+var _rupture_rows: Dictionary = {}  # pid -> {profondeur,etendue,ancrage,complete: Label}
 
 # Floating Action Button + the popup menu it opens. Replaces the previous
 # row of buttons across the bottom of the screen.
@@ -1010,11 +1011,41 @@ func _handle_action_result(result: Dictionary, success_text: String = "") -> voi
 
 # ─── REFRESH ──────────────────────────────────────────────────────────────────
 
+# Soul-rupture recap shown under each player frame. The rupture is a COLLECTIVE
+# objective (both demons together corrupt the soul ; the winner among them is
+# decided later by Fiat Tenebris / Ascendant), so both panels show identical
+# content. Cheap : only updates label text/colour, no node churn.
+func _refresh_rupture_recap() -> void:
+	if state == null or _rupture_rows.is_empty():
+		return
+	var rep := EndGameResolver.check_rupture(state)
+	var inf_total: int = state.count_total_infamies()
+	var transg: int = state.count_transgressed_domains()
+	var sealed: int = state.count_sealed_domains()
+	for pid in _rupture_rows.keys():
+		var rows: Dictionary = _rupture_rows[pid]
+		_set_rupture_row(rows["profondeur"], rep.profondeur, I18n.t("ui.rupture.profondeur", [inf_total]))
+		_set_rupture_row(rows["etendue"], rep.etendue, I18n.t("ui.rupture.etendue", [transg]))
+		_set_rupture_row(rows["ancrage"], rep.ancrage, I18n.t("ui.rupture.ancrage", [sealed]))
+		var cl: Label = rows["complete"]
+		cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
+		cl.add_theme_color_override("font_color",
+			Color(0.55, 0.85, 0.50) if rep.complete else Color(0.78, 0.70, 0.50))
+
+
+# "[x]" / "[  ]" is an ASCII (tofu-proof) non-colour cue paired with the colour.
+func _set_rupture_row(lbl: Label, ok: bool, body: String) -> void:
+	lbl.text = ("[x] " if ok else "[  ] ") + body
+	lbl.add_theme_color_override("font_color",
+		Color(0.55, 0.85, 0.50) if ok else Color(0.72, 0.64, 0.52))
+
+
 func _refresh_all() -> void:
 	_refresh_status()
 	_refresh_overlays()
 	_refresh_log()
 	_refresh_player_transgression_panels()
+	_refresh_rupture_recap()
 	_refresh_active_player_highlight()
 	_refresh_fab_highlight()
 	_animate_state_deltas()
@@ -2088,6 +2119,30 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
+
+	# Rupture-de-l'âme recap (collective end-game objective — identical for both
+	# demons, shown under each frame). Added to the vbox AFTER the expanding
+	# scroll so it sits at the bottom of the frame ; it's a sibling of the list,
+	# so the list rebuild in _refresh_player_transgression_panels never touches it.
+	vbox.add_child(HSeparator.new())
+	var rup_title := Label.new()
+	rup_title.text = I18n.t("ui.rupture.title")
+	rup_title.add_theme_font_size_override("font_size", 18)
+	rup_title.add_theme_color_override("font_color", Color(0.88, 0.80, 0.55))
+	rup_title.add_theme_color_override("font_outline_color", Color.BLACK)
+	rup_title.add_theme_constant_override("outline_size", 3)
+	rup_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(rup_title)
+	var rows: Dictionary = {}
+	for key in ["profondeur", "etendue", "ancrage", "complete"]:
+		var lbl := Label.new()
+		lbl.add_theme_font_size_override("font_size", 16)
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vbox.add_child(lbl)
+		rows[key] = lbl
+	(rows["complete"] as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	(rows["complete"] as Label).add_theme_font_size_override("font_size", 17)
+	_rupture_rows[pid] = rows
 
 	return {"panel": panel, "list": list, "reserve": reserve}
 

@@ -78,6 +78,17 @@ const STRINGS := {
 	"ui.menu.provoke_section": {"fr": "Provoquer ici", "en": "Provoke here"},
 	"ui.menu.amplify_section": {"fr": "Amplifier",     "en": "Amplify"},
 
+	# Soul-rupture recap (player panels) — collective end-game objective.
+	"ui.rupture.title":      {"fr": "Rupture de l'âme", "en": "Soul Rupture"},
+	"ui.rupture.profondeur": {"fr": "Profondeur — %d Infamie(s)  (≥3, ou Foi/Volonté)",
+		"en": "Depth — %d Infamy(ies)  (≥3, or Faith/Will)"},
+	"ui.rupture.etendue":    {"fr": "Étendue — %d/4 domaines transgressés",
+		"en": "Spread — %d/4 Domains transgressed"},
+	"ui.rupture.ancrage":    {"fr": "Ancrage — %d scellé(s)  (≥2, ou Volonté sc.+tr.)",
+		"en": "Anchoring — %d sealed  (≥2, or Will sealed+transgressed)"},
+	"ui.rupture.complete":   {"fr": "→ Rupture COMPLÈTE", "en": "→ Rupture COMPLETE"},
+	"ui.rupture.incomplete": {"fr": "→ Rupture incomplète", "en": "→ Rupture incomplete"},
+
 	# Stations (with their roman numerals so the prefix stays universal)
 	"station.murmures":     {"fr": "I — Murmures",    "en": "I — Whispers"},
 	"station.tentation":    {"fr": "II — Tentation",  "en": "II — Temptation"},
