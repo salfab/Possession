@@ -89,6 +89,33 @@ func _on_scrim_input(ev: InputEvent) -> void:
 func close() -> void:
 	visible = false
 
+
+# Deterministic click-out : close on any press whose position is outside the
+# panel rect. Runs before GUI picking, so it doesn't depend on the scrim
+# winning the pick (which the layering could otherwise steal). Presses inside
+# the panel fall through to the cells. Only active while the menu is visible,
+# so it never interferes with the tap that opens it (visible is still false at
+# that instant) nor with normal play.
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	var pos: Vector2
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if not mb.pressed:
+			return
+		pos = mb.position
+	elif event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if not st.pressed:
+			return
+		pos = st.position
+	else:
+		return
+	if not _panel.get_global_rect().has_point(pos):
+		close()
+		get_viewport().set_input_as_handled()
+
 func open_for(d_id: int, state: GameState, player: int, _at: Vector2 = Vector2.ZERO) -> void:
 	if not is_inside_tree():
 		return
