@@ -35,6 +35,10 @@ const ARCH_SEGMENTS := 24   # polyline segments for the curved top
 var arches: Dictionary = {}
 # Set of domain_ids currently visible (in penitence, or all in calib mode).
 var visible_ids: Dictionary = {}
+# Whether to draw the "+" keystone at each apex. True for the penitence
+# overlay ; the seal overlay reuses this class with keystone = false (the
+# colour itself + the padlock badge are the cue there).
+var keystone: bool = true
 
 
 func _init() -> void:
@@ -67,14 +71,18 @@ func _draw_arch(p: Dictionary, sz: Vector2) -> void:
 	var pts := outline(p, sz)
 	if pts.size() < 2:
 		return
-	# Dark halo underneath for legibility on light niche art, then the gold.
+	# Per-arch stroke colour (seal arches pass the owning demon's colour) ;
+	# defaults to the muted gold of the penitence overlay.
+	var col: Color = p.get("color", ARCH_COLOR)
+	# Dark halo underneath for legibility on light niche art, then the stroke.
 	draw_polyline(pts, ARCH_COLOR_HALO, ARCH_WIDTH + 2.0, true)
-	draw_polyline(pts, ARCH_COLOR, ARCH_WIDTH, true)
-	# Non-colour cue : a small "+" keystone at the apex.
-	var cx: float = float(p.get("cx", 0.5)) * sz.x
-	var top: float = float(p.get("top", 0.4)) * sz.y
-	var rise: float = float(p.get("rise", 0.05)) * sz.y
-	_draw_keystone(Vector2(cx, top - rise))
+	draw_polyline(pts, col, ARCH_WIDTH, true)
+	# Non-colour cue : a small "+" keystone at the apex (penitence overlay only).
+	if keystone:
+		var cx: float = float(p.get("cx", 0.5)) * sz.x
+		var top: float = float(p.get("top", 0.4)) * sz.y
+		var rise: float = float(p.get("rise", 0.05)) * sz.y
+		_draw_keystone(Vector2(cx, top - rise))
 
 
 # Build the closed arch outline as a polyline : up the left side from the

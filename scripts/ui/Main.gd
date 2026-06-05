@@ -147,6 +147,8 @@ var _debug_hotspots: bool = false   # cyan outline overlay for calibration
 # single apex handle). _arch_calibrating forces all 5 arches visible + spawns
 # one draggable apex handle each; off, only penitent Domains show.
 var _arch_overlay: PenitenceArch
+var _seal_arch_overlay: PenitenceArch   # owner-coloured ring on sealed domains
+const SEAL_ARCH_RISE_FACTOR := 0.72     # nests just inside the penitence arch
 var _arch_rise: Dictionary = {}     # domain_id -> float (apex rise, normalised)
 var _arch_calibrating: bool = false
 var _arch_handles: Dictionary = {}  # domain_id -> apex handle Button
@@ -619,6 +621,14 @@ func _build_overlays() -> void:
 	_arch_overlay = PenitenceArch.new()
 	_arch_overlay.name = "PenitenceArchOverlay"
 	_zoom_layer.add_child(_arch_overlay)
+
+	# Seal ring : same arch class, owner-coloured, slightly smaller rise, no
+	# keystone — a strong "this Domain is sealed" cue that nests just inside
+	# the penitence arch when a Domain is both sealed and in penitence.
+	_seal_arch_overlay = PenitenceArch.new()
+	_seal_arch_overlay.name = "SealArchOverlay"
+	_seal_arch_overlay.keystone = false
+	_zoom_layer.add_child(_seal_arch_overlay)
 
 	_ascendant_pawn = AscendantPawn.new()
 	_ascendant_pawn.name = "AscendantPawn"
@@ -1352,6 +1362,7 @@ func _refresh_overlays() -> void:
 	_refresh_ascendant_pawn()
 	_refresh_liturgy_banners()
 	_refresh_penitence_arches()
+	_refresh_seal_arches()
 
 
 func _refresh_ascendant_pawn() -> void:
@@ -2941,6 +2952,29 @@ func _refresh_penitence_arches() -> void:
 			vis[d_id] = true
 	_arch_overlay.set_arches(geom)
 	_arch_overlay.set_visible_ids(vis)
+
+
+# Owner-coloured ring on every sealed Domain — reuses the penitence arch class
+# with a smaller rise (nests inside) and the seal owner's colour, no keystone.
+func _refresh_seal_arches() -> void:
+	if _seal_arch_overlay == null:
+		return
+	var geom: Dictionary = {}
+	var vis: Dictionary = {}
+	if state != null:
+		for d_id in DomainData.DOMAINS:
+			if not state.is_sealed(d_id):
+				continue
+			var g := _arch_geom(d_id)
+			if g.is_empty():
+				continue
+			# Slightly smaller rise so it sits inside the penitence arch.
+			g["rise"] = float(g.get("rise", 0.05)) * SEAL_ARCH_RISE_FACTOR
+			g["color"] = GameEnums.player_color_light(state.domain(d_id).seal_owner)
+			geom[d_id] = g
+			vis[d_id] = true
+	_seal_arch_overlay.set_arches(geom)
+	_seal_arch_overlay.set_visible_ids(vis)
 
 
 func _on_btn_toggle_arches() -> void:
