@@ -391,7 +391,14 @@ func _drain_one_for_bot(dec: GameState.PendingDecision) -> void:
 		if opts.is_empty():
 			resolve_decision({"skip": true})
 		else:
-			resolve_decision({"domain": opts[0]})
+			# Let the owning bot evaluate each option (greedy 1-ply Eval) and
+			# pick the best domain, or skip — instead of blindly taking opts[0].
+			var bot: BotBase = state.bot_for_player.get(dec.player)
+			var chosen: int = bot.pick_free_exploit(state, dec.player, opts) if bot != null else int(opts[0])
+			if chosen < 0:
+				resolve_decision({"skip": true})
+			else:
+				resolve_decision({"domain": chosen})
 	elif dec.kind == "confession":
 		var avail := LiturgyResolver.available_confession_kinds(state, dec)
 		if avail.is_empty():
