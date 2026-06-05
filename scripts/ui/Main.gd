@@ -242,11 +242,12 @@ var _placed_list_blue: VBoxContainer
 # flippable card view.
 var _player_panel_red: PanelContainer
 var _player_panel_blue: PanelContainer
-var _player_list_red: HFlowContainer
-var _player_list_blue: HFlowContainer
+var _player_list_red: VBoxContainer
+var _player_list_blue: VBoxContainer
 var _player_reserve_red: Label
 var _player_reserve_blue: Label
-var _rupture_rows: Dictionary = {}  # pid -> {profondeur,etendue,ancrage,complete: Label}
+var _rupture_panel: PanelContainer
+var _rupture_rows: Dictionary = {}  # {title,profondeur,etendue,ancrage,complete: Label}
 
 # Floating Action Button + the popup menu it opens. Replaces the previous
 # row of buttons across the bottom of the screen.
@@ -1011,10 +1012,8 @@ func _handle_action_result(result: Dictionary, success_text: String = "") -> voi
 
 # ─── REFRESH ──────────────────────────────────────────────────────────────────
 
-# Soul-rupture recap shown under each player frame. The rupture is a COLLECTIVE
-# objective (both demons together corrupt the soul ; the winner among them is
-# decided later by Fiat Tenebris / Ascendant), so both panels show identical
-# content. Cheap : only updates label text/colour, no node churn.
+# Soul-rupture recap. The rupture is collective, so it is shown once for the
+# sidebar instead of repeated under both demon panels.
 func _refresh_rupture_recap() -> void:
 	if state == null or _rupture_rows.is_empty():
 		return
@@ -1022,15 +1021,14 @@ func _refresh_rupture_recap() -> void:
 	var inf_total: int = state.count_total_infamies()
 	var transg: int = state.count_transgressed_domains()
 	var sealed: int = state.count_sealed_domains()
-	for pid in _rupture_rows.keys():
-		var rows: Dictionary = _rupture_rows[pid]
-		_set_rupture_row(rows["profondeur"], rep.profondeur, I18n.t("ui.rupture.profondeur", [inf_total]))
-		_set_rupture_row(rows["etendue"], rep.etendue, I18n.t("ui.rupture.etendue", [transg]))
-		_set_rupture_row(rows["ancrage"], rep.ancrage, I18n.t("ui.rupture.ancrage", [sealed]))
-		var cl: Label = rows["complete"]
-		cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
-		cl.add_theme_color_override("font_color",
-			Color(0.55, 0.85, 0.50) if rep.complete else Color(0.78, 0.70, 0.50))
+	(_rupture_rows["title"] as Label).text = I18n.t("ui.rupture.title")
+	_set_rupture_row(_rupture_rows["profondeur"], rep.profondeur, I18n.t("ui.rupture.profondeur", [inf_total]))
+	_set_rupture_row(_rupture_rows["etendue"], rep.etendue, I18n.t("ui.rupture.etendue", [transg]))
+	_set_rupture_row(_rupture_rows["ancrage"], rep.ancrage, I18n.t("ui.rupture.ancrage", [sealed]))
+	var cl: Label = _rupture_rows["complete"]
+	cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
+	cl.add_theme_color_override("font_color",
+		Color(0.55, 0.85, 0.50) if rep.complete else Color(0.78, 0.70, 0.50))
 
 
 # "[x]" / "[  ]" is an ASCII (tofu-proof) non-colour cue paired with the colour.
@@ -1248,19 +1246,19 @@ func _apply_player_panel_style(panel: PanelContainer, pid: int, is_active: bool)
 func _build_player_panel_style(pid: int, is_active: bool) -> StyleBoxFlat:
 	var accent: Color = GameEnums.player_color_light(pid)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.04, 0.02, 0.08, 0.95)
+	sb.bg_color = Color(0.035, 0.025, 0.055, 0.94)
 	if is_active:
-		sb.border_color = accent
-		sb.set_border_width_all(4)
-		sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.60)
-		sb.shadow_size = 12
-	else:
-		sb.border_color = Color(accent.r, accent.g, accent.b, 0.35)
+		sb.border_color = Color(accent.r, accent.g, accent.b, 0.85)
 		sb.set_border_width_all(2)
-		sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.10)
-		sb.shadow_size = 4
+		sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.32)
+		sb.shadow_size = 9
+	else:
+		sb.border_color = Color(accent.r, accent.g, accent.b, 0.24)
+		sb.set_border_width_all(1)
+		sb.shadow_color = Color(0, 0, 0, 0.22)
+		sb.shadow_size = 3
 	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(6)
+	sb.set_content_margin_all(9)
 	return sb
 
 
@@ -2060,8 +2058,10 @@ func _build_player_transgression_panels() -> void:
 	_player_panel_blue = bundle_blue["panel"]
 	_player_list_blue = bundle_blue["list"]
 	_player_reserve_blue = bundle_blue["reserve"]
+	_rupture_panel = _build_rupture_panel()
 	add_child(_player_panel_red)
 	add_child(_player_panel_blue)
+	add_child(_rupture_panel)
 	# React to viewport rotation / window resize
 	get_viewport().size_changed.connect(_layout_player_transgression_panels)
 	_layout_player_transgression_panels()
@@ -2070,32 +2070,56 @@ func _build_player_transgression_panels() -> void:
 func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	var panel := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.04, 0.02, 0.08, 0.95)
-	sb.border_color = accent
-	sb.set_border_width_all(3)
+	sb.bg_color = Color(0.035, 0.025, 0.055, 0.94)
+	sb.border_color = Color(accent.r, accent.g, accent.b, 0.36)
+	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(6)
-	# Subtle glow in player accent so the panel pops on the dark board.
-	sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.35)
-	sb.shadow_size = 6
+	sb.set_content_margin_all(9)
+	sb.shadow_color = Color(0, 0, 0, 0.24)
+	sb.shadow_size = 4
 	panel.add_theme_stylebox_override("panel", sb)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 4)
+	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
 
+	var header := HBoxContainer.new()
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_theme_constant_override("separation", 8)
+	vbox.add_child(header)
+
+	var accent_bar := ColorRect.new()
+	accent_bar.color = Color(accent.r, accent.g, accent.b, 0.90)
+	accent_bar.custom_minimum_size = Vector2(4, 0)
+	accent_bar.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	header.add_child(accent_bar)
+
+	var title_box := VBoxContainer.new()
+	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_box.add_theme_constant_override("separation", 0)
+	header.add_child(title_box)
+
 	var title := Label.new()
-	title.text = I18n.t("ui.player_panel.title", [GameEnums.player_name(pid)])
-	title.set_meta("i18n_player_id", pid)  # used by _relocalize to refresh
+	title.text = GameEnums.player_name(pid)
+	title.set_meta("i18n_player_id", pid)
+	title.set_meta("i18n_player_title_mode", "name")
 	title.add_theme_color_override("font_color", accent)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
-	title.add_theme_constant_override("outline_size", 4)
-	title.add_theme_font_size_override("font_size", 20)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(title)
+	title.add_theme_constant_override("outline_size", 3)
+	title.add_theme_font_size_override("font_size", 21)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title_box.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = I18n.t("ui.dialog.title.transgressions")
+	subtitle.set_meta("i18n_static_key", "ui.dialog.title.transgressions")
+	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_color_override("font_color", Color(0.72, 0.66, 0.76))
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title_box.add_child(subtitle)
 
 	# Available-Corruption pool. Refreshed in _refresh_player_transgression_panels.
 	var reserve := Label.new()
@@ -2103,48 +2127,66 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	reserve.set_meta("i18n_reserve_pid", pid)
 	reserve.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
 	reserve.add_theme_color_override("font_outline_color", Color.BLACK)
-	reserve.add_theme_constant_override("outline_size", 3)
-	reserve.add_theme_font_size_override("font_size", 18)
-	reserve.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(reserve)
+	reserve.add_theme_constant_override("outline_size", 2)
+	reserve.add_theme_font_size_override("font_size", 15)
+	reserve.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	reserve.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	reserve.custom_minimum_size = Vector2(104, 0)
+	header.add_child(reserve)
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(scroll)
 
-	var list := HFlowContainer.new()
-	list.add_theme_constant_override("h_separation", 6)
-	list.add_theme_constant_override("v_separation", 6)
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 6)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
 
-	# Rupture-de-l'âme recap (collective end-game objective — identical for both
-	# demons, shown under each frame). Added to the vbox AFTER the expanding
-	# scroll so it sits at the bottom of the frame ; it's a sibling of the list,
-	# so the list rebuild in _refresh_player_transgression_panels never touches it.
-	vbox.add_child(HSeparator.new())
-	var rup_title := Label.new()
-	rup_title.text = I18n.t("ui.rupture.title")
-	rup_title.add_theme_font_size_override("font_size", 18)
-	rup_title.add_theme_color_override("font_color", Color(0.88, 0.80, 0.55))
-	rup_title.add_theme_color_override("font_outline_color", Color.BLACK)
-	rup_title.add_theme_constant_override("outline_size", 3)
-	rup_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(rup_title)
-	var rows: Dictionary = {}
+	return {"panel": panel, "list": list, "reserve": reserve}
+
+
+func _build_rupture_panel() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.045, 0.035, 0.055, 0.94)
+	sb.border_color = Color(0.62, 0.50, 0.30, 0.42)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(8)
+	sb.shadow_color = Color(0, 0, 0, 0.28)
+	sb.shadow_size = 4
+	panel.add_theme_stylebox_override("panel", sb)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 2)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = I18n.t("ui.rupture.title")
+	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_color_override("font_color", Color(0.88, 0.80, 0.55))
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 2)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+
+	_rupture_rows = {"title": title}
 	for key in ["profondeur", "etendue", "ancrage", "complete"]:
 		var lbl := Label.new()
-		lbl.add_theme_font_size_override("font_size", 16)
+		lbl.add_theme_font_size_override("font_size", 14)
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.clip_text = true
 		vbox.add_child(lbl)
-		rows[key] = lbl
-	(rows["complete"] as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	(rows["complete"] as Label).add_theme_font_size_override("font_size", 17)
-	_rupture_rows[pid] = rows
-
-	return {"panel": panel, "list": list, "reserve": reserve}
+		_rupture_rows[key] = lbl
+	(_rupture_rows["complete"] as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	(_rupture_rows["complete"] as Label).add_theme_font_size_override("font_size", 15)
+	return panel
 
 
 func _layout_player_transgression_panels() -> void:
@@ -2166,11 +2208,16 @@ func _layout_player_transgression_panels() -> void:
 		# label (~0.78..0.86) / FAB at the bottom.
 		_set_anchors(_player_panel_red,  0.0, 0.08, 1.0, 0.20, 4, 4, 0, -2)
 		_set_anchors(_player_panel_blue, 0.0, 0.65, 1.0, 0.77, 4, -2, 0, 0)
+		if _rupture_panel != null:
+			_rupture_panel.visible = false
 	else:
-		# Both panels on the LEFT, stacked vertically, with no overlap.
+		# Left sidebar: two demon panels plus one collective Rupture recap.
 		# Width = 0..0.25 of viewport (≈ 256 px on a 1024-wide iPad).
-		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.50, 4, 4, -4, -2)
-		_set_anchors(_player_panel_blue, 0.0, 0.50, 0.25, 0.96, 4, 2, -4, -4)
+		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.405, 6, 4, -6, -3)
+		_set_anchors(_player_panel_blue, 0.0, 0.415, 0.25, 0.780, 6, 3, -6, -3)
+		if _rupture_panel != null:
+			_rupture_panel.visible = true
+			_set_anchors(_rupture_panel, 0.0, 0.790, 0.25, 0.960, 6, 3, -6, -6)
 
 
 func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
@@ -2193,10 +2240,12 @@ func _refresh_player_transgression_panels() -> void:
 	# Available-Corruption pool — labels update in place (cheap), always.
 	if _player_reserve_red != null:
 		var n_r: int = state.available_corruption[GameEnums.PlayerId.RED]
-		_player_reserve_red.text = I18n.t("ui.player_panel.reserve", [n_r, ("s" if n_r != 1 else "")])
+		_player_reserve_red.text = "%d Corr." % n_r
+		_player_reserve_red.tooltip_text = I18n.t("ui.player_panel.reserve", [n_r, ("s" if n_r != 1 else "")])
 	if _player_reserve_blue != null:
 		var n_b: int = state.available_corruption[GameEnums.PlayerId.PURPLE]
-		_player_reserve_blue.text = I18n.t("ui.player_panel.reserve", [n_b, ("s" if n_b != 1 else "")])
+		_player_reserve_blue.text = "%d Corr." % n_b
+		_player_reserve_blue.tooltip_text = I18n.t("ui.player_panel.reserve", [n_b, ("s" if n_b != 1 else "")])
 	# The owned-transgression button lists are the costly rebuild (a Button +
 	# theme overrides + a signal per entry) — skip when the set is unchanged.
 	var sig := _panels_sig()
@@ -2218,11 +2267,13 @@ func _refresh_player_transgression_panels() -> void:
 		var name_str: String = String(def.get("name", tid))
 		btn.text = name_str
 		btn.add_theme_font_size_override("font_size", 18)
-		btn.custom_minimum_size = Vector2(0, 40)
+		btn.custom_minimum_size = Vector2(0, 38)
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.tooltip_text = I18n.t("ui.tooltip.see_card")
 		# Magenta if the transgression has been amplified to Infamie, warm orange for Scandale.
 		var fcol: Color = Color(1.0, 0.55, 1.0) if face == GameEnums.TransgressionFace.INFAMIE else Color(1.0, 0.78, 0.45)
 		btn.add_theme_color_override("font_color", fcol)
+		_apply_sidebar_button_style(btn, fcol)
 		btn.pressed.connect(_on_player_transgression_clicked.bind(String(tid), face, name_str))
 		if owner == GameEnums.PlayerId.RED:
 			_player_list_red.add_child(btn)
@@ -2233,6 +2284,29 @@ func _refresh_player_transgression_panels() -> void:
 		_player_list_red.add_child(_make_empty_hint())
 	if _player_list_blue.get_child_count() == 0:
 		_player_list_blue.add_child(_make_empty_hint())
+
+
+func _apply_sidebar_button_style(btn: Button, accent: Color) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.075, 0.055, 0.095, 0.86)
+	normal.border_color = Color(accent.r, accent.g, accent.b, 0.55)
+	normal.set_border_width(SIDE_LEFT, 3)
+	normal.set_corner_radius_all(5)
+	normal.set_content_margin(SIDE_LEFT, 9)
+	normal.set_content_margin(SIDE_RIGHT, 7)
+	normal.set_content_margin(SIDE_TOP, 4)
+	normal.set_content_margin(SIDE_BOTTOM, 4)
+	btn.add_theme_stylebox_override("normal", normal)
+
+	var hover: StyleBoxFlat = normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.105, 0.075, 0.125, 0.94)
+	hover.border_color = Color(accent.r, accent.g, accent.b, 0.85)
+	btn.add_theme_stylebox_override("hover", hover)
+
+	var pressed: StyleBoxFlat = normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.13, 0.09, 0.13, 0.98)
+	pressed.border_color = accent
+	btn.add_theme_stylebox_override("pressed", pressed)
 
 
 func _panels_sig() -> String:
@@ -2252,7 +2326,9 @@ func _make_empty_hint() -> Label:
 	var lbl := Label.new()
 	lbl.text = I18n.t("ui.player_panel.empty")
 	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
+	lbl.add_theme_color_override("font_color", Color(0.62, 0.58, 0.68))
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return lbl
 
 
@@ -4603,7 +4679,14 @@ func _relocalize_placed_column_title(list: VBoxContainer, pid: int) -> void:
 func _recursively_update_player_title(node: Node, pid: int) -> void:
 	if node is Label and node.has_meta("i18n_player_id"):
 		var lbl: Label = node
-		lbl.text = I18n.t("ui.player_panel.title", [GameEnums.player_name(pid)])
+		if String(lbl.get_meta("i18n_player_title_mode", "")) == "name":
+			lbl.text = GameEnums.player_name(pid)
+		else:
+			lbl.text = I18n.t("ui.player_panel.title", [GameEnums.player_name(pid)])
+		return
+	if node is Label and node.has_meta("i18n_static_key"):
+		var lbl_static: Label = node
+		lbl_static.text = I18n.t(String(lbl_static.get_meta("i18n_static_key")))
 		return
 	for c in node.get_children():
 		_recursively_update_player_title(c, pid)
