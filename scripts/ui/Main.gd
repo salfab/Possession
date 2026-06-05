@@ -3262,6 +3262,11 @@ func _maybe_show_decision_dialog() -> void:
 		return
 	if not state.has_pending_decisions():
 		return
+	# AI players resolve their own pending decisions (free exploit, confession)
+	# via step_bot_once() — _maybe_resume_ai() arms the stepper right after this.
+	# Never prompt the human to choose on the bot's behalf.
+	if state.bot_for_player.has(state.pending_decisions[0].player):
+		return
 	if _decision_dialog.visible:
 		return
 	# Show liturgy first if pending
