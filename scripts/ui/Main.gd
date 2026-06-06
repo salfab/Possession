@@ -1034,11 +1034,11 @@ func _refresh_rupture_recap() -> void:
 
 
 func _set_rupture_row(lbl: Label, ok: bool, body: String) -> void:
-	lbl.text = (I18n.t("ui.rupture.row_ok") if ok else I18n.t("ui.rupture.row_pending")) + " — " + body
+	lbl.text = (I18n.t("ui.rupture.row_ok") if ok else I18n.t("ui.rupture.row_pending")) + " : " + body
 	lbl.add_theme_color_override("font_color",
 		Color(0.55, 0.85, 0.50) if ok else Color(0.72, 0.64, 0.52))
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 2)
+	lbl.add_theme_constant_override("outline_size", 3)
 
 
 func _refresh_all() -> void:
@@ -2202,24 +2202,24 @@ func _build_rupture_panel() -> PanelContainer:
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 3)
+	vbox.add_theme_constant_override("separation", 5)
 	content.add_child(vbox)
 
 	var title := Label.new()
 	title.text = I18n.t("ui.rupture.title")
-	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", Color(0.88, 0.80, 0.55))
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
-	title.add_theme_constant_override("outline_size", 2)
+	title.add_theme_constant_override("outline_size", 3)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
 	var subtitle := Label.new()
 	subtitle.text = I18n.t("ui.rupture.subtitle")
-	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_font_size_override("font_size", 15)
 	subtitle.add_theme_color_override("font_color", Color(0.76, 0.70, 0.62))
 	subtitle.add_theme_color_override("font_outline_color", Color.BLACK)
-	subtitle.add_theme_constant_override("outline_size", 2)
+	subtitle.add_theme_constant_override("outline_size", 3)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(subtitle)
@@ -2227,14 +2227,14 @@ func _build_rupture_panel() -> PanelContainer:
 	_rupture_rows = {"title": title, "subtitle": subtitle}
 	for key in ["profondeur", "etendue", "ancrage", "complete"]:
 		var lbl := Label.new()
-		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.add_theme_font_size_override("font_size", 15)
 		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 2)
+		lbl.add_theme_constant_override("outline_size", 3)
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vbox.add_child(lbl)
 		_rupture_rows[key] = lbl
 	(_rupture_rows["complete"] as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	(_rupture_rows["complete"] as Label).add_theme_font_size_override("font_size", 14)
+	(_rupture_rows["complete"] as Label).add_theme_font_size_override("font_size", 16)
 	return panel
 
 
@@ -2262,11 +2262,11 @@ func _layout_player_transgression_panels() -> void:
 	else:
 		# Left sidebar: two demon panels plus one collective Rupture recap.
 		# Width = 0..0.25 of viewport (≈ 256 px on a 1024-wide iPad).
-		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.340, 6, 4, -6, -3)
-		_set_anchors(_player_panel_blue, 0.0, 0.350, 0.25, 0.660, 6, 3, -6, -3)
+		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.320, 6, 4, -6, -3)
+		_set_anchors(_player_panel_blue, 0.0, 0.330, 0.25, 0.625, 6, 3, -6, -3)
 		if _rupture_panel != null:
 			_rupture_panel.visible = true
-			_set_anchors(_rupture_panel, 0.0, 0.670, 0.25, 0.960, 6, 3, -6, -6)
+			_set_anchors(_rupture_panel, 0.0, 0.635, 0.25, 0.960, 6, 3, -6, -6)
 
 
 func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
