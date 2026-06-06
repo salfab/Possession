@@ -101,6 +101,7 @@ const ASCENDANT_TRACK_LEFT  := Vector2(0.178, 0.912)   # value -10
 const ASCENDANT_TRACK_APEX  := Vector2(0.498, 0.937)   # value 0 (curve apex)
 const ASCENDANT_TRACK_RIGHT := Vector2(0.812, 0.912)   # value +10
 const ASCENDANT_PAWN_SIZE := Vector2(42, 52)
+const RUPTURE_ILLUSTRATION_PATH := "res://assets/ui/rupture/soul_rupture.jpg"
 const _ASC_HANDLE_SIZE := 22.0
 
 const ZOOM_MIN := 1.0
@@ -247,7 +248,7 @@ var _player_list_blue: VBoxContainer
 var _player_reserve_red: Label
 var _player_reserve_blue: Label
 var _rupture_panel: PanelContainer
-var _rupture_rows: Dictionary = {}  # {title,profondeur,etendue,ancrage,complete: Label}
+var _rupture_rows: Dictionary = {}  # {title,subtitle,profondeur,etendue,ancrage,complete: Label}
 
 # Floating Action Button + the popup menu it opens. Replaces the previous
 # row of buttons across the bottom of the screen.
@@ -1022,20 +1023,22 @@ func _refresh_rupture_recap() -> void:
 	var transg: int = state.count_transgressed_domains()
 	var sealed: int = state.count_sealed_domains()
 	(_rupture_rows["title"] as Label).text = I18n.t("ui.rupture.title")
-	_set_rupture_row(_rupture_rows["profondeur"], rep.profondeur, I18n.t("ui.rupture.profondeur", [inf_total]))
-	_set_rupture_row(_rupture_rows["etendue"], rep.etendue, I18n.t("ui.rupture.etendue", [transg]))
-	_set_rupture_row(_rupture_rows["ancrage"], rep.ancrage, I18n.t("ui.rupture.ancrage", [sealed]))
+	(_rupture_rows["subtitle"] as Label).text = I18n.t("ui.rupture.subtitle")
+	_set_rupture_row(_rupture_rows["profondeur"] as Label, rep.profondeur, I18n.t("ui.rupture.profondeur", [inf_total]))
+	_set_rupture_row(_rupture_rows["etendue"] as Label, rep.etendue, I18n.t("ui.rupture.etendue", [transg]))
+	_set_rupture_row(_rupture_rows["ancrage"] as Label, rep.ancrage, I18n.t("ui.rupture.ancrage", [sealed]))
 	var cl: Label = _rupture_rows["complete"]
 	cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
 	cl.add_theme_color_override("font_color",
 		Color(0.55, 0.85, 0.50) if rep.complete else Color(0.78, 0.70, 0.50))
 
 
-# "[x]" / "[  ]" is an ASCII (tofu-proof) non-colour cue paired with the colour.
 func _set_rupture_row(lbl: Label, ok: bool, body: String) -> void:
-	lbl.text = ("[x] " if ok else "[  ] ") + body
+	lbl.text = (I18n.t("ui.rupture.row_ok") if ok else I18n.t("ui.rupture.row_pending")) + " — " + body
 	lbl.add_theme_color_override("font_color",
 		Color(0.55, 0.85, 0.50) if ok else Color(0.72, 0.64, 0.52))
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 2)
 
 
 func _refresh_all() -> void:
@@ -2152,20 +2155,55 @@ func _build_rupture_panel() -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.045, 0.035, 0.055, 0.94)
+	sb.bg_color = Color(0.02, 0.016, 0.025, 0.96)
 	sb.border_color = Color(0.62, 0.50, 0.30, 0.42)
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(8)
+	sb.set_content_margin_all(0)
 	sb.shadow_color = Color(0, 0, 0, 0.28)
 	sb.shadow_size = 4
 	panel.add_theme_stylebox_override("panel", sb)
 
+	var frame := Control.new()
+	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	frame.clip_contents = true
+	panel.add_child(frame)
+
+	var art := TextureRect.new()
+	art.anchor_right = 1.0
+	art.anchor_bottom = 1.0
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ResourceLoader.exists(RUPTURE_ILLUSTRATION_PATH):
+		art.texture = load(RUPTURE_ILLUSTRATION_PATH) as Texture2D
+	frame.add_child(art)
+
+	var art_veil := Panel.new()
+	art_veil.anchor_right = 1.0
+	art_veil.anchor_bottom = 1.0
+	art_veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var veil_sb := StyleBoxFlat.new()
+	veil_sb.bg_color = Color(0.015, 0.010, 0.020, 0.52)
+	veil_sb.set_corner_radius_all(7)
+	art_veil.add_theme_stylebox_override("panel", veil_sb)
+	frame.add_child(art_veil)
+
+	var content := MarginContainer.new()
+	content.anchor_right = 1.0
+	content.anchor_bottom = 1.0
+	content.add_theme_constant_override("margin_left", 9)
+	content.add_theme_constant_override("margin_top", 8)
+	content.add_theme_constant_override("margin_right", 9)
+	content.add_theme_constant_override("margin_bottom", 8)
+	frame.add_child(content)
+
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 2)
-	panel.add_child(vbox)
+	vbox.add_theme_constant_override("separation", 3)
+	content.add_child(vbox)
 
 	var title := Label.new()
 	title.text = I18n.t("ui.rupture.title")
@@ -2176,16 +2214,27 @@ func _build_rupture_panel() -> PanelContainer:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
-	_rupture_rows = {"title": title}
+	var subtitle := Label.new()
+	subtitle.text = I18n.t("ui.rupture.subtitle")
+	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_color_override("font_color", Color(0.76, 0.70, 0.62))
+	subtitle.add_theme_color_override("font_outline_color", Color.BLACK)
+	subtitle.add_theme_constant_override("outline_size", 2)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(subtitle)
+
+	_rupture_rows = {"title": title, "subtitle": subtitle}
 	for key in ["profondeur", "etendue", "ancrage", "complete"]:
 		var lbl := Label.new()
-		lbl.add_theme_font_size_override("font_size", 14)
+		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+		lbl.add_theme_constant_override("outline_size", 2)
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		lbl.clip_text = true
 		vbox.add_child(lbl)
 		_rupture_rows[key] = lbl
 	(_rupture_rows["complete"] as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	(_rupture_rows["complete"] as Label).add_theme_font_size_override("font_size", 15)
+	(_rupture_rows["complete"] as Label).add_theme_font_size_override("font_size", 14)
 	return panel
 
 
@@ -2213,11 +2262,11 @@ func _layout_player_transgression_panels() -> void:
 	else:
 		# Left sidebar: two demon panels plus one collective Rupture recap.
 		# Width = 0..0.25 of viewport (≈ 256 px on a 1024-wide iPad).
-		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.405, 6, 4, -6, -3)
-		_set_anchors(_player_panel_blue, 0.0, 0.415, 0.25, 0.780, 6, 3, -6, -3)
+		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.340, 6, 4, -6, -3)
+		_set_anchors(_player_panel_blue, 0.0, 0.350, 0.25, 0.660, 6, 3, -6, -3)
 		if _rupture_panel != null:
 			_rupture_panel.visible = true
-			_set_anchors(_rupture_panel, 0.0, 0.790, 0.25, 0.960, 6, 3, -6, -6)
+			_set_anchors(_rupture_panel, 0.0, 0.670, 0.25, 0.960, 6, 3, -6, -6)
 
 
 func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,

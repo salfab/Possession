@@ -78,16 +78,20 @@ const STRINGS := {
 	"ui.menu.provoke_section": {"fr": "Provoquer ici", "en": "Provoke here"},
 	"ui.menu.amplify_section": {"fr": "Amplifier",     "en": "Amplify"},
 
-	# Soul-rupture recap (player panels) — collective end-game objective.
+	# Soul-rupture recap — collective end-game objective.
 	"ui.rupture.title":      {"fr": "Rupture de l'âme", "en": "Soul Rupture"},
-	"ui.rupture.profondeur": {"fr": "Profondeur — %d Infamie(s)  (≥3, ou Foi/Volonté)",
-		"en": "Depth — %d Infamy(ies)  (≥3, or Faith/Will)"},
-	"ui.rupture.etendue":    {"fr": "Étendue — %d/4 domaines transgressés",
-		"en": "Spread — %d/4 Domains transgressed"},
-	"ui.rupture.ancrage":    {"fr": "Ancrage — %d scellé(s)  (≥2, ou Volonté sc.+tr.)",
-		"en": "Anchoring — %d sealed  (≥2, or Will sealed+transgressed)"},
-	"ui.rupture.complete":   {"fr": "→ Rupture COMPLÈTE", "en": "→ Rupture COMPLETE"},
-	"ui.rupture.incomplete": {"fr": "→ Rupture incomplète", "en": "→ Rupture incomplete"},
+	"ui.rupture.subtitle":   {"fr": "Avancée commune des démons contre le pape.",
+		"en": "Shared demonic progress against the Pope."},
+	"ui.rupture.profondeur": {"fr": "Profondeur : %d Infamie(s). Validé à 3, ou dès qu'une Infamie frappe Foi ou Volonté.",
+		"en": "Depth: %d Infamy card(s). Complete at 3, or as soon as an Infamy strikes Faith or Will."},
+	"ui.rupture.etendue":    {"fr": "Étendue : %d/4 Domaines touchés. Validé quand 4 Domaines ont au moins une Transgression.",
+		"en": "Spread: %d/4 Domains touched. Complete when 4 Domains have at least one Transgression."},
+	"ui.rupture.ancrage":    {"fr": "Ancrage : %d Domaine(s) scellé(s). Validé à 2, ou si Volonté est scellée et transgressée.",
+		"en": "Anchoring: %d sealed Domain(s). Complete at 2, or if Will is both sealed and transgressed."},
+	"ui.rupture.complete":   {"fr": "Rupture complète : le pape peut tomber.", "en": "Rupture complete: the Pope can fall."},
+	"ui.rupture.incomplete": {"fr": "Rupture incomplète : l'âme résiste encore.", "en": "Rupture incomplete: the soul still resists."},
+	"ui.rupture.row_ok":     {"fr": "Validé", "en": "Complete"},
+	"ui.rupture.row_pending":{"fr": "À compléter", "en": "Pending"},
 
 	# Stations (with their roman numerals so the prefix stays universal)
 	"station.murmures":     {"fr": "I — Murmures",    "en": "I — Whispers"},
