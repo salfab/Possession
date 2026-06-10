@@ -248,7 +248,8 @@ var _player_list_blue: VBoxContainer
 var _player_reserve_red: Label
 var _player_reserve_blue: Label
 var _rupture_panel: PanelContainer
-var _rupture_rows: Dictionary = {}  # {title,subtitle,profondeur,etendue,ancrage,complete: Label}
+var _rupture_rows: Dictionary = {}  # {title,subtitle,complete: Label}
+var _rupture_meter: RuptureMeter    # synthetic checkbox view of the 3 conditions
 
 # Floating Action Button + the popup menu it opens. Replaces the previous
 # row of buttons across the bottom of the screen.
@@ -1024,21 +1025,16 @@ func _refresh_rupture_recap() -> void:
 	var sealed: int = state.count_sealed_domains()
 	(_rupture_rows["title"] as Label).text = I18n.t("ui.rupture.title")
 	(_rupture_rows["subtitle"] as Label).text = I18n.t("ui.rupture.subtitle")
-	_set_rupture_row(_rupture_rows["profondeur"] as Label, rep.profondeur, I18n.t("ui.rupture.profondeur", [inf_total]))
-	_set_rupture_row(_rupture_rows["etendue"] as Label, rep.etendue, I18n.t("ui.rupture.etendue", [transg]))
-	_set_rupture_row(_rupture_rows["ancrage"] as Label, rep.ancrage, I18n.t("ui.rupture.ancrage", [sealed]))
+	if _rupture_meter != null:
+		_rupture_meter.set_rows([
+			{"name": I18n.t("ui.rupture.name.profondeur"), "count": mini(inf_total, 3), "total": 3, "met": rep.profondeur},
+			{"name": I18n.t("ui.rupture.name.etendue"),    "count": transg,             "total": 4, "met": rep.etendue},
+			{"name": I18n.t("ui.rupture.name.ancrage"),    "count": sealed,             "total": 2, "met": rep.ancrage},
+		])
 	var cl: Label = _rupture_rows["complete"]
 	cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
 	cl.add_theme_color_override("font_color",
 		Color(0.55, 0.85, 0.50) if rep.complete else Color(0.78, 0.70, 0.50))
-
-
-func _set_rupture_row(lbl: Label, ok: bool, body: String) -> void:
-	lbl.text = (I18n.t("ui.rupture.row_ok") if ok else I18n.t("ui.rupture.row_pending")) + " : " + body
-	lbl.add_theme_color_override("font_color",
-		Color(0.55, 0.85, 0.50) if ok else Color(0.72, 0.64, 0.52))
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 3)
 
 
 func _refresh_all() -> void:
@@ -2225,16 +2221,20 @@ func _build_rupture_panel() -> PanelContainer:
 	vbox.add_child(subtitle)
 
 	_rupture_rows = {"title": title, "subtitle": subtitle}
-	for key in ["profondeur", "etendue", "ancrage", "complete"]:
-		var lbl := Label.new()
-		lbl.add_theme_font_size_override("font_size", 15)
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 3)
-		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vbox.add_child(lbl)
-		_rupture_rows[key] = lbl
-	(_rupture_rows["complete"] as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	(_rupture_rows["complete"] as Label).add_theme_font_size_override("font_size", 16)
+	# Synthetic checkbox meter for the three conditions (replaces the verbose
+	# per-condition text). Centred so it doesn't stretch oddly in the panel.
+	_rupture_meter = RuptureMeter.new()
+	_rupture_meter.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(_rupture_meter)
+	# Short global complete/incomplete line, kept under the meter.
+	var complete := Label.new()
+	complete.add_theme_font_size_override("font_size", 16)
+	complete.add_theme_color_override("font_outline_color", Color.BLACK)
+	complete.add_theme_constant_override("outline_size", 3)
+	complete.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	complete.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(complete)
+	_rupture_rows["complete"] = complete
 	return panel
 
 

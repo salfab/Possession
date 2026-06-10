@@ -92,6 +92,10 @@ const STRINGS := {
 	"ui.rupture.incomplete": {"fr": "Rupture incomplète : l'âme résiste.", "en": "Rupture incomplete: the soul resists."},
 	"ui.rupture.row_ok":     {"fr": "Validé", "en": "Complete"},
 	"ui.rupture.row_pending":{"fr": "À compléter", "en": "Pending"},
+	# Short condition names for the synthetic checkbox meter (RuptureMeter).
+	"ui.rupture.name.profondeur": {"fr": "Profondeur", "en": "Depth"},
+	"ui.rupture.name.etendue":    {"fr": "Étendue",    "en": "Spread"},
+	"ui.rupture.name.ancrage":    {"fr": "Ancrage",    "en": "Anchoring"},
 
 	# Stations (with their roman numerals so the prefix stays universal)
 	"station.murmures":     {"fr": "I — Murmures",    "en": "I — Whispers"},
