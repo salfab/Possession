@@ -248,7 +248,8 @@ var _player_list_blue: VBoxContainer
 var _player_reserve_red: Label
 var _player_reserve_blue: Label
 var _rupture_panel: PanelContainer
-var _rupture_rows: Dictionary = {}  # {title,subtitle,profondeur,etendue,ancrage,complete: Label}
+var _rupture_rows: Dictionary = {}  # {title,subtitle,complete: Label}
+var _rupture_meter: RuptureMeter    # icon + progress cells + check per condition
 
 # Floating Action Button + the popup menu it opens. Replaces the previous
 # row of buttons across the bottom of the screen.
@@ -1024,23 +1025,16 @@ func _refresh_rupture_recap() -> void:
 	var sealed: int = state.count_sealed_domains()
 	(_rupture_rows["title"] as Label).text = I18n.t("ui.rupture.title")
 	(_rupture_rows["subtitle"] as Label).text = I18n.t("ui.rupture.subtitle")
-	_set_rupture_cond("profondeur", rep.profondeur, inf_total)
-	_set_rupture_cond("etendue", rep.etendue, transg)
-	_set_rupture_cond("ancrage", rep.ancrage, sealed)
+	if _rupture_meter != null:
+		_rupture_meter.set_rows([
+			{"kind": "profondeur", "name": I18n.t("ui.rupture.name.profondeur"), "count": mini(inf_total, 3), "total": 3, "met": rep.profondeur},
+			{"kind": "etendue",    "name": I18n.t("ui.rupture.name.etendue"),    "count": transg,            "total": 4, "met": rep.etendue},
+			{"kind": "ancrage",    "name": I18n.t("ui.rupture.name.ancrage"),    "count": sealed,            "total": 2, "met": rep.ancrage},
+		])
 	var cl: Label = _rupture_rows["complete"]
 	cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
 	cl.add_theme_color_override("font_color",
 		Color(0.55, 0.85, 0.50) if rep.complete else Color(0.78, 0.70, 0.50))
-
-
-func _set_rupture_cond(key: String, ok: bool, count: int) -> void:
-	var row: Dictionary = _rupture_rows[key]
-	(row["icon"] as RuptureIcon).set_state(key, ok)
-	var main: Label = row["main"]
-	main.text = I18n.t("ui.rupture.%s.line" % key, [count])
-	main.add_theme_color_override("font_color",
-		Color(0.62, 0.88, 0.55) if ok else Color(0.88, 0.82, 0.64))
-	(row["hint"] as Label).text = I18n.t("ui.rupture.%s.hint" % key)
 
 
 func _refresh_all() -> void:
@@ -2227,38 +2221,14 @@ func _build_rupture_panel() -> PanelContainer:
 	vbox.add_child(subtitle)
 
 	_rupture_rows = {"title": title, "subtitle": subtitle}
-	# One row per condition : drawn icon (met/pending state) + a concise
-	# name+count line and a small hint beneath. Icon replaces the old
-	# "À compléter / Validé" text prefix and frees vertical space.
-	for key in ["profondeur", "etendue", "ancrage"]:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var icon := RuptureIcon.new()
-		icon.kind = key
-		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(icon)
-		var col := VBoxContainer.new()
-		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		col.add_theme_constant_override("separation", 0)
-		var main := Label.new()
-		main.add_theme_font_size_override("font_size", 18)
-		main.add_theme_color_override("font_outline_color", Color.BLACK)
-		main.add_theme_constant_override("outline_size", 3)
-		col.add_child(main)
-		var hint := Label.new()
-		hint.add_theme_font_size_override("font_size", 12)
-		hint.add_theme_color_override("font_color", Color(0.64, 0.58, 0.48))
-		hint.add_theme_color_override("font_outline_color", Color.BLACK)
-		hint.add_theme_constant_override("outline_size", 2)
-		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hint.text = I18n.t("ui.rupture.%s.hint" % key)
-		col.add_child(hint)
-		row.add_child(col)
-		vbox.add_child(row)
-		_rupture_rows[key] = {"icon": icon, "main": main, "hint": hint}
-	# Completion verdict line.
+	# Fused meter : one row per condition = thematic icon + name + progress
+	# cells + check when met. Replaces the verbose per-condition text. Centred
+	# so it doesn't stretch oddly. Parchment font matches the rest of the UI.
+	_rupture_meter = RuptureMeter.new()
+	_rupture_meter.name_font = Card.FONT_BODY
+	_rupture_meter.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(_rupture_meter)
+	# Completion verdict line, under the meter.
 	var complete := Label.new()
 	complete.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	complete.add_theme_font_size_override("font_size", 16)
