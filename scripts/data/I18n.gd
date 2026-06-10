@@ -92,6 +92,14 @@ const STRINGS := {
 	"ui.rupture.incomplete": {"fr": "Rupture incomplète : l'âme résiste.", "en": "Rupture incomplete: the soul resists."},
 	"ui.rupture.row_ok":     {"fr": "Validé", "en": "Complete"},
 	"ui.rupture.row_pending":{"fr": "À compléter", "en": "Pending"},
+	# Concise main line (name + progress count) and a small hint beneath each
+	# condition, for the icon-based rupture panel layout.
+	"ui.rupture.profondeur.line": {"fr": "Profondeur  %d/3", "en": "Depth  %d/3"},
+	"ui.rupture.etendue.line":    {"fr": "Étendue  %d/4",    "en": "Spread  %d/4"},
+	"ui.rupture.ancrage.line":    {"fr": "Ancrage  %d/2",    "en": "Anchor  %d/2"},
+	"ui.rupture.profondeur.hint": {"fr": "ou Foi/Volonté frappée", "en": "or Faith/Will struck"},
+	"ui.rupture.etendue.hint":    {"fr": "Domaines transgressés",  "en": "transgressed Domains"},
+	"ui.rupture.ancrage.hint":    {"fr": "ou Volonté scellée + transgressée", "en": "or Will sealed + transgressed"},
 
 	# Stations (with their roman numerals so the prefix stays universal)
 	"station.murmures":     {"fr": "I — Murmures",    "en": "I — Whispers"},

@@ -1024,21 +1024,23 @@ func _refresh_rupture_recap() -> void:
 	var sealed: int = state.count_sealed_domains()
 	(_rupture_rows["title"] as Label).text = I18n.t("ui.rupture.title")
 	(_rupture_rows["subtitle"] as Label).text = I18n.t("ui.rupture.subtitle")
-	_set_rupture_row(_rupture_rows["profondeur"] as Label, rep.profondeur, I18n.t("ui.rupture.profondeur", [inf_total]))
-	_set_rupture_row(_rupture_rows["etendue"] as Label, rep.etendue, I18n.t("ui.rupture.etendue", [transg]))
-	_set_rupture_row(_rupture_rows["ancrage"] as Label, rep.ancrage, I18n.t("ui.rupture.ancrage", [sealed]))
+	_set_rupture_cond("profondeur", rep.profondeur, inf_total)
+	_set_rupture_cond("etendue", rep.etendue, transg)
+	_set_rupture_cond("ancrage", rep.ancrage, sealed)
 	var cl: Label = _rupture_rows["complete"]
 	cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
 	cl.add_theme_color_override("font_color",
 		Color(0.55, 0.85, 0.50) if rep.complete else Color(0.78, 0.70, 0.50))
 
 
-func _set_rupture_row(lbl: Label, ok: bool, body: String) -> void:
-	lbl.text = (I18n.t("ui.rupture.row_ok") if ok else I18n.t("ui.rupture.row_pending")) + " : " + body
-	lbl.add_theme_color_override("font_color",
-		Color(0.55, 0.85, 0.50) if ok else Color(0.72, 0.64, 0.52))
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 3)
+func _set_rupture_cond(key: String, ok: bool, count: int) -> void:
+	var row: Dictionary = _rupture_rows[key]
+	(row["icon"] as RuptureIcon).set_state(key, ok)
+	var main: Label = row["main"]
+	main.text = I18n.t("ui.rupture.%s.line" % key, [count])
+	main.add_theme_color_override("font_color",
+		Color(0.62, 0.88, 0.55) if ok else Color(0.88, 0.82, 0.64))
+	(row["hint"] as Label).text = I18n.t("ui.rupture.%s.hint" % key)
 
 
 func _refresh_all() -> void:
@@ -2225,16 +2227,46 @@ func _build_rupture_panel() -> PanelContainer:
 	vbox.add_child(subtitle)
 
 	_rupture_rows = {"title": title, "subtitle": subtitle}
-	for key in ["profondeur", "etendue", "ancrage", "complete"]:
-		var lbl := Label.new()
-		lbl.add_theme_font_size_override("font_size", 15)
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 3)
-		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vbox.add_child(lbl)
-		_rupture_rows[key] = lbl
-	(_rupture_rows["complete"] as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	(_rupture_rows["complete"] as Label).add_theme_font_size_override("font_size", 16)
+	# One row per condition : drawn icon (met/pending state) + a concise
+	# name+count line and a small hint beneath. Icon replaces the old
+	# "À compléter / Validé" text prefix and frees vertical space.
+	for key in ["profondeur", "etendue", "ancrage"]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var icon := RuptureIcon.new()
+		icon.kind = key
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(icon)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		col.add_theme_constant_override("separation", 0)
+		var main := Label.new()
+		main.add_theme_font_size_override("font_size", 18)
+		main.add_theme_color_override("font_outline_color", Color.BLACK)
+		main.add_theme_constant_override("outline_size", 3)
+		col.add_child(main)
+		var hint := Label.new()
+		hint.add_theme_font_size_override("font_size", 12)
+		hint.add_theme_color_override("font_color", Color(0.64, 0.58, 0.48))
+		hint.add_theme_color_override("font_outline_color", Color.BLACK)
+		hint.add_theme_constant_override("outline_size", 2)
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.text = I18n.t("ui.rupture.%s.hint" % key)
+		col.add_child(hint)
+		row.add_child(col)
+		vbox.add_child(row)
+		_rupture_rows[key] = {"icon": icon, "main": main, "hint": hint}
+	# Completion verdict line.
+	var complete := Label.new()
+	complete.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	complete.add_theme_font_size_override("font_size", 16)
+	complete.add_theme_color_override("font_outline_color", Color.BLACK)
+	complete.add_theme_constant_override("outline_size", 3)
+	complete.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(complete)
+	_rupture_rows["complete"] = complete
 	return panel
 
 
