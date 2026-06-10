@@ -104,6 +104,10 @@ const STRINGS := {
 	"ui.rupture.name.profondeur": {"fr": "Profondeur", "en": "Depth"},
 	"ui.rupture.name.etendue":    {"fr": "Étendue",    "en": "Spread"},
 	"ui.rupture.name.ancrage":    {"fr": "Ancrage",    "en": "Anchoring"},
+	# Caption under each condition : WHAT is counted toward it.
+	"ui.rupture.desc.profondeur": {"fr": "Infamies — ou Foi/Volonté frappée", "en": "Infamies — or Faith/Will struck"},
+	"ui.rupture.desc.etendue":    {"fr": "Domaines transgressés", "en": "Transgressed Domains"},
+	"ui.rupture.desc.ancrage":    {"fr": "Domaines scellés — ou Volonté scellée + transgressée", "en": "Sealed Domains — or Will sealed + transgressed"},
 
 	# Stations (with their roman numerals so the prefix stays universal)
 	"station.murmures":     {"fr": "I — Murmures",    "en": "I — Whispers"},
