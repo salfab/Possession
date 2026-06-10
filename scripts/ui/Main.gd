@@ -4043,8 +4043,11 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_back.add_theme_color_override("default_color", Color(0.16, 0.07, 0.03))
 	_fullscreen_card_back.add_theme_font_override("normal_font", Card.FONT_BODY)
 	_fullscreen_card_back.add_theme_font_override("bold_font", Card.FONT_TITLE)
-	_fullscreen_card_back.add_theme_font_size_override("normal_font_size", 24)
+	_fullscreen_card_back.add_theme_font_size_override("normal_font_size", 26)
 	_fullscreen_card_back.add_theme_font_size_override("bold_font_size", 28)
+	# Breathing room between wrapped lines — the Exorcism rules back is the
+	# densest text in the game and reads cramped at the default leading.
+	_fullscreen_card_back.add_theme_constant_override("line_separation", 6)
 	_fullscreen_card_back_panel.add_child(_fullscreen_card_back)
 
 	# Action row : flip + entraver. Both are shown / hidden per binding by
