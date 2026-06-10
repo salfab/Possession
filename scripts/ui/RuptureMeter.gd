@@ -1,15 +1,17 @@
 class_name RuptureMeter
 extends Control
 # Soul-Rupture panel — the "best of both" view : per condition, a thematic
-# drawn icon + the short name + a row of progress cells + a check when met.
-# All drawn as primitives (no font glyphs / no SVG import → no web "tofu",
-# crisp at any DPI). Accessibility : the met state is cued by SHAPE (filled
-# cells + check) AND colour (green), not colour alone.
+# drawn icon + the short name + a row of progress cells + a check when met,
+# AND a small caption naming WHAT is being counted (so the player knows what
+# feeds each objective, not just the count). All text drawn with the parchment
+# font ; cells/icons drawn as primitives (no web "tofu", crisp at any DPI).
+# Accessibility : met state cued by SHAPE (filled cells + check) AND colour.
 #
 # Fed once per refresh via set_rows() ; never redraws per frame.
 #
-# Row schema : {kind:String, name:String, count:int, total:int, met:bool}
+# Row schema : {kind:String, name:String, desc:String, count:int, total:int, met:bool}
 #   kind ∈ "profondeur" | "etendue" | "ancrage" → selects the leading glyph.
+#   desc = what is counted (e.g. "Infamies — ou Foi/Volonté frappée").
 
 const ICON := 26.0           # leading thematic glyph box
 const ICON_GAP := 7.0
@@ -18,9 +20,11 @@ const NAME_GAP := 7.0
 const CELL := 20.0           # progress cell side
 const CELL_GAP := 4.0
 const CHECK_GAP := 8.0
-const ROW := 30.0            # row height
-const ROW_GAP := 8.0
-const FONT_SIZE := 18
+const NAME_FS := 18          # condition name font size
+const DESC_FS := 12          # caption ("what is counted") font size
+const LINE1 := 26.0          # height of the name + cells line
+const DESC_GAP := 2.0        # gap between name line and caption
+const ROW_GAP := 9.0         # gap between conditions
 const PAD := 4.0
 
 const GOLD := Color(0.86, 0.72, 0.34)            # in-progress filled cell / glyph
@@ -29,8 +33,9 @@ const GREEN := Color(0.55, 0.85, 0.50)           # met : cell + check + name + g
 const INK := Color(0.04, 0.03, 0.02, 0.85)       # filled-cell hairline
 const EMPTY_BG := Color(0, 0, 0, 0.28)
 const TXT := Color(0.90, 0.84, 0.66)             # name, not-yet-met
+const DESC_COL := Color(0.70, 0.63, 0.50)        # caption, dim parchment
 
-# Parchment font (Card.FONT_BODY), set by Main so the names match the rest of
+# Parchment font (Card.FONT_BODY), set by Main so the text matches the rest of
 # the UI instead of Godot's default font. Falls back to the theme font.
 var name_font: Font = null
 var _rows: Array = []
@@ -53,12 +58,34 @@ func _max_total() -> int:
 	return m
 
 
-func _update_min_size() -> void:
+func _total_width() -> float:
 	var cells_w: float = _max_total() * CELL + maxf(0.0, _max_total() - 1) * CELL_GAP
-	var w: float = PAD + ICON + ICON_GAP + NAME_W + NAME_GAP + cells_w + CHECK_GAP + CELL + PAD
-	var n: int = _rows.size()
-	var h: float = PAD + n * ROW + maxf(0.0, n - 1) * ROW_GAP + PAD
-	custom_minimum_size = Vector2(w, h)
+	return PAD + ICON + ICON_GAP + NAME_W + NAME_GAP + cells_w + CHECK_GAP + CELL + PAD
+
+
+func _desc_x() -> float:
+	return PAD + ICON + ICON_GAP
+
+
+func _desc_width() -> float:
+	return _total_width() - _desc_x() - PAD
+
+
+func _desc_height(f: Font, desc: String) -> float:
+	if f == null or desc == "":
+		return 0.0
+	return f.get_multiline_string_size(desc, HORIZONTAL_ALIGNMENT_LEFT, _desc_width(), DESC_FS).y
+
+
+func _update_min_size() -> void:
+	var f: Font = name_font if name_font != null else ThemeDB.fallback_font
+	var h := PAD
+	for i in _rows.size():
+		if i > 0:
+			h += ROW_GAP
+		h += LINE1 + DESC_GAP + _desc_height(f, String(_rows[i].get("desc", "")))
+	h += PAD
+	custom_minimum_size = Vector2(_total_width(), h)
 
 
 func _draw() -> void:
@@ -67,30 +94,35 @@ func _draw() -> void:
 	for r in _rows:
 		var kind: String = String(r.get("kind", ""))
 		var name_str: String = String(r.get("name", ""))
+		var desc: String = String(r.get("desc", ""))
 		var count: int = int(r.get("count", 0))
 		var total: int = int(r.get("total", 0))
 		var met: bool = bool(r.get("met", false))
 		var accent: Color = GREEN if met else GOLD
-		# Leading thematic glyph.
-		_draw_glyph(kind, Rect2(PAD, y + (ROW - ICON) * 0.5, ICON, ICON), accent)
+		# Leading thematic glyph, centred on the name line.
+		_draw_glyph(kind, Rect2(PAD, y + (LINE1 - ICON) * 0.5, ICON, ICON), accent)
 		# Condition name (parchment font), green once met.
 		if f != null:
-			var bx := PAD + ICON + ICON_GAP
-			var baseline := Vector2(bx, y + ROW * 0.5 + FONT_SIZE * 0.34)
+			var baseline := Vector2(_desc_x(), y + LINE1 * 0.5 + NAME_FS * 0.34)
 			draw_string(f, baseline, name_str, HORIZONTAL_ALIGNMENT_LEFT,
-				NAME_W, FONT_SIZE, GREEN if met else TXT)
+				NAME_W, NAME_FS, GREEN if met else TXT)
 		# Progress cells. When met, every cell is shown filled (the condition
 		# can be satisfied by its OR-shortcut before the numeric count fills).
 		var shown: int = total if met else count
-		var x := PAD + ICON + ICON_GAP + NAME_W + NAME_GAP
-		var cy := y + (ROW - CELL) * 0.5
+		var x := _desc_x() + NAME_W + NAME_GAP
+		var cy := y + (LINE1 - CELL) * 0.5
 		for i in total:
 			_draw_cell(Rect2(x, cy, CELL, CELL), i < shown, met)
 			x += CELL + CELL_GAP
 		# Trailing check when satisfied — the authoritative cue.
 		if met:
 			_draw_check(Rect2(x + CHECK_GAP, cy, CELL, CELL))
-		y += ROW + ROW_GAP
+		# Caption : what is counted, under the name.
+		var dy := y + LINE1 + DESC_GAP
+		if f != null and desc != "":
+			draw_multiline_string(f, Vector2(_desc_x(), dy + DESC_FS * 0.9), desc,
+				HORIZONTAL_ALIGNMENT_LEFT, _desc_width(), DESC_FS, -1, DESC_COL)
+		y = dy + _desc_height(f, desc) + ROW_GAP
 
 
 func _draw_cell(rect: Rect2, filled: bool, met: bool) -> void:

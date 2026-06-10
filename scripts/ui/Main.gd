@@ -1027,9 +1027,9 @@ func _refresh_rupture_recap() -> void:
 	(_rupture_rows["subtitle"] as Label).text = I18n.t("ui.rupture.subtitle")
 	if _rupture_meter != null:
 		_rupture_meter.set_rows([
-			{"kind": "profondeur", "name": I18n.t("ui.rupture.name.profondeur"), "count": mini(inf_total, 3), "total": 3, "met": rep.profondeur},
-			{"kind": "etendue",    "name": I18n.t("ui.rupture.name.etendue"),    "count": transg,            "total": 4, "met": rep.etendue},
-			{"kind": "ancrage",    "name": I18n.t("ui.rupture.name.ancrage"),    "count": sealed,            "total": 2, "met": rep.ancrage},
+			{"kind": "profondeur", "name": I18n.t("ui.rupture.name.profondeur"), "desc": I18n.t("ui.rupture.desc.profondeur"), "count": mini(inf_total, 3), "total": 3, "met": rep.profondeur},
+			{"kind": "etendue",    "name": I18n.t("ui.rupture.name.etendue"),    "desc": I18n.t("ui.rupture.desc.etendue"),    "count": transg,            "total": 4, "met": rep.etendue},
+			{"kind": "ancrage",    "name": I18n.t("ui.rupture.name.ancrage"),    "desc": I18n.t("ui.rupture.desc.ancrage"),    "count": sealed,            "total": 2, "met": rep.ancrage},
 		])
 	var cl: Label = _rupture_rows["complete"]
 	cl.text = I18n.t("ui.rupture.complete") if rep.complete else I18n.t("ui.rupture.incomplete")
