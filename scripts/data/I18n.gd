@@ -100,6 +100,10 @@ const STRINGS := {
 	"ui.rupture.profondeur.hint": {"fr": "ou Foi/Volonté frappée", "en": "or Faith/Will struck"},
 	"ui.rupture.etendue.hint":    {"fr": "Domaines transgressés",  "en": "transgressed Domains"},
 	"ui.rupture.ancrage.hint":    {"fr": "ou Volonté scellée + transgressée", "en": "or Will sealed + transgressed"},
+	# Short condition names for the fused RuptureMeter (icon + cells + check).
+	"ui.rupture.name.profondeur": {"fr": "Profondeur", "en": "Depth"},
+	"ui.rupture.name.etendue":    {"fr": "Étendue",    "en": "Spread"},
+	"ui.rupture.name.ancrage":    {"fr": "Ancrage",    "en": "Anchoring"},
 
 	# Stations (with their roman numerals so the prefix stays universal)
 	"station.murmures":     {"fr": "I — Murmures",    "en": "I — Whispers"},
