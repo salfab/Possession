@@ -2108,14 +2108,14 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	title.add_theme_color_override("font_color", accent)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
 	title.add_theme_constant_override("outline_size", 3)
-	title.add_theme_font_size_override("font_size", 27)
+	title.add_theme_font_size_override("font_size", 29)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_box.add_child(title)
 
 	var subtitle := Label.new()
 	subtitle.text = I18n.t("ui.dialog.title.transgressions")
 	subtitle.set_meta("i18n_static_key", "ui.dialog.title.transgressions")
-	subtitle.add_theme_font_size_override("font_size", 18)
+	subtitle.add_theme_font_size_override("font_size", 19)
 	subtitle.add_theme_color_override("font_color", Color(0.72, 0.66, 0.76))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_box.add_child(subtitle)
@@ -2127,7 +2127,7 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	reserve.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
 	reserve.add_theme_color_override("font_outline_color", Color.BLACK)
 	reserve.add_theme_constant_override("outline_size", 2)
-	reserve.add_theme_font_size_override("font_size", 21)
+	reserve.add_theme_font_size_override("font_size", 23)
 	reserve.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	reserve.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	reserve.custom_minimum_size = Vector2(104, 0)
@@ -2317,8 +2317,8 @@ func _refresh_player_transgression_panels() -> void:
 		var btn := Button.new()
 		var name_str: String = String(def.get("name", tid))
 		btn.text = name_str
-		btn.add_theme_font_size_override("font_size", 24)
-		btn.custom_minimum_size = Vector2(0, 46)
+		btn.add_theme_font_size_override("font_size", 26)
+		btn.custom_minimum_size = Vector2(0, 48)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.tooltip_text = I18n.t("ui.tooltip.see_card")
 		# Magenta if the transgression has been amplified to Infamie, warm orange for Scandale.
@@ -2326,10 +2326,34 @@ func _refresh_player_transgression_panels() -> void:
 		btn.add_theme_color_override("font_color", fcol)
 		_apply_sidebar_button_style(btn, fcol)
 		btn.pressed.connect(_on_player_transgression_clicked.bind(String(tid), face, name_str))
+		# Entry = the name button, plus an inline "Amplify" button when the
+		# active player owns this Scandale and amplification is currently legal
+		# (origin sealed by them, not in penitence, enough Corruption). Lets you
+		# amplify straight from the demon panel without opening the full card.
+		var entry: Control = btn
+		if owner == state.active_player and face == GameEnums.TransgressionFace.SCANDALE \
+				and _player_config.get(owner, PLAYER_HUMAN) == PLAYER_HUMAN \
+				and GameRules.can_amplifier(state, owner, tid):
+			var col := VBoxContainer.new()
+			col.add_theme_constant_override("separation", 2)
+			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			col.add_child(btn)
+			var cost: int = int(def.get("amplification_cost", 0))
+			var amp := Button.new()
+			amp.text = I18n.t("ui.player_panel.amplify", [cost])
+			amp.add_theme_font_size_override("font_size", 18)
+			amp.custom_minimum_size = Vector2(0, 36)
+			var amp_col := Color(1.0, 0.55, 1.0)  # magenta = becomes Infamie
+			amp.add_theme_color_override("font_color", amp_col)
+			amp.tooltip_text = I18n.t("ui.player_panel.amplify.tooltip")
+			_apply_sidebar_button_style(amp, amp_col)
+			amp.pressed.connect(_on_panel_amplifier_clicked.bind(String(tid)))
+			col.add_child(amp)
+			entry = col
 		if owner == GameEnums.PlayerId.RED:
-			_player_list_red.add_child(btn)
+			_player_list_red.add_child(entry)
 		else:
-			_player_list_blue.add_child(btn)
+			_player_list_blue.add_child(entry)
 	# Show "(aucune)" hint when empty so players know the panel is theirs.
 	if _player_list_red.get_child_count() == 0:
 		_player_list_red.add_child(_make_empty_hint())
@@ -2363,20 +2387,24 @@ func _apply_sidebar_button_style(btn: Button, accent: Color) -> void:
 func _panels_sig() -> String:
 	var parts := PackedStringArray()
 	parts.append(I18n.current_locale)
+	parts.append("active:%d" % state.active_player)
 	for tid in TransgressionData.ALL_IDS:
 		var owner: int = state.transgression_owner(tid)
 		if owner == GameEnums.PlayerId.NONE:
 			continue
 		var inf: GameState.TransgressionInstance = state.find_transgression_instance(owner, tid, GameEnums.TransgressionFace.INFAMIE)
 		var face: int = GameEnums.TransgressionFace.INFAMIE if inf != null else GameEnums.TransgressionFace.SCANDALE
-		parts.append("%s:%d:%d" % [tid, owner, face])
+		# Amplify affordance depends on live state (active player, seal, pool),
+		# not just the owned set — fold it in so the panel rebuilds when it flips.
+		var amp: int = 1 if (owner == state.active_player and face == GameEnums.TransgressionFace.SCANDALE and _player_config.get(owner, PLAYER_HUMAN) == PLAYER_HUMAN and GameRules.can_amplifier(state, owner, tid)) else 0
+		parts.append("%s:%d:%d:%d" % [tid, owner, face, amp])
 	return "|".join(parts)
 
 
 func _make_empty_hint() -> Label:
 	var lbl := Label.new()
 	lbl.text = I18n.t("ui.player_panel.empty")
-	lbl.add_theme_font_size_override("font_size", 20)
+	lbl.add_theme_font_size_override("font_size", 22)
 	lbl.add_theme_color_override("font_color", Color(0.62, 0.58, 0.68))
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4580,6 +4608,13 @@ func _on_provoquer_clicked(tid: String, origin: int) -> void:
 
 func _on_amplifier_clicked(tid: String) -> void:
 	_trans_dialog.hide()
+	var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
+	_handle_action_result(r)
+	_refresh_all()
+
+
+# Amplify straight from the demon panel (no fullscreen card open).
+func _on_panel_amplifier_clicked(tid: String) -> void:
 	var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
 	_handle_action_result(r)
 	_refresh_all()
