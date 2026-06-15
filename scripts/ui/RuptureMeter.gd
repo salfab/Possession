@@ -13,18 +13,18 @@ extends Control
 #   kind ∈ "profondeur" | "etendue" | "ancrage" → selects the leading glyph.
 #   desc = what is counted (e.g. "Infamies — ou Foi/Volonté frappée").
 
-const ICON := 30.0           # leading thematic glyph box
-const ICON_GAP := 8.0
-const NAME_W := 116.0        # parchment-font condition name column
-const NAME_GAP := 8.0
-const CELL := 22.0           # progress cell side
+const ICON := 34.0           # leading thematic glyph box
+const ICON_GAP := 9.0
+const NAME_W := 140.0        # parchment-font condition name column
+const NAME_GAP := 9.0
+const CELL := 24.0           # progress cell side
 const CELL_GAP := 4.0
 const CHECK_GAP := 8.0
-const NAME_FS := 22          # condition name font size
-const DESC_FS := 15          # caption ("what is counted") font size
-const LINE1 := 30.0          # height of the name + cells line
+const NAME_FS := 26          # condition name font size
+const DESC_FS := 17          # caption ("what is counted") font size
+const LINE1 := 34.0          # height of the name + cells line
 const DESC_GAP := 2.0        # gap between name line and caption
-const ROW_GAP := 11.0        # gap between conditions
+const ROW_GAP := 12.0        # gap between conditions
 const PAD := 4.0
 
 const GOLD := Color(0.86, 0.72, 0.34)            # in-progress filled cell / glyph
@@ -33,7 +33,7 @@ const GREEN := Color(0.55, 0.85, 0.50)           # met : cell + check + name + g
 const INK := Color(0.04, 0.03, 0.02, 0.85)       # filled-cell hairline
 const EMPTY_BG := Color(0, 0, 0, 0.28)
 const TXT := Color(0.90, 0.84, 0.66)             # name, not-yet-met
-const DESC_COL := Color(0.70, 0.63, 0.50)        # caption, dim parchment
+const DESC_COL := Color(0.82, 0.75, 0.60)        # caption, dim parchment
 
 # Parchment font (Card.FONT_BODY), set by Main so the text matches the rest of
 # the UI instead of Godot's default font. Falls back to the theme font.
