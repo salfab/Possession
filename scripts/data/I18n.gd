@@ -77,6 +77,8 @@ const STRINGS := {
 	"ui.menu.gain":  {"fr": "+%d Corr.", "en": "+%d Corr."},
 	"ui.menu.provoke_section": {"fr": "Provoquer ici", "en": "Provoke here"},
 	"ui.menu.amplify_section": {"fr": "Amplifier",     "en": "Amplify"},
+	"ui.menu.actions_title":   {"fr": "Actions",   "en": "Actions"},
+	"ui.menu.settings_title":  {"fr": "Réglages",  "en": "Settings"},
 
 	# Soul-rupture recap — collective end-game objective.
 	"ui.rupture.title":      {"fr": "Rupture de l'âme", "en": "Soul Rupture"},

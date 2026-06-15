@@ -260,7 +260,9 @@ var _rupture_meter: RuptureMeter    # icon + progress cells + check per conditio
 # Floating Action Button + the popup menu it opens. Replaces the previous
 # row of buttons across the bottom of the screen.
 var _fab: Button
-var _fab_menu: PopupMenu
+var _settings_fab: Button
+var _actions_menu: AppMenu
+var _settings_menu: AppMenu
 
 # Latches the most recently-shown Station id so _refresh_status can fire the
 # intro animation only when the value actually changes (not on every refresh).
@@ -881,15 +883,49 @@ func _build_debug_bar() -> void:
 	_fab.add_theme_stylebox_override("hover", fab_sb)
 	_fab.add_theme_stylebox_override("pressed", fab_sb)
 	_fab.add_theme_stylebox_override("focus", fab_sb)
-	_fab.pressed.connect(_on_fab_pressed)
+	_fab.pressed.connect(_open_actions_menu)
 	add_child(_fab)
 
-	# PopupMenu that the FAB opens. Items are recreated on every popup so
-	# the labels follow the current locale and "Puiser" can be toggled
-	# disabled depending on the active player's Réserve.
-	_fab_menu = PopupMenu.new()
-	_fab_menu.id_pressed.connect(_on_fab_menu_pressed)
-	add_child(_fab_menu)
+	# Second FAB (gear) stacked directly above the hamburger FAB. Same round
+	# dark-purple/gold styling, shifted up by 72px so the two stack with an
+	# 8px gap. Opens the Settings menu (display/app parameters).
+	_settings_fab = Button.new()
+	_settings_fab.text = ""
+	_settings_fab.icon = _make_gear_icon()
+	_settings_fab.expand_icon = true
+	_settings_fab.tooltip_text = I18n.t("ui.menu.settings_title")
+	_settings_fab.set_meta("i18n_tooltip_key", "ui.menu.settings_title")
+	_settings_fab.anchor_left = 1.0
+	_settings_fab.anchor_top = 1.0
+	_settings_fab.anchor_right = 1.0
+	_settings_fab.anchor_bottom = 1.0
+	_settings_fab.offset_left = -76
+	_settings_fab.offset_top = -148   # 76 (hamburger top) + 64 (height) + 8 (gap)
+	_settings_fab.offset_right = -12
+	_settings_fab.offset_bottom = -84
+	var sfab_sb := StyleBoxFlat.new()
+	sfab_sb.bg_color = Color(0.18, 0.06, 0.22, 0.95)
+	sfab_sb.set_corner_radius_all(32)
+	sfab_sb.border_color = Color(0.85, 0.65, 0.30)
+	sfab_sb.set_border_width_all(2)
+	sfab_sb.shadow_color = Color(0, 0, 0, 0.55)
+	sfab_sb.shadow_size = 8
+	_settings_fab.add_theme_stylebox_override("normal", sfab_sb)
+	_settings_fab.add_theme_stylebox_override("hover", sfab_sb)
+	_settings_fab.add_theme_stylebox_override("pressed", sfab_sb)
+	_settings_fab.add_theme_stylebox_override("focus", sfab_sb)
+	_settings_fab.pressed.connect(_open_settings_menu)
+	add_child(_settings_fab)
+
+	# Two custom parchment menus (AppMenu) replacing the old native PopupMenu.
+	# Items are rebuilt on every open so labels follow the current locale and
+	# "Puiser" can be toggled disabled depending on the active player's Réserve.
+	_actions_menu = AppMenu.new()
+	_actions_menu.item_chosen.connect(_on_fab_menu_pressed)
+	add_child(_actions_menu)
+	_settings_menu = AppMenu.new()
+	_settings_menu.item_chosen.connect(_on_fab_menu_pressed)
+	add_child(_settings_menu)
 
 
 # Stable item ids for the FAB popup — 1000+ so they never collide with the
@@ -929,36 +965,70 @@ func _make_hamburger_icon() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-func _on_fab_pressed() -> void:
-	_fab_menu.clear()
-	# Drop the glyph prefixes (− / ⊙) — they tofu on the embedded font
-	# Godot ships in some web-export builds. The labels are descriptive
-	# enough on their own ("Dézoomer", "Recadrer", "Zoomer") that we
-	# don't need iconography here.
-	_fab_menu.add_item(I18n.t("ui.btn.zoom_out_label"), FAB_ZOOM_OUT)
-	_fab_menu.add_item(I18n.t("ui.btn.zoom_reset_label"), FAB_ZOOM_RESET)
-	_fab_menu.add_item(I18n.t("ui.btn.zoom_in_label"), FAB_ZOOM_IN)
-	_fab_menu.add_separator()
-	_fab_menu.add_item(I18n.t("ui.btn.toggle_lang") + "  —  " + I18n.t("ui.btn.toggle_lang.tooltip"), FAB_LANG)
-	_fab_menu.add_separator()
-	_fab_menu.add_item(I18n.t("ui.btn.transgressions"), FAB_TRANS)
-	_fab_menu.add_item(I18n.t("ui.btn.new_game"), FAB_NEW_GAME)
-	_fab_menu.add_item(I18n.t("ui.btn.next_station"), FAB_NEXT_ST)
-	# Puiser is shown but greyed when the active player still has Corruption.
-	var puiser_idx := _fab_menu.get_item_count()
-	_fab_menu.add_item(I18n.t("ui.btn.puiser") + "  —  " + I18n.t("ui.btn.puiser.tooltip"), FAB_PUISER)
-	if state != null and not GameRules.can_puiser(state, state.active_player):
-		_fab_menu.set_item_disabled(puiser_idx, true)
-	_fab_menu.add_separator()
-	_fab_menu.add_item(I18n.t("ui.btn.glossary"), FAB_GLOSSARY)
-	_fab_menu.add_item(I18n.t("ui.btn.journal"), FAB_JOURNAL)
-	_fab_menu.add_item(I18n.t("ui.btn.hotspots"), FAB_HOTSPOTS)
-	_fab_menu.add_item(I18n.t("ui.btn.arches"), FAB_ARCHES)
-	# Position just above the FAB.
-	var fab_pos := _fab.get_screen_position()
-	var fab_size := _fab.size
-	_fab_menu.position = Vector2i(int(fab_pos.x - 240), int(fab_pos.y - 360))
-	_fab_menu.popup()
+# Gear icon synthesised at startup (same rationale as the hamburger icon — no
+# Unicode glyph dependency, no dedicated icon font). A cream cog on transparent :
+# a ring (outer disc minus inner disc), eight rectangular teeth around it, and a
+# hollow centre, drawn into a 28×28 RGBA image.
+func _make_gear_icon() -> ImageTexture:
+	const W := 28
+	const H := 28
+	const FG := Color(0.95, 0.94, 0.92)  # warm cream — matches the hamburger icon
+	const CX := 14.0
+	const CY := 14.0
+	const R_OUTER := 9.0   # outer edge of the ring body
+	const R_INNER := 5.5   # inner edge of the ring (start of the hollow centre)
+	const R_TEETH := 12.0  # how far the teeth poke out from the centre
+	var img := Image.create(W, H, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	# Ring : pixels whose radius from the centre falls within [R_INNER, R_OUTER].
+	for y in H:
+		for x in W:
+			var dx: float = float(x) + 0.5 - CX
+			var dy: float = float(y) + 0.5 - CY
+			var d: float = sqrt(dx * dx + dy * dy)
+			if d <= R_OUTER and d >= R_INNER:
+				img.set_pixel(x, y, FG)
+	# Eight teeth : small 4×4 squares centred on the ring's outer rim at 45° steps.
+	const TEETH := 8
+	const TOOTH_HALF := 2
+	for i in TEETH:
+		var ang: float = TAU * float(i) / float(TEETH)
+		var tx: int = int(round(CX + cos(ang) * R_TEETH))
+		var ty: int = int(round(CY + sin(ang) * R_TEETH))
+		img.fill_rect(Rect2i(tx - TOOTH_HALF, ty - TOOTH_HALF,
+			TOOTH_HALF * 2, TOOTH_HALF * 2), FG)
+	return ImageTexture.create_from_image(img)
+
+
+# ACTIONS menu : in-game actions. Items rebuilt on every open so the locale and
+# the Puiser disabled-state stay fresh.
+func _open_actions_menu() -> void:
+	var puiser_disabled: bool = (state != null
+		and not GameRules.can_puiser(state, state.active_player))
+	var items: Array = [
+		{"id": FAB_TRANS,    "label": I18n.t("ui.btn.transgressions")},
+		{"id": FAB_JOURNAL,  "label": I18n.t("ui.btn.journal")},
+		{"id": FAB_GLOSSARY, "label": I18n.t("ui.btn.glossary")},
+		{"id": FAB_NEW_GAME, "label": I18n.t("ui.btn.new_game")},
+		{"id": FAB_NEXT_ST,  "label": I18n.t("ui.btn.next_station")},
+		{"id": FAB_PUISER,   "label": I18n.t("ui.btn.puiser"),
+			"hint": I18n.t("ui.btn.puiser.tooltip"), "disabled": puiser_disabled},
+	]
+	_actions_menu.open(I18n.t("ui.menu.actions_title"), items)
+
+
+# SETTINGS menu : display / app parameters.
+func _open_settings_menu() -> void:
+	var items: Array = [
+		{"id": FAB_LANG,      "label": I18n.t("ui.btn.toggle_lang"),
+			"hint": I18n.t("ui.btn.toggle_lang.tooltip")},
+		{"id": FAB_ZOOM_OUT,  "label": I18n.t("ui.btn.zoom_out_label")},
+		{"id": FAB_ZOOM_RESET,"label": I18n.t("ui.btn.zoom_reset_label")},
+		{"id": FAB_ZOOM_IN,   "label": I18n.t("ui.btn.zoom_in_label")},
+		{"id": FAB_HOTSPOTS,  "label": I18n.t("ui.btn.hotspots")},
+		{"id": FAB_ARCHES,    "label": I18n.t("ui.btn.arches")},
+	]
+	_settings_menu.open(I18n.t("ui.menu.settings_title"), items)
 
 
 func _on_fab_menu_pressed(id: int) -> void:
@@ -4820,8 +4890,8 @@ func _relocalize() -> void:
 		var chip: DomainHintChip = _domain_hint_chips[d_id]
 		if is_instance_valid(chip):
 			chip.set_domain(d_id)
-	# FAB label + tooltip — items inside the popup are recreated on each
-	# open so they pick up the current locale automatically.
+	# FAB label + tooltip — items inside the menus are rebuilt on each open so
+	# they pick up the current locale automatically.
 	if _fab != null:
 		var lk: String = _fab.get_meta("i18n_label_key", "")
 		if lk != "":
@@ -4829,6 +4899,10 @@ func _relocalize() -> void:
 		var tk: String = _fab.get_meta("i18n_tooltip_key", "")
 		if tk != "":
 			_fab.tooltip_text = I18n.t(tk)
+	if _settings_fab != null:
+		var stk: String = _settings_fab.get_meta("i18n_tooltip_key", "")
+		if stk != "":
+			_settings_fab.tooltip_text = I18n.t(stk)
 	# Static dialog titles + ok button text
 	if _liturgy_dialog != null:
 		_liturgy_dialog.title = I18n.t("ui.dialog.title.liturgy")
