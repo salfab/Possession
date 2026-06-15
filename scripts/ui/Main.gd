@@ -213,6 +213,7 @@ var _action_toast_label: Label
 var _action_toast_tween: Tween
 # In-game glossary popup, built lazily on first request.
 var _glossary_dialog: AcceptDialog
+var _dialog_theme: Theme              # parchment chrome shared by AcceptDialog popups (built lazily)
 var _liturgy_dialog: AcceptDialog
 var _liturgy_rtl: RichTextLabel
 var _liturgy_card_thumb: Control      # Card.tscn wrapped + clickable
@@ -401,6 +402,7 @@ func _maybe_offer_resume() -> void:
 	dlg.ok_button_text = I18n.t("ui.dialog.resume_yes")
 	dlg.add_cancel_button(I18n.t("ui.dialog.resume_no"))
 	add_child(dlg)
+	_style_dialog(dlg)
 	dlg.confirmed.connect(func():
 		if _load_game():
 			_refresh_all()
@@ -423,6 +425,93 @@ func _apply_theme() -> void:
 	t.set_constant("h_separation", "PopupMenu", 14)
 	t.set_font_size("font_size", "Label", 22)
 	theme = t
+
+
+# ─── Dialog chrome ────────────────────────────────────────────────────────────
+# Parchment / dark-gold "chrome" matching DomainActionMenu, applied ONLY to the
+# AcceptDialog popups via a dedicated Theme. We deliberately do NOT push these
+# Button styleboxes into the global theme assigned in _apply_theme() — that
+# would restyle every in-game button. A Theme assigned to a Window cascades to
+# its descendants (the auto OK/Cancel buttons + the content), but not to the
+# rest of the scene tree, so the parchment Button look stays scoped to dialogs.
+const _DLG_PANEL_BG := Color(0.12, 0.09, 0.05, 0.99)
+const _DLG_GOLD := Color(0.79, 0.63, 0.29)
+const _DLG_TXT := Color(0.91, 0.84, 0.66)
+const _DLG_TITLE := Color(0.95, 0.88, 0.65)
+const _DLG_TXT_DIM := Color(0.60, 0.54, 0.42)
+const _DLG_SHADOW := Color(0, 0, 0, 0.55)
+const _DLG_BTN_BG := Color(0.17, 0.13, 0.08)
+
+func _build_dialog_theme() -> Theme:
+	var th := Theme.new()
+	th.default_font_size = 22
+
+	# Window border (the embedded popup frame + title bar background). Generous
+	# top content margin leaves room for the title text above the content.
+	var win_sb := StyleBoxFlat.new()
+	win_sb.bg_color = _DLG_PANEL_BG
+	win_sb.border_color = _DLG_GOLD
+	win_sb.set_border_width_all(2)
+	win_sb.set_corner_radius_all(16)
+	win_sb.shadow_color = _DLG_SHADOW
+	win_sb.shadow_size = 22
+	win_sb.set_content_margin(SIDE_LEFT, 18)
+	win_sb.set_content_margin(SIDE_RIGHT, 18)
+	win_sb.set_content_margin(SIDE_TOP, 46)
+	win_sb.set_content_margin(SIDE_BOTTOM, 18)
+	th.set_stylebox("embedded_border", "Window", win_sb)
+	th.set_color("title_color", "Window", _DLG_TITLE)
+	th.set_font("title_font", "Window", Card.FONT_TITLE)
+	th.set_font_size("title_font_size", "Window", 30)
+	th.set_constant("title_height", "Window", 46)
+
+	# Content-area background (matches the border panel so the body reads as one
+	# parchment slab). No border here — the Window's embedded_border draws it.
+	var panel_sb := StyleBoxFlat.new()
+	panel_sb.bg_color = _DLG_PANEL_BG
+	panel_sb.set_corner_radius_all(16)
+	th.set_stylebox("panel", "AcceptDialog", panel_sb)
+
+	# Buttons : scoped to the dialog theme (OK / Cancel / extra add_button()).
+	for sname in ["normal", "hover", "pressed", "focus", "disabled"]:
+		th.set_stylebox(sname, "Button", _dialog_button_style(sname))
+	th.set_color("font_color", "Button", _DLG_TXT)
+	th.set_color("font_hover_color", "Button", _DLG_TITLE)
+	th.set_color("font_pressed_color", "Button", _DLG_TITLE)
+	th.set_color("font_focus_color", "Button", _DLG_TXT)
+	th.set_color("font_disabled_color", "Button", _DLG_TXT_DIM)
+
+	return th
+
+func _dialog_button_style(variant: String) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	match variant:
+		"hover":
+			sb.bg_color = Color(0.22, 0.17, 0.10)
+		"pressed":
+			sb.bg_color = Color(0.13, 0.10, 0.06)
+		"disabled":
+			sb.bg_color = Color(0.13, 0.10, 0.07)
+		_:
+			sb.bg_color = _DLG_BTN_BG
+	sb.border_color = _DLG_GOLD if variant != "disabled" else Color(0.35, 0.29, 0.18, 0.6)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin(SIDE_LEFT, 16)
+	sb.set_content_margin(SIDE_RIGHT, 16)
+	sb.set_content_margin(SIDE_TOP, 10)
+	sb.set_content_margin(SIDE_BOTTOM, 10)
+	return sb
+
+# Lazily build the shared chrome theme and assign it to one dialog. Called right
+# after each AcceptDialog is created. Inner widgets keep their own per-node
+# styleboxes (which override the theme), so existing custom content is untouched.
+func _style_dialog(dlg: Window) -> void:
+	if dlg == null:
+		return
+	if _dialog_theme == null:
+		_dialog_theme = _build_dialog_theme()
+	dlg.theme = _dialog_theme
 
 
 func new_game(config: Dictionary = {}) -> void:
@@ -727,6 +816,7 @@ func _build_liturgy_dialog() -> void:
 	_liturgy_dialog.min_size = Vector2i(820, 520)
 	_liturgy_dialog.confirmed.connect(_on_liturgy_acknowledged)
 	add_child(_liturgy_dialog)
+	_style_dialog(_liturgy_dialog)
 	_make_dialog_touch_friendly(_liturgy_dialog)
 
 	var hbox := HBoxContainer.new()
@@ -1935,6 +2025,7 @@ func _build_placed_transgressions_dialog() -> void:
 	_placed_dialog.dialog_text = ""
 	_placed_dialog.min_size = Vector2i(640, 480)
 	add_child(_placed_dialog)
+	_style_dialog(_placed_dialog)
 	_make_dialog_touch_friendly(_placed_dialog)
 
 	var hbox := HBoxContainer.new()
@@ -2511,9 +2602,13 @@ func _show_new_game_dialog() -> void:
 	dlg.ok_button_text = I18n.t("ui.dialog.start")
 	dlg.add_cancel_button(I18n.t("ui.dialog.cancel"))
 	# Retina (stretch=disabled) : dialogs render at the small project default
-	# font → the Human/AI picker was barely visible. Bump the whole dialog's
-	# font so the selector is legible and tappable.
-	var dlg_theme := Theme.new()
+	# font → the Human/AI picker was barely visible. Start from the parchment
+	# chrome theme and bump the whole dialog's font so the selector stays
+	# legible and tappable. Duplicate so the larger font doesn't leak onto the
+	# shared dialog theme used by every other popup.
+	if _dialog_theme == null:
+		_dialog_theme = _build_dialog_theme()
+	var dlg_theme: Theme = _dialog_theme.duplicate(true)
 	dlg_theme.default_font_size = 40
 	dlg.theme = dlg_theme
 
@@ -2605,6 +2700,7 @@ func _on_btn_glossary() -> void:
 		_glossary_dialog.exclusive = true
 		_glossary_dialog.ok_button_text = I18n.t("ui.dialog.close")
 		add_child(_glossary_dialog)
+		_style_dialog(_glossary_dialog)
 		_make_dialog_touch_friendly(_glossary_dialog)
 		var rtl := RichTextLabel.new()
 		rtl.bbcode_enabled = true
@@ -3509,6 +3605,7 @@ func _build_decision_dialog() -> void:
 	_decision_dialog.min_size = Vector2i(560, 420)
 	_decision_dialog.confirmed.connect(_on_decision_skip)
 	add_child(_decision_dialog)
+	_style_dialog(_decision_dialog)
 	_make_dialog_touch_friendly(_decision_dialog)
 	_decision_content = VBoxContainer.new()
 	_decision_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3645,6 +3742,7 @@ func _build_endgame_dialog() -> void:
 	_endgame_dialog.min_size = Vector2i(880, 540)
 	_endgame_dialog.confirmed.connect(_on_endgame_acknowledged)
 	add_child(_endgame_dialog)
+	_style_dialog(_endgame_dialog)
 	_make_dialog_touch_friendly(_endgame_dialog)
 
 	var hbox := HBoxContainer.new()
@@ -3734,6 +3832,7 @@ func _build_transgressions_dialog() -> void:
 	_trans_dialog.dialog_text = ""
 	_trans_dialog.min_size = Vector2i(720, 520)
 	add_child(_trans_dialog)
+	_style_dialog(_trans_dialog)
 	_make_dialog_touch_friendly(_trans_dialog)
 	_trans_scroll = ScrollContainer.new()
 	_trans_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4004,6 +4103,7 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_dialog.dialog_text = ""
 	_fullscreen_card_dialog.min_size = Vector2i(360, 440)
 	add_child(_fullscreen_card_dialog)
+	_style_dialog(_fullscreen_card_dialog)
 	_make_dialog_touch_friendly(_fullscreen_card_dialog)
 
 	var vbox := VBoxContainer.new()
@@ -4288,6 +4388,7 @@ func _show_entrave_payment_picker(station: int, options: Array) -> void:
 	dlg.dialog_text = I18n.t("ui.dialog.entrave_pick_prompt")
 	dlg.ok_button_text = I18n.t("ui.dialog.close")
 	add_child(dlg)
+	_style_dialog(dlg)
 	for d_id in options:
 		var dom_str: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
 		var btn := dlg.add_button(dom_str, true, "pick_%d" % int(d_id))
@@ -4379,6 +4480,7 @@ func _on_card_target_info_requested(station: int) -> void:
 		# and the Window grows past the viewport on a long rule string.
 		_targeting_dialog.wrap_controls = false
 		add_child(_targeting_dialog)
+		_style_dialog(_targeting_dialog)
 		# Bump the OK button for touch ; keep the title bar (we don't apply
 		# the full _make_dialog_touch_friendly here because the popup is much
 		# smaller than a fullscreen modal and the title carries information).
@@ -4440,6 +4542,7 @@ func _on_card_effect_info_requested() -> void:
 		_effect_detail_dialog.ok_button_text = I18n.t("ui.dialog.close")
 		_effect_detail_dialog.wrap_controls = false
 		add_child(_effect_detail_dialog)
+		_style_dialog(_effect_detail_dialog)
 		var ok_btn: Button = _effect_detail_dialog.get_ok_button()
 		if ok_btn != null:
 			ok_btn.add_theme_font_size_override("font_size", 22)
