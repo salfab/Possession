@@ -15,7 +15,7 @@ extends Control
 
 const ICON := 34.0           # leading thematic glyph box
 const ICON_GAP := 9.0
-const NAME_W := 126.0        # parchment-font condition name column
+const NAME_W := 140.0        # parchment-font condition name column
 const NAME_GAP := 9.0
 const CELL := 24.0           # progress cell side
 const CELL_GAP := 4.0
