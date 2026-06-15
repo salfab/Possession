@@ -2252,7 +2252,7 @@ func _layout_player_transgression_panels() -> void:
 		if portrait:
 			board_aspect.anchor_left = 0.0
 		else:
-			board_aspect.anchor_left = 0.26
+			board_aspect.anchor_left = 0.30
 	if portrait:
 		# Top strip (Red) and bottom strip (Blue), full width.
 		# Sandwich between the status label (~0..0.08) and the ascendant
@@ -2263,12 +2263,12 @@ func _layout_player_transgression_panels() -> void:
 			_rupture_panel.visible = false
 	else:
 		# Left sidebar: two demon panels plus one collective Rupture recap.
-		# Width = 0..0.25 of viewport (≈ 256 px on a 1024-wide iPad).
-		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.320, 6, 4, -6, -3)
-		_set_anchors(_player_panel_blue, 0.0, 0.330, 0.25, 0.625, 6, 3, -6, -3)
+		# Width = 0..0.28 of viewport (≈ 287 px on a 1024-wide iPad).
+		_set_anchors(_player_panel_red,  0.0, 0.04, 0.28, 0.320, 6, 4, -6, -3)
+		_set_anchors(_player_panel_blue, 0.0, 0.330, 0.28, 0.625, 6, 3, -6, -3)
 		if _rupture_panel != null:
 			_rupture_panel.visible = true
-			_set_anchors(_rupture_panel, 0.0, 0.635, 0.25, 0.960, 6, 3, -6, -6)
+			_set_anchors(_rupture_panel, 0.0, 0.635, 0.28, 0.960, 6, 3, -6, -6)
 
 
 func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,
