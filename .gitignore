@@ -12,3 +12,4 @@ tools/previews/
 # Artefacts d'outils externes
 .codex-remote-attachments/
 .superpowers/
+.claude/
