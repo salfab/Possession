@@ -124,6 +124,11 @@ var pending_kwargs: Dictionary = {}
 const PLAYER_HUMAN := "human"
 const PLAYER_AI := "ai"
 const AI_STEP_DELAY := 0.6   # seconds between watched bot moves (legibility)
+# Board is a 4:3 AspectRatioContainer (see BoardAspect.ratio). Used to size the
+# adaptive left sidebar so it never steals width the board actually needs.
+const BOARD_RATIO := 1.333
+const SIDEBAR_MIN := 0.22    # never narrower (sidebar stays usable)
+const SIDEBAR_MAX := 0.30    # never wider (board keeps priority on wide screens)
 var _player_config: Dictionary = {
 	GameEnums.PlayerId.RED: PLAYER_HUMAN,
 	GameEnums.PlayerId.PURPLE: PLAYER_HUMAN,
@@ -2226,7 +2231,7 @@ func _build_rupture_panel() -> PanelContainer:
 	# so it doesn't stretch oddly. Parchment font matches the rest of the UI.
 	_rupture_meter = RuptureMeter.new()
 	_rupture_meter.name_font = Card.FONT_BODY
-	_rupture_meter.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_rupture_meter.size_flags_horizontal = Control.SIZE_FILL
 	vbox.add_child(_rupture_meter)
 	# Completion verdict line, under the meter.
 	var complete := Label.new()
@@ -2245,14 +2250,20 @@ func _layout_player_transgression_panels() -> void:
 		return
 	var vp: Vector2 = get_viewport_rect().size
 	var portrait: bool = vp.y > vp.x
-	# Push the board to the right in landscape so the left column has room
-	# for the two player panels stacked vertically without overlapping the
-	# board artwork. In portrait the board still fills the full width.
+	# Adaptive sidebar width (landscape). The board is locked to 4:3, so it is
+	# only ever limited by width OR height. The sidebar can be as wide as the
+	# point where the right-hand area stops being ≥ 4:3 — beyond that the board
+	# would shrink. So : sidebar = 1 - (H·ratio)/W, i.e. exactly the slack the
+	# board doesn't need. On a wide screen the board is full-height regardless,
+	# so the sidebar gets the leftover width (comfortable text) ; on a 4:3
+	# screen that slack is ~0, so the sidebar narrows to hand width to the board.
+	# Clamped to keep the sidebar usable. The RuptureMeter scales to fit.
+	var sidebar := 0.25
+	if not portrait and vp.x > 0.0:
+		var slack: float = 1.0 - (vp.y * BOARD_RATIO) / vp.x
+		sidebar = clampf(slack, SIDEBAR_MIN, SIDEBAR_MAX)
 	if board_aspect != null:
-		if portrait:
-			board_aspect.anchor_left = 0.0
-		else:
-			board_aspect.anchor_left = 0.26
+		board_aspect.anchor_left = 0.0 if portrait else (sidebar + 0.01)
 	if portrait:
 		# Top strip (Red) and bottom strip (Blue), full width.
 		# Sandwich between the status label (~0..0.08) and the ascendant
@@ -2263,12 +2274,13 @@ func _layout_player_transgression_panels() -> void:
 			_rupture_panel.visible = false
 	else:
 		# Left sidebar: two demon panels plus one collective Rupture recap.
-		# Width = 0..0.25 of viewport (≈ 256 px on a 1024-wide iPad).
-		_set_anchors(_player_panel_red,  0.0, 0.04, 0.25, 0.320, 6, 4, -6, -3)
-		_set_anchors(_player_panel_blue, 0.0, 0.330, 0.25, 0.625, 6, 3, -6, -3)
+		# Width adapts to the screen (see above) so the board stays as large
+		# as the 4:3 lock allows.
+		_set_anchors(_player_panel_red,  0.0, 0.04, sidebar, 0.320, 6, 4, -6, -3)
+		_set_anchors(_player_panel_blue, 0.0, 0.330, sidebar, 0.625, 6, 3, -6, -3)
 		if _rupture_panel != null:
 			_rupture_panel.visible = true
-			_set_anchors(_rupture_panel, 0.0, 0.635, 0.25, 0.960, 6, 3, -6, -6)
+			_set_anchors(_rupture_panel, 0.0, 0.635, sidebar, 0.960, 6, 3, -6, -6)
 
 
 func _set_anchors(c: Control, al: float, at: float, ar: float, ab: float,

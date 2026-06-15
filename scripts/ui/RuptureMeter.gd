@@ -43,6 +43,14 @@ var _rows: Array = []
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Fill the panel width; _draw scales the fixed layout down to fit a narrow
+	# sidebar (and centres it when the panel is wider), so it never clips.
+	size_flags_horizontal = Control.SIZE_FILL
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		queue_redraw()
 
 
 func set_rows(rows: Array) -> void:
@@ -85,10 +93,24 @@ func _update_min_size() -> void:
 			h += ROW_GAP
 		h += LINE1 + DESC_GAP + _desc_height(f, String(_rows[i].get("desc", "")))
 	h += PAD
-	custom_minimum_size = Vector2(_total_width(), h)
+	# Width 0 : we FILL the panel and scale the fixed layout in _draw, so we
+	# don't force the sidebar wider than it wants to be.
+	custom_minimum_size = Vector2(0, h)
 
 
 func _draw() -> void:
+	# Scale the fixed natural layout to the actual width : shrink to fit a
+	# narrow panel, centre (scale 1) when the panel is wider than natural.
+	var natural: float = _total_width()
+	var sx := 1.0
+	var ox := 0.0
+	if size.x > 1.0:
+		if size.x < natural:
+			sx = size.x / natural
+		else:
+			ox = (size.x - natural) * 0.5
+	if sx != 1.0 or ox != 0.0:
+		draw_set_transform(Vector2(ox, 0.0), 0.0, Vector2(sx, sx))
 	var f: Font = name_font if name_font != null else ThemeDB.fallback_font
 	var y := PAD
 	for r in _rows:
