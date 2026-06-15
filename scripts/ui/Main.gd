@@ -2346,22 +2346,24 @@ func _refresh_player_transgression_panels() -> void:
 		if owner == state.active_player and face == GameEnums.TransgressionFace.SCANDALE \
 				and _player_config.get(owner, PLAYER_HUMAN) == PLAYER_HUMAN \
 				and GameRules.can_amplifier(state, owner, tid):
-			var col := VBoxContainer.new()
-			col.add_theme_constant_override("separation", 2)
-			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			col.add_child(btn)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 4)
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(btn)
 			var cost: int = int(def.get("amplification_cost", 0))
 			var amp := Button.new()
 			amp.text = I18n.t("ui.player_panel.amplify", [cost])
 			amp.add_theme_font_size_override("font_size", 18)
-			amp.custom_minimum_size = Vector2(0, 36)
+			amp.custom_minimum_size = Vector2(0, 48)
+			amp.size_flags_horizontal = Control.SIZE_SHRINK_END
 			var amp_col := Color(1.0, 0.55, 1.0)  # magenta = becomes Infamie
 			amp.add_theme_color_override("font_color", amp_col)
 			amp.tooltip_text = I18n.t("ui.player_panel.amplify.tooltip")
 			_apply_sidebar_button_style(amp, amp_col)
 			amp.pressed.connect(_on_panel_amplifier_clicked.bind(String(tid)))
-			col.add_child(amp)
-			entry = col
+			row.add_child(amp)
+			entry = row
 		if owner == GameEnums.PlayerId.RED:
 			_player_list_red.add_child(entry)
 		else:
