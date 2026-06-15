@@ -13,18 +13,18 @@ extends Control
 #   kind ∈ "profondeur" | "etendue" | "ancrage" → selects the leading glyph.
 #   desc = what is counted (e.g. "Infamies — ou Foi/Volonté frappée").
 
-const ICON := 26.0           # leading thematic glyph box
-const ICON_GAP := 7.0
-const NAME_W := 104.0        # parchment-font condition name column
-const NAME_GAP := 7.0
-const CELL := 20.0           # progress cell side
+const ICON := 30.0           # leading thematic glyph box
+const ICON_GAP := 8.0
+const NAME_W := 116.0        # parchment-font condition name column
+const NAME_GAP := 8.0
+const CELL := 22.0           # progress cell side
 const CELL_GAP := 4.0
 const CHECK_GAP := 8.0
-const NAME_FS := 18          # condition name font size
-const DESC_FS := 12          # caption ("what is counted") font size
-const LINE1 := 26.0          # height of the name + cells line
+const NAME_FS := 22          # condition name font size
+const DESC_FS := 15          # caption ("what is counted") font size
+const LINE1 := 30.0          # height of the name + cells line
 const DESC_GAP := 2.0        # gap between name line and caption
-const ROW_GAP := 9.0         # gap between conditions
+const ROW_GAP := 11.0        # gap between conditions
 const PAD := 4.0
 
 const GOLD := Color(0.86, 0.72, 0.34)            # in-progress filled cell / glyph

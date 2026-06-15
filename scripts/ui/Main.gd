@@ -2108,14 +2108,14 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	title.add_theme_color_override("font_color", accent)
 	title.add_theme_color_override("font_outline_color", Color.BLACK)
 	title.add_theme_constant_override("outline_size", 3)
-	title.add_theme_font_size_override("font_size", 21)
+	title.add_theme_font_size_override("font_size", 23)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_box.add_child(title)
 
 	var subtitle := Label.new()
 	subtitle.text = I18n.t("ui.dialog.title.transgressions")
 	subtitle.set_meta("i18n_static_key", "ui.dialog.title.transgressions")
-	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_font_size_override("font_size", 16)
 	subtitle.add_theme_color_override("font_color", Color(0.72, 0.66, 0.76))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_box.add_child(subtitle)
@@ -2127,7 +2127,7 @@ func _build_player_panel(pid: int, accent: Color) -> Dictionary:
 	reserve.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
 	reserve.add_theme_color_override("font_outline_color", Color.BLACK)
 	reserve.add_theme_constant_override("outline_size", 2)
-	reserve.add_theme_font_size_override("font_size", 15)
+	reserve.add_theme_font_size_override("font_size", 18)
 	reserve.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	reserve.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	reserve.custom_minimum_size = Vector2(104, 0)
@@ -2317,8 +2317,8 @@ func _refresh_player_transgression_panels() -> void:
 		var btn := Button.new()
 		var name_str: String = String(def.get("name", tid))
 		btn.text = name_str
-		btn.add_theme_font_size_override("font_size", 18)
-		btn.custom_minimum_size = Vector2(0, 38)
+		btn.add_theme_font_size_override("font_size", 21)
+		btn.custom_minimum_size = Vector2(0, 42)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.tooltip_text = I18n.t("ui.tooltip.see_card")
 		# Magenta if the transgression has been amplified to Infamie, warm orange for Scandale.
@@ -2376,7 +2376,7 @@ func _panels_sig() -> String:
 func _make_empty_hint() -> Label:
 	var lbl := Label.new()
 	lbl.text = I18n.t("ui.player_panel.empty")
-	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_font_size_override("font_size", 18)
 	lbl.add_theme_color_override("font_color", Color(0.62, 0.58, 0.68))
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL

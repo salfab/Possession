@@ -43,7 +43,7 @@ func toggle_locale() -> void:
 const STRINGS := {
 	# Players
 	"player.red":           {"fr": "Rouge",   "en": "Red"},
-	"player.blue":          {"fr": "Violet",  "en": "Purple"},
+	"player.purple":        {"fr": "Violet",  "en": "Purple"},
 	"player.none":          {"fr": "—",       "en": "—"},
 
 	# Domains
