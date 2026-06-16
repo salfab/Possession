@@ -1153,7 +1153,7 @@ def compose_board_pdf(pdf_path: Path):
 # Cartouche anchors on the banner WebP, mean of the 10 banner masters per
 # tools/banner_calibrate.py — same values used in-game by Main.gd to place
 # the runtime label on the parchment area of each banner.
-BANNER_CARTOUCHE = (0.40, 0.10, 0.92, 0.89)
+BANNER_CARTOUCHE = (0.40, 0.10, 0.97, 0.89)
 
 # Banner physical size on the printed A3 board. NOT derived from
 # LITURGY_BANNER_HALF — that constant defines the in-game tap hotspot,
@@ -1294,9 +1294,13 @@ def compose_banners_pdf(pdf_path: Path, i18n: dict[str, str]):
         # override takes precedence over the i18n string so abbreviations
         # ("Corr." → "Corruption") and tofu-prone glyphs ("−" → "-") get
         # corrected for the printed kit while the live game keeps the
-        # phone-cartouche-friendly compressed wording.
-        text = BANNER_PRINT_TEXT_OVERRIDE.get(text_key) or i18n.get(text_key, "")
-        composed = render_banner_with_text(path, text)
+        # phone-cartouche-friendly compressed wording. The Exorcism banner is
+        # intentionally image-only: no baked title or rules text.
+        if mode == "special":
+            composed = Image.open(path).convert("RGB")
+        else:
+            text = BANNER_PRINT_TEXT_OVERRIDE.get(text_key) or i18n.get(text_key, "")
+            composed = render_banner_with_text(path, text)
         buf = io.BytesIO()
         composed.save(buf, format="JPEG", quality=88, optimize=True)
         buf.seek(0)

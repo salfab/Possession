@@ -80,6 +80,7 @@ strings, rules text, or card list change.
 From the repo root :
 
 ```bash
+python tools/build_liturgy_banners.py
 python tools/print/build.py
 ```
 
@@ -89,3 +90,7 @@ Requires Python 3.12+ with `Pillow` and `reportlab` installed
 kit on the next build. The rulebook also uses
 `assets/print/rulebook_page_texture.png`, generated once and kept in the
 workspace so the PDF build remains reproducible.
+
+`tools/build_liturgy_banners.py` regenerates the shared In Integro /
+Impedita banner templates, the per-response visual inserts, and the baked
+banner WebPs consumed by the print PDF.

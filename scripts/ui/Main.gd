@@ -73,6 +73,20 @@ const LITURGY_BANNER_HALF := Vector2(0.090, 0.045)
 # default, dumped fully populated by the calibration tool when the user
 # resizes individual banner slots.
 const LITURGY_BANNER_HALF_OVERRIDES := {}
+const LITURGY_BANNER_TEMPLATE_DIR := "res://assets/cards/liturgy_banners/templates"
+const LITURGY_BANNER_INSERT_DIR := "res://assets/cards/liturgy_banners/inserts"
+const LITURGY_BANNER_BAKED_DIR := "res://assets/cards/liturgy_banners"
+const LITURGY_BANNER_INSERT_LEFT := 10.0 / 600.0
+const LITURGY_BANNER_INSERT_RIGHT := 234.0 / 600.0
+const LITURGY_BANNER_INSERT_TOP := 12.0 / 225.0
+const LITURGY_BANNER_INSERT_BOTTOM := 213.0 / 225.0
+const LITURGY_BANNER_ROMAN := {
+	GameEnums.StationId.MURMURES: "I",
+	GameEnums.StationId.TENTATION: "II",
+	GameEnums.StationId.CHUTE: "III",
+	GameEnums.StationId.CONFESSION: "IV",
+	GameEnums.StationId.OFFICE: "V",
+}
 
 # Penitence arch markers — one ogival golden border per Domain, shown in
 # game only while that Domain is in Penitence (state.is_in_penitence). The
@@ -1870,9 +1884,20 @@ func _build_liturgy_banners() -> void:
 			if st == GameEnums.StationId.EXORCISME
 			else I18n.t("ui.tooltip.liturgy_banner"))
 
-		# Background : either the painted banner image (when shipped) or a
-		# stylebox placeholder. _refresh_liturgy_banners decides each frame
-		# which is shown based on which textures resolve.
+		# Background : a state template with a transparent keyed insert slot,
+		# plus the per-response insert underneath. When either layer is
+		# missing, _refresh_liturgy_banners falls back to the baked banner.
+		var insert_rect := TextureRect.new()
+		insert_rect.name = "Insert"
+		insert_rect.anchor_left = LITURGY_BANNER_INSERT_LEFT
+		insert_rect.anchor_right = LITURGY_BANNER_INSERT_RIGHT
+		insert_rect.anchor_top = LITURGY_BANNER_INSERT_TOP
+		insert_rect.anchor_bottom = LITURGY_BANNER_INSERT_BOTTOM
+		insert_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		insert_rect.stretch_mode = TextureRect.STRETCH_SCALE
+		insert_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(insert_rect)
+
 		var tex_rect := TextureRect.new()
 		tex_rect.name = "Texture"
 		tex_rect.anchor_right = 1.0
@@ -1911,15 +1936,38 @@ func _build_liturgy_banners() -> void:
 		border.add_theme_stylebox_override("panel", bsb)
 		panel.add_child(border)
 
-		# Label sits on top of both, anchored to the parchment cartouche
-		# zone — values determined by tools/banner_calibrate.py over the
-		# 10 shipped banner masters (mean cartouche bbox L=0.39 T=0.09
-		# R=0.93 B=0.89, nudged 1 % inward so the text tucks comfortably
-		# even on the loosest banner). Re-run the script if the artwork
-		# changes.
+		var badge_back := Panel.new()
+		badge_back.name = "StationBadgeBack"
+		badge_back.anchor_left = 0.035
+		badge_back.anchor_right = 0.112
+		badge_back.anchor_top = 0.060
+		badge_back.anchor_bottom = 0.245
+		badge_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(badge_back)
+
+		var badge := Label.new()
+		badge.name = "StationBadge"
+		badge.anchor_left = 0.035
+		badge.anchor_right = 0.112
+		badge.anchor_top = 0.060
+		badge.anchor_bottom = 0.245
+		badge.add_theme_font_override("font", Card.FONT_FACE)
+		badge.add_theme_font_size_override("font_size", 15)
+		badge.add_theme_color_override("font_color", Color(0.93, 0.79, 0.42))
+		badge.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.01))
+		badge.add_theme_constant_override("outline_size", 3)
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(badge)
+
+		# Label sits on top of both, anchored to the generated parchment
+		# cartouche. It mirrors tools/build_liturgy_banners.py and
+		# tools/print/build.py so runtime and print text land in the same
+		# visual plate.
 		var lbl := Label.new()
 		lbl.anchor_left = 0.40
-		lbl.anchor_right = 0.92
+		lbl.anchor_right = 0.97
 		lbl.anchor_top = 0.10
 		lbl.anchor_bottom = 0.89
 		lbl.offset_left = 6
@@ -1958,8 +2006,12 @@ func _refresh_liturgy_banners() -> void:
 	for st in _liturgy_banners.keys():
 		var panel: Control = _liturgy_banners[st]
 		var lbl: Label = _liturgy_banner_labels[st]
+		var insert_rect: TextureRect = panel.get_node("Insert") as TextureRect
 		var tex_rect: TextureRect = panel.get_node("Texture") as TextureRect
 		var fallback: PanelContainer = panel.get_node("Fallback") as PanelContainer
+		var border: Panel = panel.get_node("Border") as Panel
+		var badge_back: Panel = panel.get_node("StationBadgeBack") as Panel
+		var badge: Label = panel.get_node("StationBadge") as Label
 		# Station VI is the Exorcism — it has no LiturgicalResponse, no
 		# in_integro/impedita, and can't be entravé. One fixed banner image
 		# and one fixed cartouche line.
@@ -1968,31 +2020,52 @@ func _refresh_liturgy_banners() -> void:
 		var resp: Dictionary = LiturgicalResponseData.get_response(st)
 		var resp_id: String = String(resp.get("id", ""))
 
-		# Pick the banner image for the current state, fall back to the in-
-		# integro variant if the impedita one isn't shipped yet.
+		# Compose the banner from a shared state template plus a response
+		# insert. If those generated layers are missing, keep the previous
+		# baked-banner path as a fallback.
 		var mode: String = "impedita" if entraved else "in_integro"
-		var path: String
-		var alt_path: String = ""
+		var using_layered_banner := false
 		if is_exorcism:
-			path = "res://assets/cards/liturgy_banners/exorcisme.webp"
+			var exorcism_path := LITURGY_BANNER_BAKED_DIR + "/exorcisme.webp"
+			var exorcism_tex: Texture2D = null
+			if ResourceLoader.exists(exorcism_path):
+				exorcism_tex = load(exorcism_path) as Texture2D
+			insert_rect.texture = null
+			insert_rect.visible = false
+			tex_rect.texture = exorcism_tex
+			tex_rect.visible = exorcism_tex != null
+			fallback.visible = exorcism_tex == null
 		else:
-			path = "res://assets/cards/liturgy_banners/%s_%s.webp" % [resp_id, mode]
-			alt_path = "res://assets/cards/liturgy_banners/%s_in_integro.webp" % resp_id
-		var tex: Texture2D = null
-		if ResourceLoader.exists(path):
-			tex = load(path) as Texture2D
-		elif alt_path != "" and ResourceLoader.exists(alt_path):
-			tex = load(alt_path) as Texture2D
+			var template_path := "%s/%s.webp" % [LITURGY_BANNER_TEMPLATE_DIR, mode]
+			var insert_path := "%s/%s.webp" % [LITURGY_BANNER_INSERT_DIR, resp_id]
+			var baked_path := "%s/%s_%s.webp" % [LITURGY_BANNER_BAKED_DIR, resp_id, mode]
+			var baked_alt_path := "%s/%s_in_integro.webp" % [LITURGY_BANNER_BAKED_DIR, resp_id]
+			var template_tex: Texture2D = null
+			var insert_tex: Texture2D = null
+			if ResourceLoader.exists(template_path):
+				template_tex = load(template_path) as Texture2D
+			if ResourceLoader.exists(insert_path):
+				insert_tex = load(insert_path) as Texture2D
+			if template_tex != null and insert_tex != null:
+				using_layered_banner = true
+				insert_rect.texture = insert_tex
+				insert_rect.visible = true
+				tex_rect.texture = template_tex
+				tex_rect.visible = true
+				fallback.visible = false
+			else:
+				var baked_tex: Texture2D = null
+				if ResourceLoader.exists(baked_path):
+					baked_tex = load(baked_path) as Texture2D
+				elif ResourceLoader.exists(baked_alt_path):
+					baked_tex = load(baked_alt_path) as Texture2D
+				insert_rect.texture = null
+				insert_rect.visible = false
+				tex_rect.texture = baked_tex
+				tex_rect.visible = baked_tex != null
+				fallback.visible = baked_tex == null
 
-		if tex != null:
-			tex_rect.texture = tex
-			tex_rect.visible = true
-			fallback.visible = false
-		else:
-			tex_rect.texture = null
-			tex_rect.visible = false
-			fallback.visible = true
-			# Placeholder stylebox tinted by entrave state.
+		if fallback.visible:
 			var sb := StyleBoxFlat.new()
 			sb.set_corner_radius_all(6)
 			sb.set_content_margin_all(4)
@@ -2005,14 +2078,41 @@ func _refresh_liturgy_banners() -> void:
 				sb.border_color = Color(0.85, 0.65, 0.25)
 			fallback.add_theme_stylebox_override("panel", sb)
 
+		var border_sb := StyleBoxFlat.new()
+		border_sb.bg_color = Color(0, 0, 0, 0)
+		if is_exorcism:
+			border_sb.border_color = Color(0.32, 0.18, 0.24, 0.85)
+			border_sb.set_border_width_all(2)
+		elif entraved:
+			border_sb.border_color = Color(0.70, 0.08, 0.12, 0.95)
+			border_sb.set_border_width_all(3)
+		else:
+			border_sb.border_color = Color(0.73, 0.54, 0.20, 0.78)
+			border_sb.set_border_width_all(2)
+		border_sb.set_corner_radius_all(3)
+		border.add_theme_stylebox_override("panel", border_sb)
+		var badge_visible := not is_exorcism and using_layered_banner
+		badge_back.visible = badge_visible
+		badge.visible = badge_visible
+		var badge_sb := StyleBoxFlat.new()
+		badge_sb.bg_color = Color(0.09, 0.05, 0.03, 0.82) if not entraved else Color(0.12, 0.04, 0.05, 0.86)
+		badge_sb.border_color = Color(0.76, 0.55, 0.20, 0.90) if not entraved else Color(0.70, 0.14, 0.16, 0.94)
+		badge_sb.set_border_width_all(1)
+		badge_sb.set_corner_radius_all(999)
+		badge_back.add_theme_stylebox_override("panel", badge_sb)
+		badge.text = String(LITURGY_BANNER_ROMAN.get(st, ""))
+		badge.add_theme_color_override("font_color",
+			Color(0.96, 0.77, 0.45) if entraved else Color(0.93, 0.79, 0.42))
+
 		# Cartouche text — ultra-minimal one-liner, distinct from the full
 		# liturgy.<id>.<mode> text shown on the card itself.
-		var text_key: String = "banner.exorcisme.special" if is_exorcism else "banner.%s.%s" % [resp_id, mode]
-		lbl.text = I18n.t(text_key)
-		# Dim the parchment text a notch when impedita, to suggest "this is
-		# the corrupted face".
+		var text_key: String = "banner.%s.%s" % [resp_id, mode]
+		lbl.visible = not is_exorcism
+		lbl.text = "" if is_exorcism else I18n.t(text_key)
+		# Match the state color key: dark umber for In Integro, carmine ink
+		# for Impedita.
 		lbl.add_theme_color_override("font_color",
-			Color(0.45, 0.10, 0.06) if entraved else Color(0.18, 0.10, 0.05))
+			Color(0.50, 0.07, 0.05) if entraved else Color(0.18, 0.10, 0.05))
 
 
 # Tap or release on a banner — opens the fullscreen liturgical card view for
