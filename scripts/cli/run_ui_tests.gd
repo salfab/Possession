@@ -6,29 +6,33 @@ extends SceneTree
 #
 # WHY THIS EXISTS
 # A banner-art refactor (commit 17a4ba6, "Bannières liturgiques : refond assets
-# et rendu runtime") reworked how the six liturgy banners are drawn, and soon
-# after a tap on a banner stopped opening its liturgical card. The tap path is
-# fragile and trivially broken by a change that looks purely visual, so this
-# test pins the input invariants every banner must keep to stay tappable :
+# et rendu runtime") reworked how the six liturgy banners are drawn, and a tap
+# on a banner was reported as no longer opening its liturgical card. The tap
+# path is fragile and trivially broken by a change that looks purely visual, so
+# this test pins the input invariants every banner must keep to stay tappable :
 #
 #   1. The banner panel is MOUSE_FILTER_STOP            (so it gets picked)
 #   2. Its gui_input signal has a handler connected     (so the tap is handled)
 #   3. Every descendant Control is MOUSE_FILTER_IGNORE  (no child eats the tap)
-#   4. Nothing is drawn on top at the panel's centre    (no covering overlay)
+#   4. No STOP control is drawn on top at the panel centre (nothing steals it)
 #
-# 1–3 are wired synchronously while the scene builds (in _build_liturgy_banners,
-# run from Main._ready), so they are asserted right after instancing — no layout
-# pass needed, which keeps them deterministic in CI. 4 needs real on-screen
-# rects, so it runs after a few frames ; if layout hasn't settled (e.g. a
-# zero-size headless viewport) it is reported SKIP rather than failing the build
-# for a harness reason.
+# Timing : Main._ready() does NOT run synchronously on add_child, and the demon
+# side-panels lay themselves out from the viewport size via a size_changed
+# handler. So we add the scene, force a known landscape viewport, drive a
+# re-layout, and let several frames settle BEFORE asserting anything.
 #
-# NOTE : this guards the in-tree input WIRING. It cannot catch a regression that
-# only manifests under the Web export / iPad Safari runtime — a headless desktop
-# run exercises the same GDScript but not that environment.
+# Invariant 4 only counts STOP controls : MOUSE_FILTER_PASS receives the event
+# but lets it fall through to the control behind, so a PASS overlay does not
+# block the banner — only a STOP one does.
 #
-# Mirrors the run_tests.gd conventions (SceneTree driver, PASS/FAIL lines, a
+# NOTE : this guards the in-tree input WIRING + on-screen layout. It cannot
+# catch a regression that only manifests under the Web export / iPad Safari
+# runtime — a headless desktop run exercises the same GDScript, not that env.
+#
+# Mirrors run_tests.gd conventions (SceneTree driver, PASS/FAIL lines, a
 # "=== a/b PASS, c FAIL ===" summary the CI greps) so the same tooling applies.
+
+const VIEWPORT := Vector2i(1280, 800)   # landscape, matches the project default
 
 var _pass := 0
 var _fail := 0
@@ -37,32 +41,39 @@ var _lines: Array = []
 
 
 func _initialize() -> void:
-	# A concrete viewport size so the AspectRatioContainer lays the board out and
-	# the banner panels resolve to non-zero rects for the coverage check.
-	root.size = Vector2i(1280, 800)
-
 	var scene: PackedScene = load("res://scenes/Main.tscn")
 	if scene == null:
 		_fail_line("load Main.tscn", "PackedScene failed to load")
 		_finish()
 		return
-	# Untyped on purpose : we read Main's script var `_liturgy_banners`, which a
-	# statically-typed Node base would reject at parse time.
+	# Untyped on purpose : we read Main's script var `_liturgy_banners` and call
+	# its layout helper, which a statically-typed Node base would reject.
 	var main = scene.instantiate()
 	if main == null:
 		_fail_line("instantiate Main.tscn", "instantiate() returned null")
 		_finish()
 		return
-	# Adding to the already-active root runs Main._ready synchronously, which
-	# builds the banner panels — so the structural invariants are readable now.
 	root.add_child(main)
 
-	var banners: Dictionary = main._liturgy_banners
-	_check_structure(banners)
-
-	# Coverage needs laid-out rects ; let the container sort + anchor pass settle.
-	for _i in 8:
+	# _ready runs on the next idle frames, not synchronously — let it build the
+	# overlays + load the board texture.
+	for _i in 6:
 		await process_frame
+	# Force a known landscape viewport, then re-run the demon-panel layout so the
+	# panels land where they would on a real landscape screen (left sidebar) and
+	# the board occupies the right — otherwise they keep a degenerate first-layout
+	# rect and the coverage check measures nonsense.
+	root.size = VIEWPORT
+	for _i in 4:
+		await process_frame
+	if main.has_method("_layout_player_transgression_panels"):
+		main._layout_player_transgression_panels()
+	for _i in 4:
+		await process_frame
+
+	var banners: Dictionary = main._liturgy_banners
+	_dump_geometry(main, banners)
+	_check_structure(banners)
 	_check_coverage(main, banners)
 
 	_finish()
@@ -95,7 +106,18 @@ func _assert(cond: bool, name: String, msg: String = "") -> void:
 		_fail_line(name, msg)
 
 
-# ─── Invariants 1–3 : per-banner input wiring (no layout needed) ──────────────
+# ─── Diagnostics ──────────────────────────────────────────────────────────────
+
+func _dump_geometry(main: Node, banners: Dictionary) -> void:
+	_lines.append("GEOM  viewport=%s  banners=%d" % [str(root.size), banners.size()])
+	for st in banners.keys():
+		var panel = banners[st]
+		if panel is Control and is_instance_valid(panel):
+			_lines.append("GEOM  station %d rect=%s mf=%d"
+				% [int(st), str((panel as Control).get_global_rect()), (panel as Control).mouse_filter])
+
+
+# ─── Invariants 1–3 : per-banner input wiring ─────────────────────────────────
 
 func _check_structure(banners: Dictionary) -> void:
 	_assert(banners.size() == 6, "six liturgy banners built", "got %d" % banners.size())
@@ -129,13 +151,13 @@ func _non_ignore_descendants(node: Node) -> Array:
 	return out
 
 
-# ─── Invariant 4 : nothing covers the panel at its centre ─────────────────────
+# ─── Invariant 4 : no STOP control covers the panel centre ────────────────────
 
 func _check_coverage(main: Node, banners: Dictionary) -> void:
 	# Draw order ≈ pre-order tree position (single CanvasLayer, no z_index here),
-	# so a Control later in the walk paints on top. The topmost non-IGNORE control
-	# containing a banner's centre must be the banner panel itself ; anything
-	# drawn above it would be picked first and steal the tap.
+	# so a Control later in the walk paints on top. A tap resolves to the topmost
+	# STOP control under the point ; that must be the banner panel itself. PASS
+	# controls are transparent to blocking (they fall through), so we ignore them.
 	var order: Dictionary = {}
 	var seq: Array = [0]
 	_index_draw_order(main, order, seq)
@@ -152,11 +174,12 @@ func _check_coverage(main: Node, banners: Dictionary) -> void:
 			_lines.append("SKIP  %s : not-covered (panel rect not laid out yet: %s)"
 				% [label, str(rect.size)])
 			continue
-		var coverer := _topmost_blocker_over(main, rect.get_center(), p, order)
-		_assert(coverer == null,
-			"%s : panel not covered at centre" % label,
-			"" if coverer == null else "covered by %s (mouse_filter=%d)"
-				% [String(coverer.get_path()), coverer.mouse_filter])
+		var top := _topmost_stop_at(main, rect.get_center(), order)
+		_assert(top == p,
+			"%s : panel is the topmost tap target at its centre" % label,
+			"" if top == p else "covered by STOP control %s (rect=%s)"
+				% [String(top.get_path()) if top != null else "<none>",
+				   str(top.get_global_rect()) if top != null else "?"])
 
 
 func _index_draw_order(node: Node, order: Dictionary, seq: Array) -> void:
@@ -164,19 +187,18 @@ func _index_draw_order(node: Node, order: Dictionary, seq: Array) -> void:
 	seq[0] += 1
 	for c in node.get_children():
 		# Popups / dialogs are Windows — they render in their own viewport, not
-		# in the board's pick stack, so they can't cover a banner. Skip them
-		# (a resume dialog may be open during a local run with a save file).
+		# in the board's pick stack, so they can't cover a banner. Skip them.
 		if c is Window:
 			continue
 		_index_draw_order(c, order, seq)
 
 
-# Topmost Control that would intercept a press at `point` instead of `panel` :
-# visible, non-IGNORE, contains the point, painted after the panel, and neither
-# the panel nor one of its descendants. Returns null when nothing covers it.
-func _topmost_blocker_over(main: Node, point: Vector2, panel: Control, order: Dictionary) -> Control:
-	var worst: Control = null
-	var worst_order: int = int(order.get(panel, -1))
+# Topmost (latest-painted) STOP Control whose global rect contains `point`. With
+# all banner children IGNORE, this resolves to the banner panel itself unless a
+# STOP control is layered on top of it — exactly what would steal the tap.
+func _topmost_stop_at(main: Node, point: Vector2, order: Dictionary) -> Control:
+	var top: Control = null
+	var top_order: int = -1
 	var stack: Array = [main]
 	while not stack.is_empty():
 		var n: Node = stack.pop_back()
@@ -187,25 +209,14 @@ func _topmost_blocker_over(main: Node, point: Vector2, panel: Control, order: Di
 		if not (n is Control):
 			continue
 		var ctl: Control = n
-		if ctl == panel or _is_descendant_of(ctl, panel):
-			continue
 		if not ctl.is_visible_in_tree():
 			continue
-		if ctl.mouse_filter == Control.MOUSE_FILTER_IGNORE:
-			continue
+		if ctl.mouse_filter != Control.MOUSE_FILTER_STOP:
+			continue  # PASS falls through, IGNORE is invisible to picking
 		if not ctl.get_global_rect().has_point(point):
 			continue
 		var o: int = int(order.get(ctl, -1))
-		if o > worst_order:
-			worst_order = o
-			worst = ctl
-	return worst
-
-
-func _is_descendant_of(node: Node, ancestor: Node) -> bool:
-	var p: Node = node.get_parent()
-	while p != null:
-		if p == ancestor:
-			return true
-		p = p.get_parent()
-	return false
+		if o > top_order:
+			top_order = o
+			top = ctl
+	return top
