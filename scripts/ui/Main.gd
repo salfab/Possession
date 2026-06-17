@@ -419,6 +419,14 @@ func _maybe_offer_resume() -> void:
 	dlg.add_cancel_button(I18n.t("ui.dialog.resume_no"))
 	add_child(dlg)
 	_style_dialog(dlg)
+	# Retina (stretch=disabled) : the resume prompt rendered at the small
+	# project default font → barely legible. Duplicate the parchment chrome
+	# theme and bump the whole dialog's font so the message and both buttons
+	# stay readable. Duplicate so the larger font doesn't leak onto the shared
+	# dialog theme used by every other popup.
+	var dlg_theme: Theme = _dialog_theme.duplicate(true)
+	dlg_theme.default_font_size = 40
+	dlg.theme = dlg_theme
 	dlg.confirmed.connect(func():
 		if _load_game():
 			_refresh_all()
@@ -950,7 +958,6 @@ const FAB_ZOOM_IN    := 1002
 const FAB_LANG       := 1003
 const FAB_TRANS      := 1004
 const FAB_NEW_GAME   := 1005
-const FAB_NEXT_ST    := 1006
 const FAB_PUISER     := 1007
 const FAB_JOURNAL    := 1008
 const FAB_HOTSPOTS   := 1009
@@ -1021,10 +1028,7 @@ func _open_actions_menu() -> void:
 		and not GameRules.can_puiser(state, state.active_player))
 	var items: Array = [
 		{"id": FAB_TRANS,    "label": I18n.t("ui.btn.transgressions")},
-		{"id": FAB_JOURNAL,  "label": I18n.t("ui.btn.journal")},
-		{"id": FAB_GLOSSARY, "label": I18n.t("ui.btn.glossary")},
 		{"id": FAB_NEW_GAME, "label": I18n.t("ui.btn.new_game")},
-		{"id": FAB_NEXT_ST,  "label": I18n.t("ui.btn.next_station")},
 		{"id": FAB_PUISER,   "label": I18n.t("ui.btn.puiser"),
 			"hint": I18n.t("ui.btn.puiser.tooltip"), "disabled": puiser_disabled},
 	]
@@ -1036,6 +1040,8 @@ func _open_settings_menu() -> void:
 	var items: Array = [
 		{"id": FAB_LANG,      "label": I18n.t("ui.btn.toggle_lang"),
 			"hint": I18n.t("ui.btn.toggle_lang.tooltip")},
+		{"id": FAB_JOURNAL,   "label": I18n.t("ui.btn.journal")},
+		{"id": FAB_GLOSSARY,  "label": I18n.t("ui.btn.glossary")},
 		{"id": FAB_ZOOM_OUT,  "label": I18n.t("ui.btn.zoom_out_label")},
 		{"id": FAB_ZOOM_RESET,"label": I18n.t("ui.btn.zoom_reset_label")},
 		{"id": FAB_ZOOM_IN,   "label": I18n.t("ui.btn.zoom_in_label")},
@@ -1053,7 +1059,6 @@ func _on_fab_menu_pressed(id: int) -> void:
 		FAB_LANG:       _on_btn_toggle_lang()
 		FAB_TRANS:      _on_btn_transgressions()
 		FAB_NEW_GAME:   _on_btn_new_game()
-		FAB_NEXT_ST:    _on_btn_force_next_station()
 		FAB_PUISER:     _on_btn_puiser()
 		FAB_GLOSSARY:   _on_btn_glossary()
 		FAB_JOURNAL:    _on_btn_toggle_log()
@@ -2825,16 +2830,6 @@ func _start_new_game(config: Dictionary) -> void:
 	new_game(config)
 	state.add_log(I18n.t("log.new_game", [Time.get_time_string_from_system()]))
 	_refresh_log()
-
-
-func _on_btn_force_next_station() -> void:
-	if state.game_over:
-		return
-	state.current_pulse = GameEnums.STATION_PULSES[state.current_station]
-	manager._pulse_actions_done[GameEnums.PlayerId.RED] = true
-	manager._pulse_actions_done[GameEnums.PlayerId.PURPLE] = true
-	manager._end_pulse()
-	_refresh_all()
 
 
 # Puiser dans l'Ombre — only legal when the active player's available

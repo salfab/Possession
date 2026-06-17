@@ -166,9 +166,8 @@ const STRINGS := {
 	},
 
 	# UI — bottom bar
-	"ui.btn.transgressions":{"fr": "Trans.",      "en": "Trans."},
-	"ui.btn.new_game":      {"fr": "Nouvelle",    "en": "New game"},
-	"ui.btn.next_station":  {"fr": "Station »",   "en": "Station »"},
+	"ui.btn.transgressions":{"fr": "Transgressions", "en": "Transgressions"},
+	"ui.btn.new_game":      {"fr": "Nouvelle partie", "en": "New game"},
 	"ui.btn.pass":          {"fr": "Passer",      "en": "Pass"},
 	"ui.btn.journal":       {"fr": "Journal",     "en": "Journal"},
 	"ui.btn.glossary":      {"fr": "Glossaire",   "en": "Glossary"},

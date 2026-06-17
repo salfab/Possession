@@ -62,12 +62,28 @@ jobs:
             exit 1
           fi
 
+      - name: Run UI regression tests (liturgy-banner tap path)
+        shell: bash
+        # Boots the Main scene headless and asserts the per-banner input
+        # invariants (panel STOP, gui_input wired, children IGNORE, not covered)
+        # so a future banner-art refactor can't silently kill banner taps again.
+        run: |
+          set -eo pipefail
+          godot --headless --path . --script res://scripts/cli/run_ui_tests.gd 2>&1 | tee ui-tests.log
+          grep -q "PASS" ui-tests.log || { echo "::error::No UI test output — UI tests did not run."; exit 1; }
+          if grep -E "=== [0-9]+/[0-9]+ PASS, ([1-9][0-9]*) FAIL ===" ui-tests.log > /dev/null; then
+            echo "::error::Some UI tests failed."
+            exit 1
+          fi
+
       - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-log
-          path: tests.log
+          path: |
+            tests.log
+            ui-tests.log
 
   # ---------------------------------------------------------------------------
   # 2. Build the Web/HTML5 export.

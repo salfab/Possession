@@ -34,8 +34,14 @@ bloquant.
 docker run --rm -v "$(pwd):/project_src:ro" barichello/godot-ci:4.3 \
   bash -c "cp -r /project_src /tmp/proj && rm -rf /tmp/proj/.godot \
   && godot --headless --editor --path /tmp/proj --quit 2>/dev/null \
-  && godot --headless --path /tmp/proj --script res://scripts/cli/run_tests.gd"
+  && godot --headless --path /tmp/proj --script res://scripts/cli/run_tests.gd \
+  && godot --headless --path /tmp/proj --script res://scripts/cli/run_ui_tests.gd"
 ```
+
+Deux suites : `run_tests.gd` (logique : rules engine + bot, pur `RefCounted`) et
+`run_ui_tests.gd` (régression UI : instancie `Main` headless et vérifie les
+invariants d'input des bannières liturgiques — panel `STOP`, `gui_input`
+connecté, enfants `IGNORE`, panel non recouvert). Le CI lance les deux.
 
 Le `--editor --quit` reconstruit le cache de class_name avant les tests.
 Sans ça, les identifiants GDScript ne sont pas résolus en mode `--script`.
