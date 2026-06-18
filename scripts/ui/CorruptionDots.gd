@@ -5,9 +5,9 @@ extends Control
 # flame/drop shape tinted with the owning demon's colour. Both players' tokens
 # share the same row, separated by a small gap.
 
-const DOT_SIZE := 14.0
-const DOT_GAP := 2.0
-const GROUP_GAP := 6.0
+const DOT_SIZE := 28.0
+const DOT_GAP := 4.0
+const GROUP_GAP := 12.0
 const TEX_CORRUPTION_PATH := "res://assets/ui/markers/corruption.png"
 const USE_TEXTURE_MARKERS := false
 

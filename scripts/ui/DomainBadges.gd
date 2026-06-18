@@ -14,8 +14,8 @@ extends Control
 #   • Sealed     : padlock — filled square with an inverted-U shackle
 #   • Penitence  : a + sign (cross) drawn from two thick rectangles
 
-const BADGE_SIZE := 26.0
-const BADGE_GAP  := 5.0
+const BADGE_SIZE := 52.0
+const BADGE_GAP  := 10.0
 
 var controller_color: Color = Color(0, 0, 0, 0)  # alpha=0 means "no controller"
 var controller_letter: String = ""

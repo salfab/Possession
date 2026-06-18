@@ -10,7 +10,7 @@ extends Control
 
 signal pressed
 
-const DEFAULT_SIZE := 26.0
+const DEFAULT_SIZE := 52.0
 const TEX_SCANDALE_PATH := "res://assets/ui/markers/transgression_scandale.png"
 const TEX_INFAMIE_PATH := "res://assets/ui/markers/transgression_infamie.png"
 const USE_TEXTURE_MARKERS := false
