@@ -235,7 +235,7 @@ func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 	for tid in TransgressionData.ALL_IDS:
 		if GameRules.why_cannot_provoquer(state, player, tid) != "":
 			continue
-		if d_id in GameRules.transgression_origin_options(player, tid):
+		if d_id in GameRules.transgression_origin_options(state, player, tid):
 			var lbl := I18n.t("ui.popup.provoke_in",
 				[TransgressionData.name_of(tid), GameEnums.DOMAIN_NAMES[d_id]])
 			prov.add_child(_make_cell(lbl, "", GAIN, true, _emit_provoke.bind(tid, d_id)))

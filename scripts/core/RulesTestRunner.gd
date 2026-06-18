@@ -28,6 +28,7 @@ func run_all() -> Dictionary:
 	_test_communion()
 	_test_station_six()
 	_test_simonie_infamy()
+	_test_simonie_origin()
 	_test_confession_pending_decision()
 	# V1h additions
 	_test_starting_corruption()
@@ -968,28 +969,87 @@ func _test_codex_mascarade() -> void:
 # ---------------------------------------------------------------------------
 # Appétit hérétique (14)
 # ---------------------------------------------------------------------------
-func _test_codex_appetit() -> void:
+# Shared setup for the Appétit hérétique (Infamie) power tests : RED controls
+# DÉSIR (its home), holds 1 presence in PEUR which PURPLE controls, and owns
+# Appétit in Infamie — so every guard is satisfied and callers knock them out
+# one at a time.
+func _appetit_base_state() -> GameState:
 	var s := _new_state()
-	# PURPLE controls DESIR, RED does not but has 1 corruption there.
-	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE, 3)
-	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 1)
+	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 2)
+	s.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.PURPLE, 2)
+	s.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 1)
 	s.available_corruption[GameEnums.PlayerId.RED] = 10
-	# Without Appétit infamy: RED can't provoquer a DÉSIR transgression.
-	_assert(not GameRules.can_provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_FESTIN),
-		"Appétit : sans infamie, pas de Transgression DÉSIR sans contrôle")
-	# With Appétit infamy (RED has it).
 	var ti := GameState.TransgressionInstance.new()
 	ti.def_id = TransgressionData.T_APPETIT
 	ti.owner = GameEnums.PlayerId.RED
 	ti.face = GameEnums.TransgressionFace.INFAMIE
 	ti.origin_domain = GameEnums.DomainId.DESIR
 	s.domain(GameEnums.DomainId.DESIR).infamies.append(ti)
-	_assert(GameRules.can_provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_FESTIN),
-		"Appétit Infamie : Transgression DÉSIR autorisée avec présence mais sans contrôle")
-	# Without presence: still blocked.
-	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 0)
-	_assert(not GameRules.can_provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_FESTIN),
-		"Appétit Infamie : sans présence dans le Domaine, toujours bloqué")
+	return s
+
+
+func _test_codex_appetit() -> void:
+	# Sanity : without Appétit infamy, a PEUR transgression needs control of PEUR.
+	var s0 := _appetit_base_state()
+	s0.domain(GameEnums.DomainId.DESIR).infamies.clear()
+	_assert(not GameRules.can_provoquer(s0, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION),
+		"Appétit : sans infamie, pas de Transgression PEUR sans contrôle")
+	# Every guard satisfied -> allowed.
+	var s1 := _appetit_base_state()
+	_assert(GameRules.can_provoquer(s1, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION),
+		"Appétit Infamie : provocation autorisée (Désir contrôlé + présence, non scellé, inutilisé)")
+	# Guard 1 — must control DÉSIR.
+	var s2 := _appetit_base_state()
+	s2.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE, 3)
+	_assert(not GameRules.can_provoquer(s2, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION),
+		"Appétit Infamie : bloqué si on ne contrôle plus Désir")
+	# Guard 2 — need ≥1 presence in the required domain.
+	var s3 := _appetit_base_state()
+	s3.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 0)
+	_assert(not GameRules.can_provoquer(s3, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION),
+		"Appétit Infamie : bloqué sans présence dans le Domaine requis")
+	# Guard 3 — the required domain must not be sealed by the opponent.
+	var s4 := _appetit_base_state()
+	s4.domain(GameEnums.DomainId.PEUR).seal_owner = GameEnums.PlayerId.PURPLE
+	_assert(not GameRules.can_provoquer(s4, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION),
+		"Appétit Infamie : bloqué si le Domaine requis est scellé par l'adversaire")
+	# Guard 4 — once per Station : the first off-control provoke spends it.
+	var s5 := _appetit_base_state()
+	ActionResolver.provoquer(s5, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION)
+	_assert(s5.transgression_owner(TransgressionData.T_PERSECUTION) == GameEnums.PlayerId.RED,
+		"Appétit Infamie : 1re provocation hors-contrôle réussit")
+	_assert(s5.appetit_offcontrol_used_this_station[GameEnums.PlayerId.RED],
+		"Appétit Infamie : pouvoir marqué utilisé pour la Station")
+	_assert(not GameRules.can_provoquer(s5, GameEnums.PlayerId.RED, TransgressionData.T_PANIQUE),
+		"Appétit Infamie : 2e provocation hors-contrôle bloquée la même Station")
+
+
+func _test_simonie_origin() -> void:
+	# Simonie requires FOI or AMBITION (origin_choice). PURPLE controls FOI only ;
+	# RED controls AMBITION. PURPLE must not be able to drop its Scandale into
+	# AMBITION (a required domain it does not control) — it lands in FOI.
+	var s := _new_state()
+	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.PURPLE, 1)
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 2)
+	s.available_corruption[GameEnums.PlayerId.PURPLE] = 10
+	_assert(GameRules.can_provoquer(s, GameEnums.PlayerId.PURPLE, TransgressionData.T_SIMONIE),
+		"Simonie : provocation légale (contrôle Foi)")
+	# Ask for AMBITION (uncontrolled) -> engine must redirect to FOI.
+	ActionResolver.provoquer(s, GameEnums.PlayerId.PURPLE, TransgressionData.T_SIMONIE,
+		GameEnums.DomainId.AMBITION)
+	var ti := s.find_transgression_instance(GameEnums.PlayerId.PURPLE, TransgressionData.T_SIMONIE, GameEnums.TransgressionFace.SCANDALE)
+	_assert(ti != null and ti.origin_domain == GameEnums.DomainId.FOI,
+		"Simonie : Scandale posé en Foi (contrôlé), pas en Ambition (Rouge)")
+	# Explicitly choosing the controlled domain also lands in FOI.
+	var s2 := _new_state()
+	s2.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.PURPLE, 1)
+	s2.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 2)
+	s2.available_corruption[GameEnums.PlayerId.PURPLE] = 10
+	ActionResolver.provoquer(s2, GameEnums.PlayerId.PURPLE, TransgressionData.T_SIMONIE,
+		GameEnums.DomainId.FOI)
+	var ti2 := s2.find_transgression_instance(GameEnums.PlayerId.PURPLE, TransgressionData.T_SIMONIE, GameEnums.TransgressionFace.SCANDALE)
+	_assert(ti2 != null and ti2.origin_domain == GameEnums.DomainId.FOI,
+		"Simonie : choix explicite de Foi -> posé en Foi")
 
 
 # ---------------------------------------------------------------------------

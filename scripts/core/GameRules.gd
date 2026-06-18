@@ -57,10 +57,16 @@ static func can_exploiter(state: GameState, player: int, d_id: int) -> bool:
 			return false
 	return true
 
-static func transgression_origin_options(player: int, def_id: String) -> Array:
+static func transgression_origin_options(state: GameState, player: int, def_id: String) -> Array:
 	var def: Dictionary = TransgressionData.get_def(def_id)
 	if def.get("origin_choice", false):
-		return def.get("domain_requirement", []).duplicate()
+		# Only the required domains the player can actually provoke from (controls,
+		# or qualifies via the Appétit presence power) — never the opponent's.
+		var out: Array = []
+		for d_id in def.get("domain_requirement", []):
+			if can_provoke_from_domain(state, player, d_id):
+				out.append(d_id)
+		return out
 	return [def.get("default_origin", 0)]
 
 static func can_provoquer(state: GameState, player: int, def_id: String) -> bool:
@@ -71,16 +77,12 @@ static func can_provoquer(state: GameState, player: int, def_id: String) -> bool
 	var owner := state.transgression_owner(def_id)
 	if owner != GameEnums.PlayerId.NONE:
 		return false
-	# Must control (or with Appétit infamy: have presence in) at least one required domain.
+	# Must be able to provoke from at least one required domain — by controlling
+	# it, or via the Appétit hérétique (Infamie) presence power.
 	var requirement: Array = def.get("domain_requirement", [])
-	var appetit_ti: GameState.TransgressionInstance = state.find_transgression_instance(player, TransgressionData.T_APPETIT, GameEnums.TransgressionFace.INFAMIE)
-	var has_appetit_infamy: bool = appetit_ti != null
 	var qualifies := false
 	for d_id in requirement:
-		if state.controller_of(d_id) == player:
-			qualifies = true
-			break
-		if has_appetit_infamy and state.corruption_in(d_id, player) >= 1:
+		if can_provoke_from_domain(state, player, d_id):
 			qualifies = true
 			break
 	if not qualifies:
@@ -88,6 +90,27 @@ static func can_provoquer(state: GameState, player: int, def_id: String) -> bool
 	# Must afford the (possibly discounted) Scandale cost.
 	var cost := transgression_scandal_cost(state, player, def_id)
 	if state.available_corruption[player] < cost:
+		return false
+	return true
+
+# A player may provoke a Transgression *from* domain `d_id` when they control it,
+# OR via the Appétit hérétique (Infamie) power : while they control Désir, once
+# per Station, they may provoke from a domain where they merely hold ≥1
+# Corruption, provided the opponent hasn't sealed it. Mirrors the card text.
+static func can_provoke_from_domain(state: GameState, player: int, d_id: int) -> bool:
+	if state.controller_of(d_id) == player:
+		return true
+	# Appétit hérétique (Infamie) presence path + its three guards.
+	if state.find_transgression_instance(player, TransgressionData.T_APPETIT, GameEnums.TransgressionFace.INFAMIE) == null:
+		return false
+	if state.controller_of(GameEnums.DomainId.DESIR) != player:
+		return false
+	if state.corruption_in(d_id, player) < 1:
+		return false
+	var d := state.domain(d_id)
+	if d != null and d.seal_owner == GameEnums.opponent(player):
+		return false
+	if state.appetit_offcontrol_used_this_station.get(player, false):
 		return false
 	return true
 

@@ -47,14 +47,21 @@ static func provoquer(state: GameState, player: int, def_id: String, origin_choi
 	var origin: int = def.get("default_origin", 0)
 	if def.get("origin_choice", false):
 		var options: Array = def.get("domain_requirement", [])
-		if origin_choice in options:
+		# The chosen origin must be a domain the player can actually provoke from
+		# (controls it, or qualifies via the Appétit presence power) — otherwise
+		# fall back to the first such domain. Stops a Scandale being dropped into
+		# a required domain the opponent controls.
+		if origin_choice in options and GameRules.can_provoke_from_domain(state, player, origin_choice):
 			origin = origin_choice
 		else:
-			# fall back to the first controlled requirement domain
 			for d_id in options:
-				if state.controller_of(d_id) == player:
+				if GameRules.can_provoke_from_domain(state, player, d_id):
 					origin = d_id
 					break
+	# Provoking from a domain you don't control spends the once-per-Station
+	# Appétit hérétique (Infamie) power.
+	if state.controller_of(origin) != player:
+		state.appetit_offcontrol_used_this_station[player] = true
 	# Pay cost (with Népotisme discount tracked)
 	var cost := GameRules.transgression_scandal_cost(state, player, def_id)
 	state.add_corruption_pool(player, -cost)

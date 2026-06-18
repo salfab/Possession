@@ -146,6 +146,12 @@ var paranoia_used_this_station: Dictionary = {
 	GameEnums.PlayerId.RED: false,
 	GameEnums.PlayerId.PURPLE: false,
 }
+# Appétit hérétique (Infamie) : the "provoke from a domain you don't control"
+# power is limited to once per Station per player.
+var appetit_offcontrol_used_this_station: Dictionary = {  # PlayerId -> bool
+	GameEnums.PlayerId.RED: false,
+	GameEnums.PlayerId.PURPLE: false,
+}
 var foi_next_response_impedita: bool = false  # Simonie infamy effect
 var missel_modifiers: Dictionary = {}  # StationId -> String modifier_id; empty = V1h strict
 var initiative_override: Dictionary = {}  # StationId -> PlayerId; empty = use STATION_INITIATIVE
@@ -322,6 +328,7 @@ func to_dict() -> Dictionary:
 		"trafic_infamy_used_this_station": trafic_infamy_used_this_station.duplicate(),
 		"favori_used_this_station": favori_used_this_station.duplicate(),
 		"paranoia_used_this_station": paranoia_used_this_station.duplicate(),
+		"appetit_offcontrol_used_this_station": appetit_offcontrol_used_this_station.duplicate(),
 		"foi_next_response_impedita": foi_next_response_impedita,
 		"missel_modifiers": missel_modifiers.duplicate(),
 		"initiative_override": initiative_override.duplicate(),
@@ -362,6 +369,7 @@ func from_dict(d: Dictionary) -> void:
 	trafic_infamy_used_this_station = d.get("trafic_infamy_used_this_station", trafic_infamy_used_this_station)
 	favori_used_this_station = d.get("favori_used_this_station", favori_used_this_station)
 	paranoia_used_this_station = d.get("paranoia_used_this_station", paranoia_used_this_station)
+	appetit_offcontrol_used_this_station = d.get("appetit_offcontrol_used_this_station", appetit_offcontrol_used_this_station)
 	foi_next_response_impedita = d.get("foi_next_response_impedita", false)
 	missel_modifiers = d.get("missel_modifiers", {}).duplicate()
 	initiative_override = d.get("initiative_override", {}).duplicate()

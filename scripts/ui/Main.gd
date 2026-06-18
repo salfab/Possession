@@ -4139,7 +4139,7 @@ func _make_transgression_card(player: int, tid: String, def: Dictionary) -> Cont
 	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_vbox.add_child(action_row)
 
-	var origins: Array = GameRules.transgression_origin_options(player, tid)
+	var origins: Array = GameRules.transgression_origin_options(state, player, tid)
 	for origin_d in origins:
 		var btn := Button.new()
 		var origin_int: int = origin_d

@@ -184,6 +184,8 @@ func _begin_station(station: int, _initial: bool) -> void:
 	state.favori_used_this_station[GameEnums.PlayerId.PURPLE] = false
 	state.paranoia_used_this_station[GameEnums.PlayerId.RED] = false
 	state.paranoia_used_this_station[GameEnums.PlayerId.PURPLE] = false
+	state.appetit_offcontrol_used_this_station[GameEnums.PlayerId.RED] = false
+	state.appetit_offcontrol_used_this_station[GameEnums.PlayerId.PURPLE] = false
 	# Dénonciation scandale block is station-scoped: reset at station start.
 	state.denonciation_blocked_domain[GameEnums.PlayerId.RED] = -1
 	state.denonciation_blocked_domain[GameEnums.PlayerId.PURPLE] = -1
