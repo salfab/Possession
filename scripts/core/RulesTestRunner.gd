@@ -36,6 +36,7 @@ func run_all() -> Dictionary:
 	_test_free_exploit_per_player()
 	_test_linked_domains()
 	_test_anchor_unchanged()
+	_test_save_load_roundtrip()
 	# Codex des Transgressions
 	_test_codex_setup()
 	_test_codex_filter()
@@ -57,6 +58,35 @@ func run_all() -> Dictionary:
 
 func _new_state() -> GameState:
 	return GameState.new()
+
+
+func _test_save_load_roundtrip() -> void:
+	# Saves go through JSON, which stringifies int dict keys (and widens ints to
+	# floats). from_dict must rebuild int keys so available_corruption[player] &
+	# co. don't read null and crash arithmetic on resume ("a number is required").
+	var s := _new_state()
+	s.available_corruption[GameEnums.PlayerId.RED] = 4
+	s.available_corruption[GameEnums.PlayerId.PURPLE] = 2
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
+	s.nepotisme_used_this_station[GameEnums.PlayerId.RED] = true
+	s.transgressions_provoked_this_station[GameEnums.PlayerId.PURPLE] = 1
+	s.ascendant = 2
+	var parsed: Variant = JSON.parse_string(JSON.stringify(s.to_dict()))
+	var s2 := _new_state()
+	s2.from_dict(parsed)
+	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == 4,
+		"Round-trip JSON : available_corruption[RED] préservé (clé int)")
+	_assert(s2.available_corruption[GameEnums.PlayerId.PURPLE] == 2,
+		"Round-trip JSON : available_corruption[PURPLE] préservé")
+	_assert(s2.corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED) == 3,
+		"Round-trip JSON : corruption d'un Domaine préservée")
+	_assert(s2.nepotisme_used_this_station[GameEnums.PlayerId.RED] == true,
+		"Round-trip JSON : flag per-Station (clé int) préservé")
+	_assert(s2.transgressions_provoked_this_station[GameEnums.PlayerId.PURPLE] == 1,
+		"Round-trip JSON : compteur per-Station préservé")
+	# The exact resume crash : arithmetic on the reloaded pool must not error.
+	_assert(s2.available_corruption[GameEnums.PlayerId.RED] < 5,
+		"Round-trip JSON : arithmétique sur le pool rechargé OK (pas de null)")
 
 
 func _assert(cond: bool, name: String, msg: String = "") -> void:

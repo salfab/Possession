@@ -342,13 +342,35 @@ func to_dict() -> Dictionary:
 		"obeissance_acts_first": obeissance_acts_first.duplicate(),
 	}
 
+# JSON stringifies Dictionary keys (and widens ints to floats), so an int-keyed
+# dict round-trips with string keys ("0"/"1") and float values. The engine
+# indexes these by GameEnums.PlayerId / StationId ints everywhere, so a loaded
+# save returned null on those lookups → "a number is required" on the next bit
+# of arithmetic (e.g. the demon-panel reserve labels on resume). Rebuild with
+# int keys — same idea as the domains[int(d_id)] handling below. `numeric_values`
+# coerces float values back to int (corruption counts, domain / player ids).
+static func _reint_keyed(loaded: Variant, fallback: Dictionary, numeric_values: bool) -> Dictionary:
+	if not (loaded is Dictionary) or (loaded as Dictionary).is_empty():
+		return fallback.duplicate()
+	var out := {}
+	for k in (loaded as Dictionary).keys():
+		var v: Variant = loaded[k]
+		if numeric_values and (v is float or v is int):
+			v = int(v)
+		out[int(k)] = v
+	for fk in fallback.keys():
+		if not out.has(fk):
+			out[fk] = fallback[fk]
+	return out
+
+
 func from_dict(d: Dictionary) -> void:
 	domains.clear()
 	for d_id in d.get("domains", {}).keys():
 		var ds := DomainState.new()
 		ds.from_dict(d["domains"][d_id])
 		domains[int(d_id)] = ds
-	available_corruption = d.get("available_corruption", available_corruption)
+	available_corruption = _reint_keyed(d.get("available_corruption", available_corruption), available_corruption, true)
 	ascendant = d.get("ascendant", 0)
 	current_station = d.get("current_station", 0)
 	current_pulse = d.get("current_pulse", 1)
@@ -363,21 +385,21 @@ func from_dict(d: Dictionary) -> void:
 		var pd := PendingDecision.new()
 		pd.from_dict(p)
 		pending_decisions.append(pd)
-	transgressions_provoked_this_station = d.get("transgressions_provoked_this_station", transgressions_provoked_this_station)
-	trafic_discount_pending = d.get("trafic_discount_pending", trafic_discount_pending)
-	nepotisme_used_this_station = d.get("nepotisme_used_this_station", nepotisme_used_this_station)
-	trafic_infamy_used_this_station = d.get("trafic_infamy_used_this_station", trafic_infamy_used_this_station)
-	favori_used_this_station = d.get("favori_used_this_station", favori_used_this_station)
-	paranoia_used_this_station = d.get("paranoia_used_this_station", paranoia_used_this_station)
-	appetit_offcontrol_used_this_station = d.get("appetit_offcontrol_used_this_station", appetit_offcontrol_used_this_station)
+	transgressions_provoked_this_station = _reint_keyed(d.get("transgressions_provoked_this_station", transgressions_provoked_this_station), transgressions_provoked_this_station, true)
+	trafic_discount_pending = _reint_keyed(d.get("trafic_discount_pending", trafic_discount_pending), trafic_discount_pending, false)
+	nepotisme_used_this_station = _reint_keyed(d.get("nepotisme_used_this_station", nepotisme_used_this_station), nepotisme_used_this_station, false)
+	trafic_infamy_used_this_station = _reint_keyed(d.get("trafic_infamy_used_this_station", trafic_infamy_used_this_station), trafic_infamy_used_this_station, false)
+	favori_used_this_station = _reint_keyed(d.get("favori_used_this_station", favori_used_this_station), favori_used_this_station, false)
+	paranoia_used_this_station = _reint_keyed(d.get("paranoia_used_this_station", paranoia_used_this_station), paranoia_used_this_station, false)
+	appetit_offcontrol_used_this_station = _reint_keyed(d.get("appetit_offcontrol_used_this_station", appetit_offcontrol_used_this_station), appetit_offcontrol_used_this_station, false)
 	foi_next_response_impedita = d.get("foi_next_response_impedita", false)
-	missel_modifiers = d.get("missel_modifiers", {}).duplicate()
-	initiative_override = d.get("initiative_override", {}).duplicate()
+	missel_modifiers = _reint_keyed(d.get("missel_modifiers", {}), {}, false)
+	initiative_override = _reint_keyed(d.get("initiative_override", {}), {}, true)
 	log = d.get("log", [])
 	game_over = d.get("game_over", false)
 	winner = d.get("winner", GameEnums.PlayerId.NONE)
 	winner_reason = d.get("winner_reason", "")
 	codex_of_transgressions_enabled = d.get("codex_of_transgressions_enabled", false)
 	codex_available = d.get("codex_available", []).duplicate()
-	denonciation_blocked_domain = d.get("denonciation_blocked_domain", denonciation_blocked_domain).duplicate()
-	obeissance_acts_first = d.get("obeissance_acts_first", obeissance_acts_first).duplicate()
+	denonciation_blocked_domain = _reint_keyed(d.get("denonciation_blocked_domain", denonciation_blocked_domain), denonciation_blocked_domain, true)
+	obeissance_acts_first = _reint_keyed(d.get("obeissance_acts_first", obeissance_acts_first), obeissance_acts_first, false)
