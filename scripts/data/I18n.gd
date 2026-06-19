@@ -209,6 +209,8 @@ const STRINGS := {
 	"ui.dialog.cancel":             {"fr": "Annuler",                    "en": "Cancel"},
 	"ui.player.human":              {"fr": "Humain",                     "en": "Human"},
 	"ui.player.ai":                 {"fr": "IA",                         "en": "AI"},
+	"ui.new_game.codex":            {"fr": "Codex des Transgressions (20 cartes)", "en": "Codex of Transgressions (20 cards)"},
+	"ui.new_game.missel":           {"fr": "Missel Corrompu (Réponses corrompues)", "en": "Corrupted Missal (corrupted Responses)"},
 	"ui.dialog.title.targeting_rule":{"fr": "Règle de ciblage",           "en": "Targeting rule"},
 	"ui.dialog.title.effect_detail":{"fr": "Détail de l'effet",          "en": "Effect detail"},
 	"ui.tooltip.tap_for_targeting_rule":{"fr": "Toucher pour voir la règle de ciblage",

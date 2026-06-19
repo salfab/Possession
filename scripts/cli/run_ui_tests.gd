@@ -84,6 +84,14 @@ func _initialize() -> void:
 	_pass += int(card_res.get("pass", 0))
 	_fail += int(card_res.get("fail", 0))
 
+	# New-game options (Codex / Missel toggles) → fresh GameState. Runs last : it
+	# calls new_game() which resets state, so it must not precede other checks.
+	var ng_res: Dictionary = load("res://scripts/cli/new_game_options_check.gd").new().check(main)
+	for l in ng_res.get("lines", []):
+		_lines.append(String(l))
+	_pass += int(ng_res.get("pass", 0))
+	_fail += int(ng_res.get("fail", 0))
+
 	_finish()
 
 

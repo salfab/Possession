@@ -147,6 +147,10 @@ var _player_config: Dictionary = {
 	GameEnums.PlayerId.RED: PLAYER_HUMAN,
 	GameEnums.PlayerId.PURPLE: PLAYER_HUMAN,
 }
+# Optional rule modules picked in the new-game dialog ; remembered across games
+# so a repeat start keeps the player's last choice (like the Human/AI picker).
+var _new_game_codex: bool = false
+var _new_game_missel: bool = false
 # One-shot timer that paces bot moves: each timeout applies a single
 # step_bot_once() so the player can watch the AI play instead of the whole
 # turn resolving instantly. Created lazily in _ensure_ai_timer().
@@ -551,9 +555,25 @@ func new_game(config: Dictionary = {}) -> void:
 	# The UI paces bot moves itself (one per timer tick) instead of letting
 	# perform_action() resolve the whole bot turn synchronously.
 	manager.auto_bot = false
+	# Optional rule modules travel as string keys in config ; they configure the
+	# fresh GameState (and are persisted via its serialization), so keep them OUT
+	# of _player_config (which only holds the per-side Human/AI choice).
+	var enable_codex: bool = bool(config.get("codex", false))
+	var enable_missel: bool = bool(config.get("missel", false))
 	if not config.is_empty():
-		_player_config = config.duplicate()
+		var pc: Dictionary = config.duplicate()
+		pc.erase("codex")
+		pc.erase("missel")
+		if not pc.is_empty():
+			_player_config = pc
 	_apply_player_config()
+	if enable_codex or enable_missel:
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		if enable_codex:
+			CodexSetup.setup(state, rng)
+		if enable_missel:
+			MisselSetup.setup(state, rng)
 	pending_action = -1
 	pending_kwargs.clear()
 	_endgame_shown = false
@@ -2811,11 +2831,25 @@ func _show_new_game_dialog() -> void:
 		picks[pid] = opt
 		box.add_child(row)
 
+	# Optional rule modules — independent toggles, remembered across games.
+	var codex_chk := CheckButton.new()
+	codex_chk.text = I18n.t("ui.new_game.codex")
+	codex_chk.button_pressed = _new_game_codex
+	box.add_child(codex_chk)
+	var missel_chk := CheckButton.new()
+	missel_chk.text = I18n.t("ui.new_game.missel")
+	missel_chk.button_pressed = _new_game_missel
+	box.add_child(missel_chk)
+
 	add_child(dlg)
 	dlg.confirmed.connect(func():
 		var config := {}
 		for pid in picks.keys():
 			config[pid] = PLAYER_AI if (picks[pid] as OptionButton).selected == 1 else PLAYER_HUMAN
+		_new_game_codex = codex_chk.button_pressed
+		_new_game_missel = missel_chk.button_pressed
+		config["codex"] = _new_game_codex
+		config["missel"] = _new_game_missel
 		_start_new_game(config)
 		dlg.queue_free()
 	)

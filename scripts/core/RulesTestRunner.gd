@@ -44,6 +44,7 @@ func run_all() -> Dictionary:
 	# Codex des Transgressions
 	_test_codex_setup()
 	_test_codex_filter()
+	_test_missel_setup()
 	_test_codex_intrigue()
 	_test_codex_bulle()
 	_test_codex_mascarade()
@@ -982,6 +983,27 @@ func _test_codex_filter() -> void:
 			intrigue_variants += 1
 	_assert(intrigue_variants == DomainData.DOMAINS.size(),
 		"Codex actif + Intrigue sélectionnée : une variante par Domaine (%d)" % intrigue_variants)
+
+
+# ---------------------------------------------------------------------------
+# Missel Corrompu — setup (random one modifier per Station I–V)
+# ---------------------------------------------------------------------------
+func _test_missel_setup() -> void:
+	var s := _new_state()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 12345
+	MisselSetup.setup(s, rng)
+	# One modifier per Station that owns variants (I–V = 5 ; never the Exorcisme).
+	_assert(s.missel_modifiers.size() == 5,
+		"Missel setup : 5 Stations reçoivent un modificateur (obtenu %d)" % s.missel_modifiers.size())
+	var all_valid := true
+	for st in s.missel_modifiers.keys():
+		var mid: String = String(s.missel_modifiers[st])
+		if not (MisselData.MODIFIERS.has(mid) and MisselData.MODIFIERS[mid]["station"] == st):
+			all_valid = false
+	_assert(all_valid, "Missel setup : chaque modificateur tiré est valide pour sa Station")
+	_assert(not s.missel_modifiers.has(GameEnums.StationId.EXORCISME),
+		"Missel setup : l'Exorcisme ne reçoit jamais de modificateur")
 
 
 # ---------------------------------------------------------------------------
