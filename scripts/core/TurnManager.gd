@@ -44,6 +44,8 @@ func active_player_must_act() -> bool:
 func perform_action(action: int, kwargs: Dictionary = {}) -> Dictionary:
 	if state.game_over:
 		return ActionResolver.fail("Partie terminée.")
+	if not pending_liturgy.is_empty():
+		return ActionResolver.fail("Réponse liturgique en attente — validez-la d'abord.")
 	if state.has_pending_decisions():
 		return ActionResolver.fail("Une décision est en attente — résolvez-la d'abord.")
 	if not active_player_must_act():
@@ -168,6 +170,11 @@ func _advance_to_station(s: int) -> void:
 func _begin_station(station: int, _initial: bool) -> void:
 	state.add_log("=== Début Station %s — Initiative %s ===" %
 		[GameEnums.STATION_NAMES[station], GameEnums.player_name(GameEnums.STATION_INITIATIVE[station])])
+	# A new Station is always a fresh first Pulse — clear the per-pulse action
+	# flags so a stale "already acted" can't block the new Station's first move
+	# (defence-in-depth alongside the pending_liturgy guard in perform_action).
+	_pulse_actions_done[GameEnums.PlayerId.RED] = false
+	_pulse_actions_done[GameEnums.PlayerId.PURPLE] = false
 	# Reset per-station flags
 	for d_id in DomainData.DOMAINS:
 		var d := state.domain(d_id)

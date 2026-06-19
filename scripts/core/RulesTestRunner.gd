@@ -37,6 +37,7 @@ func run_all() -> Dictionary:
 	_test_linked_domains()
 	_test_anchor_unchanged()
 	_test_save_load_roundtrip()
+	_test_liturgy_advance_after_acknowledge()
 	# Codex des Transgressions
 	_test_codex_setup()
 	_test_codex_filter()
@@ -58,6 +59,30 @@ func run_all() -> Dictionary:
 
 func _new_state() -> GameState:
 	return GameState.new()
+
+
+func _test_liturgy_advance_after_acknowledge() -> void:
+	# End-of-Station liturgy must pause the game (no actions until acknowledged),
+	# then advancing must give the next Station a clean first Pulse — no stale
+	# "Ce joueur a déjà agi cette Pulsation".
+	var s := _new_state()
+	var tm := TurnManager.new(s, true)
+	var pulses: int = GameEnums.STATION_PULSES[GameEnums.StationId.MURMURES]
+	for i in pulses * 2:
+		tm.perform_action(GameEnums.ActionId.PASSER, {})
+	_assert(not tm.pending_liturgy.is_empty(),
+		"Liturgie : réponse en attente après la dernière Pulsation")
+	var blocked := tm.perform_action(GameEnums.ActionId.PASSER, {})
+	_assert(not blocked.get("ok", false),
+		"Liturgie : action refusée tant que la réponse n'est pas validée")
+	tm.acknowledge_liturgy()
+	_assert(s.current_station == GameEnums.StationId.TENTATION,
+		"Liturgie : avance à la Station suivante après validation")
+	_assert(tm.active_player_must_act(),
+		"Liturgie : joueur actif peut agir dans la nouvelle Station (pas de « déjà joué »)")
+	var ok_act := tm.perform_action(GameEnums.ActionId.PASSER, {})
+	_assert(ok_act.get("ok", false),
+		"Liturgie : 1re action de la nouvelle Station acceptée")
 
 
 func _test_save_load_roundtrip() -> void:

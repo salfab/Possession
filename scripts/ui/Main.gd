@@ -839,6 +839,9 @@ func _build_liturgy_dialog() -> void:
 	_liturgy_dialog.dialog_text = ""
 	_liturgy_dialog.min_size = Vector2i(820, 520)
 	_liturgy_dialog.confirmed.connect(_on_liturgy_acknowledged)
+	# Any close (not only the OK button) must acknowledge → advance the Station ;
+	# otherwise closing the response left the game stuck on the finished Station.
+	_liturgy_dialog.canceled.connect(_on_liturgy_acknowledged)
 	add_child(_liturgy_dialog)
 	_style_dialog(_liturgy_dialog)
 	_make_dialog_touch_friendly(_liturgy_dialog)
@@ -3751,7 +3754,9 @@ func _show_liturgy_dialog(info: Dictionary) -> void:
 	_liturgy_rtl.append_text("[b]%s[/b]\n" % I18n.t("ui.liturgy.resolution_header"))
 	_liturgy_rtl.append_text(details)
 
-	_popup_dialog_fullscreen(_liturgy_dialog)
+	# Centred dialog OVER the board (~70 %) rather than fullscreen, so the board
+	# stays visible behind the liturgical response.
+	_popup_dialog_over_board(_liturgy_dialog, 0.7)
 
 
 func _on_liturgy_acknowledged() -> void:
@@ -4638,7 +4643,11 @@ func _on_card_target_info_requested(station: int) -> void:
 		return
 	if _targeting_dialog == null:
 		_targeting_dialog = AcceptDialog.new()
-		_targeting_dialog.exclusive = true
+		# Non-exclusive on purpose : it stacks OVER the fullscreen card (CLAUDE.md
+		# « modales empilées »). Godot allows only one exclusive child per parent,
+		# so making this exclusive while the card is exclusive crashed with
+		# « another exclusive child ».
+		_targeting_dialog.exclusive = false
 		_targeting_dialog.ok_button_text = I18n.t("ui.dialog.close")
 		# Force a max width by capping wrap_controls and pinning min_size.
 		# Without this, the internal Label measures its single-line width
@@ -4703,7 +4712,8 @@ func _on_card_effect_info_requested() -> void:
 
 	if _effect_detail_dialog == null:
 		_effect_detail_dialog = AcceptDialog.new()
-		_effect_detail_dialog.exclusive = true
+		# Non-exclusive : stacks OVER the fullscreen card (see _targeting_dialog).
+		_effect_detail_dialog.exclusive = false
 		_effect_detail_dialog.ok_button_text = I18n.t("ui.dialog.close")
 		_effect_detail_dialog.wrap_controls = false
 		add_child(_effect_detail_dialog)
@@ -4815,6 +4825,14 @@ func _popup_dialog_fullscreen(dlg: AcceptDialog) -> void:
 	# (margin tweaks didn't move anything on screen), which suggests Godot
 	# applies its own layout pass when embedded.
 	dlg.popup_centered_ratio(1.0)
+
+
+# Like _popup_dialog_fullscreen but sized to a fraction of the viewport so the
+# board stays visible around it (used for the liturgical response dialog).
+func _popup_dialog_over_board(dlg: AcceptDialog, ratio: float) -> void:
+	_hide_other_exclusive_dialogs(dlg)
+	dlg.min_size = Vector2i.ZERO
+	dlg.popup_centered_ratio(ratio)
 
 
 # ─── Transgression catalog: per-card flip + image-click handlers ──────────────
