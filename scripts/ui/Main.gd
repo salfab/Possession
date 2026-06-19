@@ -2615,36 +2615,12 @@ func _refresh_player_transgression_panels() -> void:
 		btn.add_theme_color_override("font_color", fcol)
 		_apply_sidebar_button_style(btn, fcol)
 		btn.pressed.connect(_on_player_transgression_clicked.bind(String(tid), face, name_str))
-		# Entry = the name button, plus an inline "Amplify" button when the
-		# active player owns this Scandale and amplification is currently legal
-		# (origin sealed by them, not in penitence, enough Corruption). Lets you
-		# amplify straight from the demon panel without opening the full card.
-		var entry: Control = btn
-		if owner == state.active_player and face == GameEnums.TransgressionFace.SCANDALE \
-				and _player_config.get(owner, PLAYER_HUMAN) == PLAYER_HUMAN \
-				and GameRules.can_amplifier(state, owner, tid):
-			var row := HBoxContainer.new()
-			row.add_theme_constant_override("separation", 4)
-			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(btn)
-			var cost: int = int(def.get("amplification_cost", 0))
-			var amp := Button.new()
-			amp.text = I18n.t("ui.player_panel.amplify", [cost])
-			amp.add_theme_font_size_override("font_size", 18)
-			amp.custom_minimum_size = Vector2(0, 48)
-			amp.size_flags_horizontal = Control.SIZE_SHRINK_END
-			var amp_col := Color(1.0, 0.55, 1.0)  # magenta = becomes Infamie
-			amp.add_theme_color_override("font_color", amp_col)
-			amp.tooltip_text = I18n.t("ui.player_panel.amplify.tooltip")
-			_apply_sidebar_button_style(amp, amp_col)
-			amp.pressed.connect(_on_panel_amplifier_clicked.bind(String(tid)))
-			row.add_child(amp)
-			entry = row
+		# The chip opens the fullscreen card, where Provoquer / Amplifier now lives
+		# (the card is the single action surface) — no inline action button here.
 		if owner == GameEnums.PlayerId.RED:
-			_player_list_red.add_child(entry)
+			_player_list_red.add_child(btn)
 		else:
-			_player_list_blue.add_child(entry)
+			_player_list_blue.add_child(btn)
 	# Show "(aucune)" hint when empty so players know the panel is theirs.
 	if _player_list_red.get_child_count() == 0:
 		_player_list_red.add_child(_make_empty_hint())
@@ -2685,10 +2661,7 @@ func _panels_sig() -> String:
 			continue
 		var inf: GameState.TransgressionInstance = state.find_transgression_instance(owner, tid, GameEnums.TransgressionFace.INFAMIE)
 		var face: int = GameEnums.TransgressionFace.INFAMIE if inf != null else GameEnums.TransgressionFace.SCANDALE
-		# Amplify affordance depends on live state (active player, seal, pool),
-		# not just the owned set — fold it in so the panel rebuilds when it flips.
-		var amp: int = 1 if (owner == state.active_player and face == GameEnums.TransgressionFace.SCANDALE and _player_config.get(owner, PLAYER_HUMAN) == PLAYER_HUMAN and GameRules.can_amplifier(state, owner, tid)) else 0
-		parts.append("%s:%d:%d:%d" % [tid, owner, face, amp])
+		parts.append("%s:%d:%d" % [tid, owner, face])
 	return "|".join(parts)
 
 
@@ -5133,13 +5106,6 @@ func _do_provoke_simonie(origin: int, target_station: int) -> void:
 
 func _on_amplifier_clicked(tid: String) -> void:
 	_trans_dialog.hide()
-	var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
-	_handle_action_result(r)
-	_refresh_all()
-
-
-# Amplify straight from the demon panel (no fullscreen card open).
-func _on_panel_amplifier_clicked(tid: String) -> void:
 	var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
 	_handle_action_result(r)
 	_refresh_all()
