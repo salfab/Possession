@@ -78,6 +78,8 @@ const STRINGS := {
 	"ui.menu.provoke_section": {"fr": "Provoquer ici", "en": "Provoke here"},
 	"ui.menu.amplify_section": {"fr": "Amplifier",     "en": "Amplify"},
 	"ui.menu.preview_card":    {"fr": "Carte",         "en": "Card"},
+	"ui.card.provoke":         {"fr": "Provoquer ici", "en": "Provoke here"},
+	"ui.card.amplify":         {"fr": "Amplifier",     "en": "Amplify"},
 	"ui.menu.actions_title":   {"fr": "Actions",   "en": "Actions"},
 	"ui.menu.settings_title":  {"fr": "Réglages",  "en": "Settings"},
 

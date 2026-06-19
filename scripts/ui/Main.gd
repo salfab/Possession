@@ -291,6 +291,7 @@ var _fullscreen_card_back: RichTextLabel      # rich text drawn on the back parc
 var _fullscreen_card_aspect: AspectRatioContainer
 var _fullscreen_card_flip_btn: Button
 var _fullscreen_card_entraver_btn: Button
+var _fullscreen_card_action_btn: Button   # Provoquer / Amplifier (transgression)
 # Small popup that explains the targeting rule of a Liturgy. Triggered by
 # tapping the badge slot on a fullscreen Liturgy card.
 var _targeting_dialog: AcceptDialog
@@ -4400,6 +4401,14 @@ func _build_fullscreen_card_dialog() -> void:
 	_fullscreen_card_entraver_btn.pressed.connect(_on_fullscreen_card_entraver_pressed)
 	actions.add_child(_fullscreen_card_entraver_btn)
 
+	# Transgression action (Provoquer / Amplifier) — symmetric to the liturgy
+	# Entraver button : the card is the single place you commit the action.
+	_fullscreen_card_action_btn = Button.new()
+	_fullscreen_card_action_btn.add_theme_font_size_override("font_size", 18)
+	_fullscreen_card_action_btn.visible = false
+	_fullscreen_card_action_btn.pressed.connect(_on_fullscreen_card_action_pressed)
+	actions.add_child(_fullscreen_card_action_btn)
+
 
 # Static-image fallback (used by Exorcism only).
 func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte", back_text: String = "") -> void:
@@ -4437,14 +4446,68 @@ func _show_fullscreen_card(tex: Texture2D, title_str: String = "Carte", back_tex
 	_popup_dialog_fullscreen(_fullscreen_card_dialog)
 
 
-func _show_fullscreen_transgression(tid: String, face: int, title_str: String) -> void:
+func _show_fullscreen_transgression(tid: String, face: int, title_str: String, origin: int = -1) -> void:
 	_fullscreen_card_aspect.visible = true
 	_static_card_holder.visible = false
 	_fullscreen_card_node.setup_transgression(tid, face)
-	_fullscreen_card_binding = {"kind": "transgression", "tid": tid, "face": face}
+	# origin = domaine d'origine pour une éventuelle provocation depuis la carte
+	# (-1 quand la carte est ouverte pour amplifier / simple aperçu).
+	_fullscreen_card_binding = {"kind": "transgression", "tid": tid, "face": face, "origin": origin}
 	_update_fullscreen_flip_button()
 	_fullscreen_card_dialog.title = title_str
 	_popup_dialog_fullscreen(_fullscreen_card_dialog)
+
+
+# Provoquer / Amplifier from the transgression card itself (the single action
+# surface). Shown only for a transgression binding, when the active player can
+# legally act and nothing else is pending.
+func _update_fullscreen_action_button() -> void:
+	_fullscreen_card_action_btn.visible = false
+	if state == null or state.game_over or manager == null:
+		return
+	if not manager.pending_liturgy.is_empty() or state.has_pending_decisions():
+		return
+	var tid: String = String(_fullscreen_card_binding.get("tid", ""))
+	if tid == "":
+		return
+	var p: int = state.active_player
+	if GameRules.can_amplifier(state, p, tid):
+		_fullscreen_card_action_btn.text = I18n.t("ui.card.amplify")
+		_fullscreen_card_action_btn.visible = true
+		return
+	var origin: int = int(_fullscreen_card_binding.get("origin", -1))
+	if origin >= 0 and GameRules.can_provoquer(state, p, tid) \
+			and origin in GameRules.transgression_origin_options(state, p, tid):
+		_fullscreen_card_action_btn.text = I18n.t("ui.card.provoke")
+		_fullscreen_card_action_btn.visible = true
+
+
+func _on_fullscreen_card_action_pressed() -> void:
+	var tid: String = String(_fullscreen_card_binding.get("tid", ""))
+	if tid == "" or state == null or manager == null:
+		return
+	var p: int = state.active_player
+	_fullscreen_card_dialog.hide()
+	if GameRules.can_amplifier(state, p, tid):
+		var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
+		_handle_action_result(r)
+		_refresh_all()
+		return
+	_provoke_transgression(tid, int(_fullscreen_card_binding.get("origin", -1)))
+
+
+# Central provoke dispatch : routes cards that need a choice through their
+# (mandatory) picker, others provoke directly. Used by every action entry point.
+func _provoke_transgression(tid: String, origin: int) -> void:
+	match tid:
+		TransgressionData.T_PERSECUTION:
+			_provoke_persecution(origin)
+		TransgressionData.T_SIMONIE:
+			_provoke_simonie(origin)
+		_:
+			var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": tid, "origin": origin})
+			_handle_action_result(r)
+			_refresh_all()
 
 
 func _show_fullscreen_liturgy(station: int, impedita: bool, title_str: String, target_domain: int = -2, target_player: int = -2) -> void:
@@ -4473,13 +4536,16 @@ func _update_fullscreen_flip_button() -> void:
 	if _fullscreen_card_binding.is_empty():
 		_fullscreen_card_flip_btn.visible = false
 		_fullscreen_card_entraver_btn.visible = false
+		_fullscreen_card_action_btn.visible = false
 		return
 	var kind: String = _fullscreen_card_binding.get("kind", "")
+	_fullscreen_card_action_btn.visible = false   # only re-shown for transgressions
 	if kind == "transgression":
 		var face: int = int(_fullscreen_card_binding.get("face", GameEnums.TransgressionFace.SCANDALE))
 		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_infamy") if face == GameEnums.TransgressionFace.SCANDALE else I18n.t("ui.flip.see_scandal")
 		_fullscreen_card_flip_btn.visible = true
 		_fullscreen_card_entraver_btn.visible = false
+		_update_fullscreen_action_button()
 	elif kind == "liturgy":
 		var imp: bool = bool(_fullscreen_card_binding.get("impedita", false))
 		_fullscreen_card_flip_btn.text = I18n.t("ui.flip.see_in_integro") if imp else I18n.t("ui.flip.see_impedita")
