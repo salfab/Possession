@@ -151,6 +151,16 @@ func acknowledge_liturgy() -> void:
 		if dogme_ti != null:
 			state.add_corruption_pool(p, 1)
 			state.add_log("Infamie Dogme renversé : %s gagne +1 Corruption." % GameEnums.player_name(p))
+	# Dogme renversé (Scandale) bet : pays out when the chosen Station's Response
+	# resolves — +2 if In Integro, lost if Impedita. Consumed either way.
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+		if state.dogme_bonus_station.get(p, -1) == state.current_station:
+			if not was_entraved:
+				state.add_corruption_pool(p, 2)
+				state.add_log("Effet Scandale Dogme renversé : Réponse In Integro → %s gagne +2 Corruptions." % GameEnums.player_name(p))
+			else:
+				state.add_log("Effet Scandale Dogme renversé : Réponse Impedita → effet perdu (%s)." % GameEnums.player_name(p))
+			state.dogme_bonus_station[p] = -1
 	_try_advance_after_liturgy()
 	_check_bot_turn()
 

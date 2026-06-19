@@ -251,6 +251,14 @@ static func _intrigue_grant_ok(state: GameState, player: int, d_id: int) -> bool
 	return not state.is_sealed(d_id)
 
 
+# Dogme renversé (Scandale) target : this Station or the next, and it must be a
+# Station that actually has a Liturgical Response (I–V ; never the Exorcisme).
+static func _dogme_target_ok(state: GameState, st: int) -> bool:
+	if st != state.current_station and st != state.current_station + 1:
+		return false
+	return st >= GameEnums.StationId.MURMURES and st <= GameEnums.StationId.OFFICE
+
+
 static func _apply_scandal_effect(state: GameState, player: int, def_id: String, origin: int, extra: Dictionary = {}) -> void:
 	match def_id:
 		TransgressionData.T_NEPOTISME:
@@ -410,17 +418,19 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 			state.appetit_scandale_armed[player] = true
 			state.add_log("Effet Scandale Appétit hérétique : la prochaine Transgression peut être provoquée hors-contrôle (sous conditions).")
 		TransgressionData.T_DOGME:
-			# Free entrave on target_station; fallback +1 Corruption.
-			var ts_d: int = extra.get("target_station", -1)
-			if ts_d >= 0 and ts_d != GameEnums.StationId.EXORCISME and not GameRules.is_response_entraved(state, ts_d):
-				var pe_d := GameState.PendingEntrave.new()
-				pe_d.caster = player
-				pe_d.target_station = ts_d
-				state.pending_entraves.append(pe_d)
-				state.add_log("Effet Scandale Dogme renversé : Entrave gratuite sur Station %s." % GameEnums.STATION_NAMES[ts_d])
+			# Card : « Choisissez cette Station ou la prochaine. Si sa Réponse
+			# liturgique se résout In Integro, gagnez 2 Corruptions disponibles après
+			# résolution. Si Impedita, effet perdu. » Register a pending bet ; the
+			# payout (+2 / lost) happens in TurnManager.acknowledge_liturgy.
+			var ts_d: int = int(extra.get("target_station", -1))
+			if not _dogme_target_ok(state, ts_d):
+				ts_d = state.current_station  # default : bet on this Station's Response
+			if _dogme_target_ok(state, ts_d):
+				state.dogme_bonus_station[player] = ts_d
+				state.add_log("Effet Scandale Dogme renversé : pari sur la Réponse de la Station %s (In Integro → +2)." % GameEnums.STATION_NAMES[ts_d])
 			else:
 				state.add_corruption_pool(player, 1)
-				state.add_log("Effet Scandale Dogme renversé : +1 Corruption (aucune Station à entraver).")
+				state.add_log("Effet Scandale Dogme renversé : +1 Corruption (aucune Réponse ciblable).")
 		TransgressionData.T_RELIQUES:
 			# Remove one penitence from a controlled domain; fallback +1 Corruption.
 			var removed_r := false

@@ -185,6 +185,13 @@ var intrigue_seal_grant: Dictionary = {  # owner PlayerId -> DomainId or -1
 	GameEnums.PlayerId.RED: -1,
 	GameEnums.PlayerId.PURPLE: -1,
 }
+# Dogme renversé (Scandale) : a bet on a Station's Liturgical Response. owner ->
+# chosen StationId (or -1). When THAT Station's Response resolves, +2 if In
+# Integro, lost if Impedita (paid out / cleared in TurnManager.acknowledge_liturgy).
+var dogme_bonus_station: Dictionary = {  # owner PlayerId -> StationId or -1
+	GameEnums.PlayerId.RED: -1,
+	GameEnums.PlayerId.PURPLE: -1,
+}
 
 
 func _init() -> void:
@@ -356,6 +363,7 @@ func to_dict() -> Dictionary:
 		"denonciation_blocked_domain": denonciation_blocked_domain.duplicate(),
 		"obeissance_acts_first": obeissance_acts_first.duplicate(),
 		"intrigue_seal_grant": intrigue_seal_grant.duplicate(),
+		"dogme_bonus_station": dogme_bonus_station.duplicate(),
 	}
 
 # JSON stringifies Dictionary keys (and widens ints to floats), so an int-keyed
@@ -421,3 +429,4 @@ func from_dict(d: Dictionary) -> void:
 	denonciation_blocked_domain = _reint_keyed(d.get("denonciation_blocked_domain", denonciation_blocked_domain), denonciation_blocked_domain, true)
 	obeissance_acts_first = _reint_keyed(d.get("obeissance_acts_first", obeissance_acts_first), obeissance_acts_first, false)
 	intrigue_seal_grant = _reint_keyed(d.get("intrigue_seal_grant", intrigue_seal_grant), intrigue_seal_grant, true)
+	dogme_bonus_station = _reint_keyed(d.get("dogme_bonus_station", dogme_bonus_station), dogme_bonus_station, true)

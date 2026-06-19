@@ -156,6 +156,7 @@ func _test_save_load_roundtrip() -> void:
 	s.transgressions_provoked_this_station[GameEnums.PlayerId.PURPLE] = 1
 	s.intrigue_seal_grant[GameEnums.PlayerId.RED] = GameEnums.DomainId.FOI
 	s.appetit_scandale_armed[GameEnums.PlayerId.PURPLE] = true
+	s.dogme_bonus_station[GameEnums.PlayerId.RED] = GameEnums.StationId.CHUTE
 	s.ascendant = 2
 	var parsed: Variant = JSON.parse_string(JSON.stringify(s.to_dict()))
 	var s2 := _new_state()
@@ -164,6 +165,8 @@ func _test_save_load_roundtrip() -> void:
 		"Round-trip JSON : intrigue_seal_grant (clé+valeur int) préservé")
 	_assert(s2.appetit_scandale_armed[GameEnums.PlayerId.PURPLE] == true,
 		"Round-trip JSON : appetit_scandale_armed (clé int, valeur bool) préservé")
+	_assert(s2.dogme_bonus_station[GameEnums.PlayerId.RED] == GameEnums.StationId.CHUTE,
+		"Round-trip JSON : dogme_bonus_station (clé+valeur int) préservé")
 	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == 4,
 		"Round-trip JSON : available_corruption[RED] préservé (clé int)")
 	_assert(s2.available_corruption[GameEnums.PlayerId.PURPLE] == 2,
@@ -1243,18 +1246,39 @@ func _test_simonie_origin() -> void:
 # Dogme renversé (15)
 # ---------------------------------------------------------------------------
 func _test_codex_dogme() -> void:
+	# SCANDALE (carte) : choisir cette Station ou la prochaine ; +2 si la Réponse
+	# s'y résout In Integro, perdu si Impedita.
 	var s := _new_state()
+	s.current_station = GameEnums.StationId.TENTATION
 	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.RED, 3)
 	s.available_corruption[GameEnums.PlayerId.RED] = 10
-	# SCANDALE: free entrave on current+1.
-	var target_st: int = GameEnums.StationId.TENTATION
 	ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_DOGME, -1,
-		{"target_station": target_st})
-	var entraved := false
-	for pe in s.pending_entraves:
-		if pe.target_station == target_st:
-			entraved = true
-	_assert(entraved, "Dogme Scandale : Entrave gratuite posée sur la Station cible")
+		{"target_station": GameEnums.StationId.TENTATION})
+	_assert(s.dogme_bonus_station[GameEnums.PlayerId.RED] == GameEnums.StationId.TENTATION,
+		"Dogme Scandale : bonus armé sur la Station choisie")
+	var dogme_pool_b4: int = s.available_corruption[GameEnums.PlayerId.RED]
+	var tm_dg := TurnManager.new(s, false)
+	tm_dg.pending_liturgy = {"impedita": false, "resolved": true}
+	tm_dg.acknowledge_liturgy()
+	_assert(s.available_corruption[GameEnums.PlayerId.RED] == dogme_pool_b4 + 2,
+		"Dogme Scandale : +2 Corruptions si la Réponse se résout In Integro")
+	_assert(s.dogme_bonus_station[GameEnums.PlayerId.RED] == -1,
+		"Dogme Scandale : bonus consommé après résolution")
+	# Impedita → aucun bonus (effet perdu).
+	var sd2 := _new_state()
+	sd2.current_station = GameEnums.StationId.TENTATION
+	sd2.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.RED, 3)
+	sd2.available_corruption[GameEnums.PlayerId.RED] = 10
+	ActionResolver.provoquer(sd2, GameEnums.PlayerId.RED, TransgressionData.T_DOGME, -1,
+		{"target_station": GameEnums.StationId.TENTATION})
+	var dogme2_pool_b4: int = sd2.available_corruption[GameEnums.PlayerId.RED]
+	var tm_dg2 := TurnManager.new(sd2, false)
+	tm_dg2.pending_liturgy = {"impedita": true, "resolved": true}
+	tm_dg2.acknowledge_liturgy()
+	_assert(sd2.available_corruption[GameEnums.PlayerId.RED] == dogme2_pool_b4,
+		"Dogme Scandale : Impedita → aucun bonus (effet perdu)")
+	_assert(sd2.dogme_bonus_station[GameEnums.PlayerId.RED] == -1,
+		"Dogme Scandale : bonus consommé (perdu) même en Impedita")
 	# INFAMY: +1 Corruption after each liturgy.
 	var s2 := _new_state()
 	s2.current_station = GameEnums.StationId.TENTATION
