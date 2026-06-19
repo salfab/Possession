@@ -248,6 +248,8 @@ const STRINGS := {
 	"ui.btn.entraver.tooltip":          {"fr": "Retirer 1 de vos Corruptions d'un Domaine lié que vous contrôlez. La Réponse devient Impedita.",
 	                                     "en": "Remove 1 of your Corruptions from a linked Domain you control. The Response becomes Impedita."},
 	"ui.dialog.title.entrave_pick":     {"fr": "Entraver — choisir le Domaine", "en": "Hinder — choose the Domain"},
+	"ui.dialog.title.persecution_pick": {"fr": "Persécution — Domaine cible", "en": "Persecution — target Domain"},
+	"ui.dialog.persecution_pick_prompt":{"fr": "Choisissez le Domaine contesté où l'adversaire perd 1 Corruption :", "en": "Choose the contested Domain where the opponent loses 1 Corruption:"},
 	"ui.dialog.entrave_pick_prompt":    {"fr": "Retirer 1 de vos Corruptions de :",
 	                                     "en": "Remove 1 of your Corruptions from:"},
 	"ui.liturgy.banner.in_integro":    {"fr": "%s\nIn Integro",          "en": "%s\nIn Integro"},

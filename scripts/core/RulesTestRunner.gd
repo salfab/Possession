@@ -38,6 +38,7 @@ func run_all() -> Dictionary:
 	_test_anchor_unchanged()
 	_test_save_load_roundtrip()
 	_test_liturgy_advance_after_acknowledge()
+	_test_persecution_target()
 	# Codex des Transgressions
 	_test_codex_setup()
 	_test_codex_filter()
@@ -59,6 +60,28 @@ func run_all() -> Dictionary:
 
 func _new_state() -> GameState:
 	return GameState.new()
+
+
+func _test_persecution_target() -> void:
+	# Persécution must hit the CHOSEN contested opponent Domain (extra.target_domain),
+	# not just the first contested one.
+	var s := _new_state()
+	# RED controls PEUR (required to provoke Persécution) and it's contested.
+	s.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 2)
+	s.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.PURPLE, 1)
+	# A second contested Domain where PURPLE has corruption — the chosen target.
+	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 1)
+	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE, 2)
+	s.available_corruption[GameEnums.PlayerId.RED] = 10
+	var before_desir: int = s.corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE)
+	var before_peur: int = s.corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.PURPLE)
+	var r := ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION,
+		-1, {"target_domain": GameEnums.DomainId.DESIR})
+	_assert(r.get("ok", false), "Persécution : provocation réussie")
+	_assert(s.corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE) == before_desir - 1,
+		"Persécution : le Domaine cible choisi (Désir) perd 1 Corruption adverse")
+	_assert(s.corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.PURPLE) == before_peur,
+		"Persécution : le Domaine NON ciblé (Peur) reste intact")
 
 
 func _test_liturgy_advance_after_acknowledge() -> void:

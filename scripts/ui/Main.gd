@@ -2749,6 +2749,12 @@ func _on_menu_action(payload: Dictionary) -> void:
 			result = manager.perform_action(int(payload["action_id"]),
 				{"domain": _selected_domain})
 		DomainActionMenu.Kind.PROVOKE:
+			# Persécution lets the player pick which contested opponent Domain to
+			# hit — route through the target picker instead of provoking blind.
+			if String(payload["tid"]) == TransgressionData.T_PERSECUTION:
+				_provoke_persecution(int(payload["origin"]))
+				_selected_domain = -1
+				return
 			result = manager.perform_action(GameEnums.ActionId.PROVOQUER,
 				{"def_id": String(payload["tid"]), "origin": int(payload["origin"])})
 		DomainActionMenu.Kind.AMPLIFY:
@@ -4901,7 +4907,52 @@ func _on_endgame_image_clicked() -> void:
 
 func _on_provoquer_clicked(tid: String, origin: int) -> void:
 	_trans_dialog.hide()
+	if tid == TransgressionData.T_PERSECUTION:
+		_provoke_persecution(origin)
+		return
 	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": tid, "origin": origin})
+	_handle_action_result(r)
+	_refresh_all()
+
+
+# Persécution : let the player choose which contested opponent Domain loses a
+# Corruption. 0 candidates → drain the pool (no choice) ; 1 → no real choice ;
+# ≥2 → a picker (one button per Domain), mirroring _show_entrave_payment_picker.
+func _provoke_persecution(origin: int) -> void:
+	var opp := GameEnums.opponent(state.active_player)
+	var candidates: Array = []
+	for d_id in DomainData.DOMAINS:
+		if state.is_contested(d_id) and state.corruption_in(d_id, opp) >= 1:
+			candidates.append(d_id)
+	if candidates.size() <= 1:
+		_do_provoke_persecution(origin, candidates[0] if candidates.size() == 1 else -1)
+		return
+	var dlg := AcceptDialog.new()
+	dlg.exclusive = true
+	dlg.title = I18n.t("ui.dialog.title.persecution_pick")
+	dlg.dialog_text = I18n.t("ui.dialog.persecution_pick_prompt")
+	dlg.ok_button_text = I18n.t("ui.dialog.close")
+	add_child(dlg)
+	_style_dialog(dlg)
+	for d_id in candidates:
+		var dom_str: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
+		var btn := dlg.add_button(dom_str, true, "per_%d" % int(d_id))
+		var captured_d: int = int(d_id)
+		var captured_origin: int = origin
+		var captured_dlg := dlg
+		btn.pressed.connect(func():
+			captured_dlg.hide()
+			captured_dlg.queue_free()
+			_do_provoke_persecution(captured_origin, captured_d))
+	_hide_other_exclusive_dialogs(dlg)
+	dlg.popup_centered()
+
+
+func _do_provoke_persecution(origin: int, target_domain: int) -> void:
+	var kwargs: Dictionary = {"def_id": TransgressionData.T_PERSECUTION, "origin": origin}
+	if target_domain >= 0:
+		kwargs["target_domain"] = target_domain
+	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, kwargs)
 	_handle_action_result(r)
 	_refresh_all()
 

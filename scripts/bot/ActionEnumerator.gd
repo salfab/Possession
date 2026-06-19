@@ -125,6 +125,18 @@ static func _append_provoquer_variants(state: GameState, player: int, def_id: St
 					k["target_domain"] = d_id
 					actions.append({"action_id": GameEnums.ActionId.PROVOQUER, "kwargs": k})
 
+		TransgressionData.T_PERSECUTION:
+			# One variant per contested domain where the opponent has ≥1 corruption.
+			var added_per: bool = false
+			for d_id in DomainData.DOMAINS:
+				if state.is_contested(d_id) and state.corruption_in(d_id, opp) >= 1:
+					var k: Dictionary = base.duplicate()
+					k["target_domain"] = d_id
+					actions.append({"action_id": GameEnums.ActionId.PROVOQUER, "kwargs": k})
+					added_per = true
+			if not added_per:
+				actions.append({"action_id": GameEnums.ActionId.PROVOQUER, "kwargs": base.duplicate()})
+
 		TransgressionData.T_RENONCEMENT:
 			# One variant per domain where opponent has ≥1 corruption.
 			var added_r: bool = false

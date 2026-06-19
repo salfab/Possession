@@ -282,14 +282,19 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 				state.add_log("Effet Scandale Paranoïa : %s perd 1 Corruption disponible." % GameEnums.player_name(opp))
 		TransgressionData.T_PERSECUTION:
 			var opp2 := GameEnums.opponent(player)
-			var contested_dom := -1
-			for d_id in DomainData.DOMAINS:
-				if state.is_contested(d_id):
-					contested_dom = d_id
-					break
-			if contested_dom >= 0:
-				state.set_corruption_in(contested_dom, opp2, state.corruption_in(contested_dom, opp2) - 1)
-				state.add_log("Effet Scandale Persécution : %s perd 1 Corruption en %s." % [GameEnums.player_name(opp2), GameEnums.DOMAIN_NAMES[contested_dom]])
+			# Player (or bot) may target a specific contested Domain where the
+			# opponent holds ≥1 Corruption ; otherwise fall back to the first such
+			# Domain, else drain 1 from the opponent's pool.
+			var tgt_per: int = int(extra.get("target_domain", -1))
+			if not (tgt_per >= 0 and state.is_contested(tgt_per) and state.corruption_in(tgt_per, opp2) >= 1):
+				tgt_per = -1
+				for d_id in DomainData.DOMAINS:
+					if state.is_contested(d_id) and state.corruption_in(d_id, opp2) >= 1:
+						tgt_per = d_id
+						break
+			if tgt_per >= 0:
+				state.set_corruption_in(tgt_per, opp2, state.corruption_in(tgt_per, opp2) - 1)
+				state.add_log("Effet Scandale Persécution : %s perd 1 Corruption en %s." % [GameEnums.player_name(opp2), GameEnums.DOMAIN_NAMES[tgt_per]])
 			else:
 				state.add_corruption_pool(opp2, -1)
 				state.add_log("Effet Scandale Persécution : %s perd 1 Corruption disponible." % GameEnums.player_name(opp2))
