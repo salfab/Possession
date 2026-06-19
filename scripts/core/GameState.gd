@@ -178,6 +178,14 @@ var obeissance_acts_first: Dictionary = {  # PlayerId -> bool
 	GameEnums.PlayerId.RED: false,
 	GameEnums.PlayerId.PURPLE: false,
 }
+# Obéissance pervertie (Scandale) : a ONE-SHOT « act first at the next Pulse »,
+# consumed by TurnManager._pick_initiative (so it naturally carries to the next
+# Station's first Pulse if no Pulse remains). Distinct from the Infamy's
+# per-Station flag above ; grants NO Corruption.
+var obeissance_next_pulse_first: Dictionary = {  # PlayerId -> bool
+	GameEnums.PlayerId.RED: false,
+	GameEnums.PlayerId.PURPLE: false,
+}
 # Intrigue de consistoire (Scandale) : grants the right to Seal one chosen
 # Domain WITHOUT net domination until the end of the Station. owner -> DomainId
 # (or -1 when no grant is active). Station-scoped (reset in _begin_station).
@@ -362,6 +370,7 @@ func to_dict() -> Dictionary:
 		"codex_available": codex_available.duplicate(),
 		"denonciation_blocked_domain": denonciation_blocked_domain.duplicate(),
 		"obeissance_acts_first": obeissance_acts_first.duplicate(),
+		"obeissance_next_pulse_first": obeissance_next_pulse_first.duplicate(),
 		"intrigue_seal_grant": intrigue_seal_grant.duplicate(),
 		"dogme_bonus_station": dogme_bonus_station.duplicate(),
 	}
@@ -428,5 +437,6 @@ func from_dict(d: Dictionary) -> void:
 	codex_available = d.get("codex_available", []).duplicate()
 	denonciation_blocked_domain = _reint_keyed(d.get("denonciation_blocked_domain", denonciation_blocked_domain), denonciation_blocked_domain, true)
 	obeissance_acts_first = _reint_keyed(d.get("obeissance_acts_first", obeissance_acts_first), obeissance_acts_first, false)
+	obeissance_next_pulse_first = _reint_keyed(d.get("obeissance_next_pulse_first", obeissance_next_pulse_first), obeissance_next_pulse_first, false)
 	intrigue_seal_grant = _reint_keyed(d.get("intrigue_seal_grant", intrigue_seal_grant), intrigue_seal_grant, true)
 	dogme_bonus_station = _reint_keyed(d.get("dogme_bonus_station", dogme_bonus_station), dogme_bonus_station, true)

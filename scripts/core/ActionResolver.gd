@@ -502,9 +502,13 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 				else:
 					state.add_log("Effet Scandale Panique contagieuse : aucun effet (pas de Domaine contesté).")
 		TransgressionData.T_OBEISSANCE:
-			state.add_corruption_pool(player, 1)
-			state.obeissance_acts_first[player] = true
-			state.add_log("Effet Scandale Obéissance pervertie : +1 Corruption, initiative cette Station.")
+			# Card : « À la prochaine Pulsation, vous agissez en premier, quelle que
+			# soit l'Initiative. […] Si aucune Pulsation ne reste cette Station, effet
+			# reporté à la première Pulsation de la prochaine Station. » No Corruption.
+			# A one-shot consumed by TurnManager._pick_initiative (which is also what
+			# makes the carry-over automatic). Distinct from the permanent Infamy flag.
+			state.obeissance_next_pulse_first[player] = true
+			state.add_log("Effet Scandale Obéissance pervertie : %s agira en premier à la prochaine Pulsation." % GameEnums.player_name(player))
 		TransgressionData.T_RENONCEMENT:
 			# Card : « Retirez 1 de vos Corruptions d'un Domaine que vous contrôlez,
 			# puis gagnez 3 Corruptions disponibles. Si aucune cible : +1 Corruption. »

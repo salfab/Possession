@@ -238,6 +238,13 @@ func _begin_station(station: int, _initial: bool) -> void:
 
 
 func _pick_initiative() -> int:
+	# Obéissance pervertie (Scandale) one-shot : act first at the very next Pulse,
+	# then consume. Highest priority ; consuming here makes the "carry to next
+	# Station's first Pulse" rule automatic (this runs once per Pulse start).
+	for p in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+		if state.obeissance_next_pulse_first.get(p, false):
+			state.obeissance_next_pulse_first[p] = false
+			return p
 	if state.obeissance_acts_first.get(GameEnums.PlayerId.RED, false):
 		return GameEnums.PlayerId.RED
 	if state.obeissance_acts_first.get(GameEnums.PlayerId.PURPLE, false):

@@ -157,6 +157,7 @@ func _test_save_load_roundtrip() -> void:
 	s.intrigue_seal_grant[GameEnums.PlayerId.RED] = GameEnums.DomainId.FOI
 	s.appetit_scandale_armed[GameEnums.PlayerId.PURPLE] = true
 	s.dogme_bonus_station[GameEnums.PlayerId.RED] = GameEnums.StationId.CHUTE
+	s.obeissance_next_pulse_first[GameEnums.PlayerId.PURPLE] = true
 	s.ascendant = 2
 	var parsed: Variant = JSON.parse_string(JSON.stringify(s.to_dict()))
 	var s2 := _new_state()
@@ -167,6 +168,8 @@ func _test_save_load_roundtrip() -> void:
 		"Round-trip JSON : appetit_scandale_armed (clé int, valeur bool) préservé")
 	_assert(s2.dogme_bonus_station[GameEnums.PlayerId.RED] == GameEnums.StationId.CHUTE,
 		"Round-trip JSON : dogme_bonus_station (clé+valeur int) préservé")
+	_assert(s2.obeissance_next_pulse_first[GameEnums.PlayerId.PURPLE] == true,
+		"Round-trip JSON : obeissance_next_pulse_first (clé int, valeur bool) préservé")
 	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == 4,
 		"Round-trip JSON : available_corruption[RED] préservé (clé int)")
 	_assert(s2.available_corruption[GameEnums.PlayerId.PURPLE] == 2,
@@ -1436,13 +1439,27 @@ func _test_codex_panique() -> void:
 # Obéissance pervertie (19)
 # ---------------------------------------------------------------------------
 func _test_codex_obeissance() -> void:
+	# SCANDALE (carte) : agir en premier à la PROCHAINE Pulsation (one-shot), PAS de +1.
 	var s := _new_state()
 	s.set_corruption_in(GameEnums.DomainId.VOLONTE, GameEnums.PlayerId.RED, 3)
 	s.available_corruption[GameEnums.PlayerId.RED] = 10
-	# SCANDALE: sets obeissance_acts_first flag.
+	var pool_b4_ob: int = s.available_corruption[GameEnums.PlayerId.RED]
+	var cost_ob: int = TransgressionData.CATALOG.get(TransgressionData.T_OBEISSANCE).get("scandal_cost", 0)
 	ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_OBEISSANCE)
-	_assert(s.obeissance_acts_first[GameEnums.PlayerId.RED],
-		"Obéissance Scandale : flag d'initiative activé")
+	_assert(s.obeissance_next_pulse_first[GameEnums.PlayerId.RED],
+		"Obéissance Scandale : « agir en premier » armé pour la prochaine Pulsation")
+	_assert(not s.obeissance_acts_first[GameEnums.PlayerId.RED],
+		"Obéissance Scandale : n'active PAS l'initiative permanente (≠ Infamie)")
+	_assert(s.available_corruption[GameEnums.PlayerId.RED] == pool_b4_ob - cost_ob,
+		"Obéissance Scandale : aucune Corruption gagnée (seul le coût est déduit)")
+	# _pick_initiative renvoie le joueur armé puis consomme le one-shot.
+	var tm_ob := TurnManager.new(s, false)
+	_assert(tm_ob._pick_initiative() == GameEnums.PlayerId.RED,
+		"Obéissance Scandale : RED agit en premier à la prochaine Pulsation")
+	_assert(not s.obeissance_next_pulse_first[GameEnums.PlayerId.RED],
+		"Obéissance Scandale : one-shot consommé après la Pulsation")
+	_assert(tm_ob._pick_initiative() == GameEnums.STATION_INITIATIVE[s.current_station],
+		"Obéissance Scandale : Initiative normale rétablie après consommation")
 	# INFAMY: flag survives station reset.
 	var s2 := _new_state()
 	var ti := GameState.TransgressionInstance.new()
