@@ -4929,9 +4929,36 @@ func _on_provoquer_clicked(tid: String, origin: int) -> void:
 	_refresh_all()
 
 
-# Persécution : let the player choose which contested opponent Domain loses a
-# Corruption. 0 candidates → drain the pool (no choice) ; 1 → no real choice ;
-# ≥2 → a picker (one button per Domain), mirroring _show_entrave_payment_picker.
+# A mandatory demon choice : an exclusive dialog with NO OK/close button — the
+# player must tap one of the option buttons (the choice is part of the action,
+# they can't dismiss it without choosing). `options` = Array of {label, value} ;
+# on_pick is called with the chosen value.
+func _show_demon_choice(title: String, prompt: String, options: Array, on_pick: Callable) -> void:
+	var dlg := AcceptDialog.new()
+	dlg.exclusive = true
+	dlg.title = title
+	dlg.dialog_text = prompt
+	add_child(dlg)
+	_style_dialog(dlg)
+	var ok_btn := dlg.get_ok_button()
+	if ok_btn != null:
+		ok_btn.visible = false   # force a choice : no "Close" escape
+	for opt in options:
+		var btn := dlg.add_button(String(opt.get("label", "?")), true, "")
+		btn.add_theme_font_size_override("font_size", 24)
+		var captured_value: Variant = opt.get("value")
+		var captured_dlg := dlg
+		btn.pressed.connect(func():
+			captured_dlg.hide()
+			captured_dlg.queue_free()
+			on_pick.call(captured_value))
+	_hide_other_exclusive_dialogs(dlg)
+	dlg.popup_centered()
+
+
+# Persécution : the player must pick which contested opponent Domain loses a
+# Corruption. 0 candidates → drain the pool ; 1 → no real choice ; ≥2 → mandatory
+# picker.
 func _provoke_persecution(origin: int) -> void:
 	var opp := GameEnums.opponent(state.active_player)
 	var candidates: Array = []
@@ -4941,25 +4968,12 @@ func _provoke_persecution(origin: int) -> void:
 	if candidates.size() <= 1:
 		_do_provoke_persecution(origin, candidates[0] if candidates.size() == 1 else -1)
 		return
-	var dlg := AcceptDialog.new()
-	dlg.exclusive = true
-	dlg.title = I18n.t("ui.dialog.title.persecution_pick")
-	dlg.dialog_text = I18n.t("ui.dialog.persecution_pick_prompt")
-	dlg.ok_button_text = I18n.t("ui.dialog.close")
-	add_child(dlg)
-	_style_dialog(dlg)
+	var options: Array = []
 	for d_id in candidates:
-		var dom_str: String = String(GameEnums.DOMAIN_NAMES.get(d_id, "?"))
-		var btn := dlg.add_button(dom_str, true, "per_%d" % int(d_id))
-		var captured_d: int = int(d_id)
-		var captured_origin: int = origin
-		var captured_dlg := dlg
-		btn.pressed.connect(func():
-			captured_dlg.hide()
-			captured_dlg.queue_free()
-			_do_provoke_persecution(captured_origin, captured_d))
-	_hide_other_exclusive_dialogs(dlg)
-	dlg.popup_centered()
+		options.append({"label": String(GameEnums.DOMAIN_NAMES.get(d_id, "?")), "value": d_id})
+	_show_demon_choice(I18n.t("ui.dialog.title.persecution_pick"),
+		I18n.t("ui.dialog.persecution_pick_prompt"), options,
+		func(v): _do_provoke_persecution(origin, int(v)))
 
 
 func _do_provoke_persecution(origin: int, target_domain: int) -> void:
@@ -4971,8 +4985,8 @@ func _do_provoke_persecution(origin: int, target_domain: int) -> void:
 	_refresh_all()
 
 
-# Simonie : let the player choose which Station's response to hinder — the
-# current one or the next. Mirrors the Persécution picker.
+# Simonie : the player must pick which Station's response to hinder — current or
+# next. ≤1 valid option → no real choice ; else mandatory picker.
 func _provoke_simonie(origin: int) -> void:
 	var candidates: Array = []
 	var cur: int = state.current_station
@@ -4983,25 +4997,12 @@ func _provoke_simonie(origin: int) -> void:
 	if candidates.size() <= 1:
 		_do_provoke_simonie(origin, candidates[0] if candidates.size() == 1 else -1)
 		return
-	var dlg := AcceptDialog.new()
-	dlg.exclusive = true
-	dlg.title = I18n.t("ui.dialog.title.simonie_pick")
-	dlg.dialog_text = I18n.t("ui.dialog.simonie_pick_prompt")
-	dlg.ok_button_text = I18n.t("ui.dialog.close")
-	add_child(dlg)
-	_style_dialog(dlg)
+	var options: Array = []
 	for st in candidates:
-		var st_str: String = String(GameEnums.STATION_NAMES.get(st, "?"))
-		var btn := dlg.add_button(st_str, true, "sim_%d" % int(st))
-		var captured_st: int = int(st)
-		var captured_origin: int = origin
-		var captured_dlg := dlg
-		btn.pressed.connect(func():
-			captured_dlg.hide()
-			captured_dlg.queue_free()
-			_do_provoke_simonie(captured_origin, captured_st))
-	_hide_other_exclusive_dialogs(dlg)
-	dlg.popup_centered()
+		options.append({"label": String(GameEnums.STATION_NAMES.get(st, "?")), "value": st})
+	_show_demon_choice(I18n.t("ui.dialog.title.simonie_pick"),
+		I18n.t("ui.dialog.simonie_pick_prompt"), options,
+		func(v): _do_provoke_simonie(origin, int(v)))
 
 
 func _do_provoke_simonie(origin: int, target_station: int) -> void:
