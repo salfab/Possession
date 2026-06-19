@@ -80,6 +80,10 @@ const STRINGS := {
 	"ui.menu.preview_card":    {"fr": "Carte",         "en": "Card"},
 	"ui.card.provoke":         {"fr": "Provoquer ici", "en": "Provoke here"},
 	"ui.card.amplify":         {"fr": "Amplifier",     "en": "Amplify"},
+	# Explanations surfaced (as a toast) when a greyed card action button is tapped.
+	"ui.card.explain.resolve_liturgy_first":  {"fr": "Résolvez d'abord la Réponse liturgique.", "en": "Resolve the Liturgical Response first."},
+	"ui.card.explain.resolve_decision_first": {"fr": "Résolvez d'abord la décision en cours.",  "en": "Resolve the pending decision first."},
+	"ui.card.explain.bad_origin":             {"fr": "%s n'est pas une origine valide pour cette Transgression.", "en": "%s isn't a valid origin for this Transgression."},
 	"ui.menu.actions_title":   {"fr": "Actions",   "en": "Actions"},
 	"ui.menu.settings_title":  {"fr": "Réglages",  "en": "Settings"},
 

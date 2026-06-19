@@ -292,6 +292,12 @@ var _fullscreen_card_aspect: AspectRatioContainer
 var _fullscreen_card_flip_btn: Button
 var _fullscreen_card_entraver_btn: Button
 var _fullscreen_card_action_btn: Button   # Provoquer / Amplifier (transgression)
+# Card action button state (set by _update_fullscreen_action_button, read by the
+# press handler). When the action is unavailable the button stays visible but
+# greyed and tappable : a tap surfaces _fullscreen_action_reason as a toast
+# (tooltips don't fire on touch, so the reason is delivered on tap).
+var _fullscreen_action_kind: String = ""    # "amplify" | "provoke" | "" (hidden)
+var _fullscreen_action_reason: String = ""  # "" when legal, else the resolved reason
 # Small popup that explains the targeting rule of a Liturgy. Triggered by
 # tapping the badge slot on a fullscreen Liturgy card.
 var _targeting_dialog: AcceptDialog
@@ -4463,34 +4469,66 @@ func _show_fullscreen_transgression(tid: String, face: int, title_str: String, o
 # Provoquer / Amplifier from the transgression card itself (the single action
 # surface). Shown only for a transgression binding, when the active player can
 # legally act and nothing else is pending.
+# The card is the single action surface : show the contextual action (Amplifier
+# if the player owns this transgression's Scandale, otherwise Provoquer when an
+# origin context is present). When the action is currently unavailable the button
+# is NOT hidden — it stays visible but greyed and tappable, and a tap explains
+# why via the amber toast (so the reason reaches touch users, who never hover).
 func _update_fullscreen_action_button() -> void:
+	_fullscreen_action_kind = ""
+	_fullscreen_action_reason = ""
 	_fullscreen_card_action_btn.visible = false
+	_fullscreen_card_action_btn.modulate = Color(1, 1, 1, 1)
 	if state == null or state.game_over or manager == null:
-		return
-	if not manager.pending_liturgy.is_empty() or state.has_pending_decisions():
 		return
 	var tid: String = String(_fullscreen_card_binding.get("tid", ""))
 	if tid == "":
 		return
 	var p: int = state.active_player
-	if GameRules.can_amplifier(state, p, tid):
+	# A pending Liturgy / decision blocks every action — show the relevant button
+	# greyed with that explanation rather than hiding it.
+	var blocked_global := ""
+	if not manager.pending_liturgy.is_empty():
+		blocked_global = I18n.t("ui.card.explain.resolve_liturgy_first")
+	elif state.has_pending_decisions():
+		blocked_global = I18n.t("ui.card.explain.resolve_decision_first")
+	var owns_scandale: bool = state.find_transgression_instance(p, tid, GameEnums.TransgressionFace.SCANDALE) != null
+	var origin: int = int(_fullscreen_card_binding.get("origin", -1))
+	if owns_scandale:
+		_fullscreen_action_kind = "amplify"
 		_fullscreen_card_action_btn.text = I18n.t("ui.card.amplify")
 		_fullscreen_card_action_btn.visible = true
-		return
-	var origin: int = int(_fullscreen_card_binding.get("origin", -1))
-	if origin >= 0 and GameRules.can_provoquer(state, p, tid) \
-			and origin in GameRules.transgression_origin_options(state, p, tid):
+		_fullscreen_action_reason = blocked_global if blocked_global != "" else GameRules.why_cannot_amplifier(state, p, tid)
+	elif origin >= 0:
+		_fullscreen_action_kind = "provoke"
 		_fullscreen_card_action_btn.text = I18n.t("ui.card.provoke")
 		_fullscreen_card_action_btn.visible = true
+		if blocked_global != "":
+			_fullscreen_action_reason = blocked_global
+		elif not (origin in GameRules.transgression_origin_options(state, p, tid)):
+			_fullscreen_action_reason = I18n.t("ui.card.explain.bad_origin", [String(GameEnums.DOMAIN_NAMES.get(origin, "?"))])
+		else:
+			_fullscreen_action_reason = GameRules.why_cannot_provoquer(state, p, tid)
+	else:
+		# No Scandale owned and no origin context → no action to offer here.
+		return
+	# Greyed look when unavailable ; full opacity when ready. Stays tappable either
+	# way so the press handler can explain a refusal on touch.
+	var legal := _fullscreen_action_reason == ""
+	_fullscreen_card_action_btn.modulate = Color(1, 1, 1, 1) if legal else Color(1, 1, 1, 0.45)
+	_fullscreen_card_action_btn.tooltip_text = "" if legal else _fullscreen_action_reason
 
 
 func _on_fullscreen_card_action_pressed() -> void:
 	var tid: String = String(_fullscreen_card_binding.get("tid", ""))
 	if tid == "" or state == null or manager == null:
 		return
-	var p: int = state.active_player
+	# Greyed (unavailable) : explain via the toast, keep the card open.
+	if _fullscreen_action_reason != "":
+		_flash_action_toast(_fullscreen_action_reason, "refused")
+		return
 	_fullscreen_card_dialog.hide()
-	if GameRules.can_amplifier(state, p, tid):
+	if _fullscreen_action_kind == "amplify":
 		var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
 		_handle_action_result(r)
 		_refresh_all()
