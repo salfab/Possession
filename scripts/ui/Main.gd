@@ -2745,7 +2745,9 @@ func _on_domain_clicked(d_id: int) -> void:
 # Preview a Transgression card from the domain menu without acting — the
 # fullscreen card opens over the still-open menu (so the player can then provoke).
 func _on_domain_card_preview(tid: String, face: int) -> void:
-	_show_fullscreen_transgression(tid, face, TransgressionData.name_of(tid))
+	# Pass the tapped domain as the provoke origin so the card can show
+	# « Provoquer ici » (the action button needs a valid origin).
+	_show_fullscreen_transgression(tid, face, TransgressionData.name_of(tid), _selected_domain)
 
 
 func _on_menu_action(payload: Dictionary) -> void:
