@@ -1013,15 +1013,25 @@ func _test_codex_intrigue() -> void:
 # Bulle vendue (12)
 # ---------------------------------------------------------------------------
 func _test_codex_bulle() -> void:
+	# SCANDALE (carte) : retire l'interdiction permanente de Scellement (Communion)
+	# d'un Domaine contrôlé. Sinon +1 Corruption.
 	var s := _new_state()
 	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
 	s.available_corruption[GameEnums.PlayerId.RED] = 5
-	var pool_before: int = s.available_corruption[GameEnums.PlayerId.RED]
-	ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_BULLE)
-	var def: Dictionary = TransgressionData.CATALOG.get(TransgressionData.T_BULLE)
-	var cost: int = def.get("scandal_cost", 0)
-	_assert(s.available_corruption[GameEnums.PlayerId.RED] == pool_before - cost + 2,
-		"Bulle vendue Scandale : +2 Corruptions (coût déduit)")
+	s.domain(GameEnums.DomainId.AMBITION).cannot_be_sealed_until_exorcism = true
+	ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_BULLE, -1,
+		{"target_domain": GameEnums.DomainId.AMBITION})
+	_assert(not s.domain(GameEnums.DomainId.AMBITION).cannot_be_sealed_until_exorcism,
+		"Bulle vendue Scandale : interdiction permanente de Scellement retirée du Domaine contrôlé")
+	# Aucune interdiction à retirer → +1 Corruption.
+	var s3 := _new_state()
+	s3.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
+	s3.available_corruption[GameEnums.PlayerId.RED] = 5
+	var pool_before: int = s3.available_corruption[GameEnums.PlayerId.RED]
+	var cost: int = TransgressionData.CATALOG.get(TransgressionData.T_BULLE).get("scandal_cost", 0)
+	ActionResolver.provoquer(s3, GameEnums.PlayerId.RED, TransgressionData.T_BULLE)
+	_assert(s3.available_corruption[GameEnums.PlayerId.RED] == pool_before - cost + 1,
+		"Bulle vendue Scandale : +1 Corruption si aucune interdiction à retirer")
 	# INFAMY post-liturgy bonus (non-entraved): +1 Corruption.
 	var s2 := _new_state()
 	s2.current_station = GameEnums.StationId.CHUTE
@@ -1058,6 +1068,20 @@ func _test_codex_mascarade() -> void:
 		"Mascarade Scandale : -1 Corruption sur le Domaine source")
 	_assert(s.corruption_in(GameEnums.DomainId.VOLONTE, GameEnums.PlayerId.RED) == volonte_before + 1,
 		"Mascarade Scandale : +1 Corruption sur le Domaine cible")
+	# Destination scellée par l'adversaire → déplacement refusé, repli +1.
+	var s3 := _new_state()
+	s3.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 3)
+	s3.available_corruption[GameEnums.PlayerId.RED] = 10
+	s3.domain(GameEnums.DomainId.VOLONTE).seal_owner = GameEnums.PlayerId.PURPLE
+	var desir_b4_m: int = s3.corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED)
+	var pool_b4_m: int = s3.available_corruption[GameEnums.PlayerId.RED]
+	var cost_m: int = TransgressionData.CATALOG.get(TransgressionData.T_MASCARADE).get("scandal_cost", 0)
+	ActionResolver.provoquer(s3, GameEnums.PlayerId.RED, TransgressionData.T_MASCARADE, -1,
+		{"from_domain": GameEnums.DomainId.DESIR, "to_domain": GameEnums.DomainId.VOLONTE})
+	_assert(s3.corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED) == desir_b4_m,
+		"Mascarade Scandale : déplacement refusé si destination scellée par l'adversaire")
+	_assert(s3.available_corruption[GameEnums.PlayerId.RED] == pool_b4_m - cost_m + 1,
+		"Mascarade Scandale : +1 Corruption en repli si déplacement invalide")
 	# INFAMY auto-move in _begin_station: redistribution conserves total.
 	var s2 := _new_state()
 	s2.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE, 4)
@@ -1238,8 +1262,11 @@ func _test_codex_reliques() -> void:
 # Dénonciation anonyme (17)
 # ---------------------------------------------------------------------------
 func _test_codex_denonciation() -> void:
+	# SCANDALE (carte) : cible un Domaine contrôlé par l'adversaire où VOUS avez
+	# ≥1 Corruption. Bloque son Exploitation ; s'il a déjà Exploité, -1 dispo.
 	var s := _new_state()
 	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE, 3)
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 1)  # présence ≥1 dans le Domaine adverse
 	s.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 3)
 	s.available_corruption[GameEnums.PlayerId.RED] = 10
 	# Before scandale: PURPLE can exploit AMBITION.
@@ -1254,6 +1281,28 @@ func _test_codex_denonciation() -> void:
 	s.denonciation_blocked_domain[GameEnums.PlayerId.RED] = -1
 	_assert(GameRules.can_exploiter(s, GameEnums.PlayerId.PURPLE, GameEnums.DomainId.AMBITION),
 		"Dénonciation : après reset station, blocage levé")
+	# Déjà Exploité par l'adversaire → il perd 1 Corruption disponible.
+	var s3 := _new_state()
+	s3.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE, 3)
+	s3.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 1)
+	s3.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 3)
+	s3.available_corruption[GameEnums.PlayerId.RED] = 10
+	s3.available_corruption[GameEnums.PlayerId.PURPLE] = 5
+	s3.domain(GameEnums.DomainId.AMBITION).exploited_by_blue_this_station = true
+	var purple_pool_b4: int = s3.available_corruption[GameEnums.PlayerId.PURPLE]
+	ActionResolver.provoquer(s3, GameEnums.PlayerId.RED, TransgressionData.T_DENONCIATION, -1,
+		{"target_domain": GameEnums.DomainId.AMBITION})
+	_assert(s3.available_corruption[GameEnums.PlayerId.PURPLE] == purple_pool_b4 - 1,
+		"Dénonciation Scandale : si l'adversaire avait déjà Exploité, il perd 1 Corruption disponible")
+	# Aucune cible valide (0 Corruption dans le Domaine adverse) → aucun blocage.
+	var s4 := _new_state()
+	s4.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE, 3)
+	s4.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 3)
+	s4.available_corruption[GameEnums.PlayerId.RED] = 10
+	ActionResolver.provoquer(s4, GameEnums.PlayerId.RED, TransgressionData.T_DENONCIATION, -1,
+		{"target_domain": GameEnums.DomainId.AMBITION})
+	_assert(s4.denonciation_blocked_domain[GameEnums.PlayerId.RED] == -1,
+		"Dénonciation Scandale : aucune cible valide → aucun blocage posé")
 	# INFAMY: PEUR permanently blocked for PURPLE.
 	var ti := GameState.TransgressionInstance.new()
 	ti.def_id = TransgressionData.T_DENONCIATION
@@ -1272,17 +1321,26 @@ func _test_codex_denonciation() -> void:
 # Panique contagieuse (18)
 # ---------------------------------------------------------------------------
 func _test_codex_panique() -> void:
+	# SCANDALE (carte) : sur un Domaine contesté, chaque démon y ayant ≥1
+	# Corruption en retire 1 et la déplace vers Peur (si Peur non scellée par
+	# son adversaire).
 	var s := _new_state()
 	s.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 3)
 	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 1)
 	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE, 2)
 	s.available_corruption[GameEnums.PlayerId.RED] = 10
-	var opp_pool_before: int = s.available_corruption[GameEnums.PlayerId.PURPLE]
-	# SCANDALE on contested AMBITION: opponent loses 1 pool.
+	var red_amb_b4: int = s.corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED)
+	var blue_amb_b4: int = s.corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE)
+	var red_peur_b4: int = s.corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED)
+	var blue_peur_b4: int = s.corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.PURPLE)
 	ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_PANIQUE, -1,
 		{"target_domain": GameEnums.DomainId.AMBITION})
-	_assert(s.available_corruption[GameEnums.PlayerId.PURPLE] == opp_pool_before - 1,
-		"Panique Scandale : adversaire perd 1 Corruption disponible")
+	_assert(s.corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED) == red_amb_b4 - 1
+		and s.corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE) == blue_amb_b4 - 1,
+		"Panique Scandale : chaque démon retire 1 Corruption du Domaine contesté")
+	_assert(s.corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED) == red_peur_b4 + 1
+		and s.corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.PURPLE) == blue_peur_b4 + 1,
+		"Panique Scandale : les Corruptions retirées sont déplacées vers Peur")
 	# INFAMY: opponent production -1 when exploiting contested domain.
 	var s2 := _new_state()
 	s2.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 2)
@@ -1336,16 +1394,20 @@ func _test_codex_obeissance() -> void:
 # Renoncement noir (20)
 # ---------------------------------------------------------------------------
 func _test_codex_renoncement() -> void:
+	# SCANDALE (carte) : retirez 1 de VOS Corruptions d'un Domaine que vous
+	# contrôlez, puis gagnez 3 Corruptions disponibles.
 	var s := _new_state()
 	s.set_corruption_in(GameEnums.DomainId.VOLONTE, GameEnums.PlayerId.RED, 3)
-	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE, 2)
 	s.available_corruption[GameEnums.PlayerId.RED] = 10
-	var blue_ambition_before: int = s.corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE)
-	# SCANDALE: removes 1 of opponent's corruption in target_domain.
+	var red_volonte_before: int = s.corruption_in(GameEnums.DomainId.VOLONTE, GameEnums.PlayerId.RED)
+	var red_pool_b4: int = s.available_corruption[GameEnums.PlayerId.RED]
+	var cost_ren: int = TransgressionData.CATALOG.get(TransgressionData.T_RENONCEMENT).get("scandal_cost", 0)
 	ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_RENONCEMENT, -1,
-		{"target_domain": GameEnums.DomainId.AMBITION})
-	_assert(s.corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.PURPLE) == blue_ambition_before - 1,
-		"Renoncement Scandale : adversaire perd 1 Corruption dans la cible")
+		{"target_domain": GameEnums.DomainId.VOLONTE})
+	_assert(s.corruption_in(GameEnums.DomainId.VOLONTE, GameEnums.PlayerId.RED) == red_volonte_before - 1,
+		"Renoncement Scandale : vous retirez 1 de vos Corruptions du Domaine contrôlé")
+	_assert(s.available_corruption[GameEnums.PlayerId.RED] == red_pool_b4 - cost_ren + 3,
+		"Renoncement Scandale : +3 Corruptions disponibles (coût déduit)")
 	# INFAMY: when opponent places an Entrave, owner gains +1 Corruption.
 	var s2 := _new_state()
 	s2.set_corruption_in(GameEnums.DomainId.VOLONTE, GameEnums.PlayerId.RED, 3)

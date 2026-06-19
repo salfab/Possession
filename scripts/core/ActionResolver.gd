@@ -348,13 +348,33 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 				state.add_corruption_pool(player, 1)
 				state.add_log("Effet Scandale Intrigue du Consistoire : +1 Corruption (aucune cible).")
 		TransgressionData.T_BULLE:
-			state.add_corruption_pool(player, 2)
-			state.add_log("Effet Scandale Bulle vendue : +2 Corruptions.")
+			# Card : « Retirez l'interdiction permanente de Scellement (Communion)
+			# d'un Domaine que vous contrôlez. Si aucune cible : +1 Corruption. »
+			# The permanent prohibition is DomainState.cannot_be_sealed_until_exorcism.
+			var tgt_b: int = int(extra.get("target_domain", -1))
+			if not (tgt_b >= 0 and state.controller_of(tgt_b) == player and state.domain(tgt_b).cannot_be_sealed_until_exorcism):
+				tgt_b = -1
+				for d_id_b in DomainData.DOMAINS:
+					if state.controller_of(d_id_b) == player and state.domain(d_id_b).cannot_be_sealed_until_exorcism:
+						tgt_b = d_id_b
+						break
+			if tgt_b >= 0:
+				state.domain(tgt_b).cannot_be_sealed_until_exorcism = false
+				state.add_log("Effet Scandale Bulle vendue : interdiction de Scellement retirée de %s." % GameEnums.DOMAIN_NAMES[tgt_b])
+			else:
+				state.add_corruption_pool(player, 1)
+				state.add_log("Effet Scandale Bulle vendue : +1 Corruption (aucune interdiction à retirer).")
 		TransgressionData.T_MASCARADE:
-			# Move 1 corruption from from_domain to to_domain (both must be valid).
-			var fd: int = extra.get("from_domain", -1)
-			var td: int = extra.get("to_domain", -1)
-			if fd >= 0 and td >= 0 and fd != td and state.corruption_in(fd, player) >= 1:
+			# Card : « Déplacez 1 de vos Corruptions depuis un Domaine vers un autre
+			# Domaine non scellé par l'autre démon. » The destination must NOT be
+			# sealed by the opponent ; source/destination distinct ; you need ≥1 in
+			# the source. No legal move (e.g. only seals left) → +1 (house fallback,
+			# a provoked Scandale never wastes its cost outright).
+			var fd: int = int(extra.get("from_domain", -1))
+			var td: int = int(extra.get("to_domain", -1))
+			var opp_m: int = GameEnums.opponent(player)
+			var td_sealed_by_opp: bool = td >= 0 and state.is_sealed(td) and state.domain(td).seal_owner == opp_m
+			if fd >= 0 and td >= 0 and fd != td and state.corruption_in(fd, player) >= 1 and not td_sealed_by_opp:
 				state.set_corruption_in(fd, player, state.corruption_in(fd, player) - 1)
 				state.set_corruption_in(td, player, state.corruption_in(td, player) + 1)
 				state.add_log("Effet Scandale Mascarade de velours : 1 Corruption déplacée de %s vers %s." % [GameEnums.DOMAIN_NAMES[fd], GameEnums.DOMAIN_NAMES[td]])
@@ -389,36 +409,84 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 				state.add_corruption_pool(player, 1)
 				state.add_log("Effet Scandale Reliques menteuses : +1 Corruption (aucune Pénitence à retirer).")
 		TransgressionData.T_DENONCIATION:
-			# Block opponent from exploiting target_domain this station.
-			var tgt_den: int = extra.get("target_domain", -1)
+			# Card : « Choisissez un Domaine contrôlé par l'autre démon où vous avez
+			# ≥1 Corruption. Jusqu'à fin de Station, l'autre démon ne peut pas
+			# l'Exploiter. S'il l'a déjà Exploité, il perd 1 Corruption disponible.
+			# Si aucune cible : aucun effet. »
+			var opp_den: int = GameEnums.opponent(player)
+			var tgt_den: int = int(extra.get("target_domain", -1))
+			if not (tgt_den >= 0 and state.controller_of(tgt_den) == opp_den and state.corruption_in(tgt_den, player) >= 1):
+				tgt_den = -1
+				for d_id_den in DomainData.DOMAINS:
+					if state.controller_of(d_id_den) == opp_den and state.corruption_in(d_id_den, player) >= 1:
+						tgt_den = d_id_den
+						break
 			if tgt_den >= 0:
 				state.denonciation_blocked_domain[player] = tgt_den
-				state.add_log("Effet Scandale Dénonciation anonyme : %s ne peut pas exploiter %s cette Station." % [GameEnums.player_name(GameEnums.opponent(player)), GameEnums.DOMAIN_NAMES[tgt_den]])
+				state.add_log("Effet Scandale Dénonciation anonyme : %s ne peut plus exploiter %s cette Station." % [GameEnums.player_name(opp_den), GameEnums.DOMAIN_NAMES[tgt_den]])
+				var already_exploited: bool = state.domain(tgt_den).exploited_by_red_this_station if opp_den == GameEnums.PlayerId.RED else state.domain(tgt_den).exploited_by_blue_this_station
+				if already_exploited:
+					state.add_corruption_pool(opp_den, -1)
+					state.add_log("Effet Scandale Dénonciation anonyme : %s avait déjà Exploité, -1 Corruption disponible." % GameEnums.player_name(opp_den))
 			else:
-				state.add_log("Effet Scandale Dénonciation anonyme : aucune cible choisie.")
+				state.add_log("Effet Scandale Dénonciation anonyme : aucune cible valide.")
 		TransgressionData.T_PANIQUE:
-			# Chosen contested domain: opponent loses 1 from pool. Fallback if no contested domain.
-			var tgt_pan: int = extra.get("target_domain", -1)
-			var opp_pan: int = GameEnums.opponent(player)
-			if tgt_pan >= 0 and state.is_contested(tgt_pan):
-				state.add_corruption_pool(opp_pan, -1)
-				state.add_log("Effet Scandale Panique contagieuse : %s perd 1 Corruption disponible (Domaine contesté %s)." % [GameEnums.player_name(opp_pan), GameEnums.DOMAIN_NAMES[tgt_pan]])
+			# Card : « Choisissez un Domaine contesté. Chaque démon y ayant ≥1
+			# Corruption y retire 1 Corruption et la déplace vers Peur, si Peur
+			# n'est pas scellée par son adversaire. Si aucun Domaine contesté :
+			# placez 1 de vos Corruptions disponibles sur Peur si possible. »
+			var peur: int = GameEnums.DomainId.PEUR
+			var tgt_pan: int = int(extra.get("target_domain", -1))
+			if not (tgt_pan >= 0 and state.is_contested(tgt_pan)):
+				tgt_pan = -1
+				for d_id_pan in DomainData.DOMAINS:
+					if state.is_contested(d_id_pan):
+						tgt_pan = d_id_pan
+						break
+			if tgt_pan >= 0:
+				var moved_any: bool = false
+				for p_pan in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+					if state.corruption_in(tgt_pan, p_pan) < 1:
+						continue
+					# Skip a demon whose adversary has sealed Peur.
+					if state.is_sealed(peur) and state.domain(peur).seal_owner == GameEnums.opponent(p_pan):
+						continue
+					state.set_corruption_in(tgt_pan, p_pan, state.corruption_in(tgt_pan, p_pan) - 1)
+					state.set_corruption_in(peur, p_pan, state.corruption_in(peur, p_pan) + 1)
+					state.add_log("Effet Scandale Panique contagieuse : %s déplace 1 Corruption de %s vers Peur." % [GameEnums.player_name(p_pan), GameEnums.DOMAIN_NAMES[tgt_pan]])
+					moved_any = true
+				if not moved_any:
+					state.add_log("Effet Scandale Panique contagieuse : aucun déplacement possible (Peur scellée).")
 			else:
-				state.add_corruption_pool(opp_pan, -1)
-				state.add_log("Effet Scandale Panique contagieuse : %s perd 1 Corruption disponible." % GameEnums.player_name(opp_pan))
+				# No contested domain : place 1 of your available Corruption on Peur.
+				var peur_blocked: bool = state.is_sealed(peur) and state.domain(peur).seal_owner == GameEnums.opponent(player)
+				if state.available_corruption[player] >= 1 and not peur_blocked:
+					state.add_corruption_pool(player, -1)
+					state.set_corruption_in(peur, player, state.corruption_in(peur, player) + 1)
+					state.add_log("Effet Scandale Panique contagieuse : aucun Domaine contesté, 1 Corruption placée sur Peur.")
+				else:
+					state.add_log("Effet Scandale Panique contagieuse : aucun effet (pas de Domaine contesté).")
 		TransgressionData.T_OBEISSANCE:
 			state.add_corruption_pool(player, 1)
 			state.obeissance_acts_first[player] = true
 			state.add_log("Effet Scandale Obéissance pervertie : +1 Corruption, initiative cette Station.")
 		TransgressionData.T_RENONCEMENT:
-			# Remove 1 of opponent's corruptions from target_domain.
-			var tgt_ren: int = extra.get("target_domain", -1)
-			var opp_ren: int = GameEnums.opponent(player)
-			if tgt_ren >= 0 and state.corruption_in(tgt_ren, opp_ren) >= 1:
-				state.set_corruption_in(tgt_ren, opp_ren, state.corruption_in(tgt_ren, opp_ren) - 1)
-				state.add_log("Effet Scandale Renoncement noir : %s perd 1 Corruption en %s." % [GameEnums.player_name(opp_ren), GameEnums.DOMAIN_NAMES[tgt_ren]])
+			# Card : « Retirez 1 de vos Corruptions d'un Domaine que vous contrôlez,
+			# puis gagnez 3 Corruptions disponibles. Si aucune cible : +1 Corruption. »
+			var tgt_ren: int = int(extra.get("target_domain", -1))
+			if not (tgt_ren >= 0 and state.controller_of(tgt_ren) == player and state.corruption_in(tgt_ren, player) >= 1):
+				tgt_ren = -1
+				for d_id_ren in DomainData.DOMAINS:
+					if state.controller_of(d_id_ren) == player and state.corruption_in(d_id_ren, player) >= 1:
+						tgt_ren = d_id_ren
+						break
+			if tgt_ren >= 0:
+				state.set_corruption_in(tgt_ren, player, state.corruption_in(tgt_ren, player) - 1)
+				state.add_corruption_pool(player, 3)
+				state.add_log("Effet Scandale Renoncement noir : -1 Corruption en %s, +3 Corruptions disponibles." % GameEnums.DOMAIN_NAMES[tgt_ren])
 			else:
-				state.add_log("Effet Scandale Renoncement noir : aucune Corruption à retirer.")
+				state.add_corruption_pool(player, 1)
+				state.add_log("Effet Scandale Renoncement noir : +1 Corruption (aucune cible).")
 
 static func _check_trafic_infamy_bonus(state: GameState, player: int, def_id: String, origin: int) -> void:
 	# Trafic de charges Infamy: once/Station, when provoking a Transgression linked to
