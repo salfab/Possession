@@ -152,6 +152,13 @@ var appetit_offcontrol_used_this_station: Dictionary = {  # PlayerId -> bool
 	GameEnums.PlayerId.RED: false,
 	GameEnums.PlayerId.PURPLE: false,
 }
+# Appétit hérétique (Scandale) : arms the off-control provoke power for the NEXT
+# Transgression provoked this Station (one-shot). If unused by Station end → +1
+# (granted in TurnManager._begin_station).
+var appetit_scandale_armed: Dictionary = {  # PlayerId -> bool
+	GameEnums.PlayerId.RED: false,
+	GameEnums.PlayerId.PURPLE: false,
+}
 var foi_next_response_impedita: bool = false  # Simonie infamy effect
 var missel_modifiers: Dictionary = {}  # StationId -> String modifier_id; empty = V1h strict
 var initiative_override: Dictionary = {}  # StationId -> PlayerId; empty = use STATION_INITIATIVE
@@ -336,6 +343,7 @@ func to_dict() -> Dictionary:
 		"favori_used_this_station": favori_used_this_station.duplicate(),
 		"paranoia_used_this_station": paranoia_used_this_station.duplicate(),
 		"appetit_offcontrol_used_this_station": appetit_offcontrol_used_this_station.duplicate(),
+		"appetit_scandale_armed": appetit_scandale_armed.duplicate(),
 		"foi_next_response_impedita": foi_next_response_impedita,
 		"missel_modifiers": missel_modifiers.duplicate(),
 		"initiative_override": initiative_override.duplicate(),
@@ -400,6 +408,7 @@ func from_dict(d: Dictionary) -> void:
 	favori_used_this_station = _reint_keyed(d.get("favori_used_this_station", favori_used_this_station), favori_used_this_station, false)
 	paranoia_used_this_station = _reint_keyed(d.get("paranoia_used_this_station", paranoia_used_this_station), paranoia_used_this_station, false)
 	appetit_offcontrol_used_this_station = _reint_keyed(d.get("appetit_offcontrol_used_this_station", appetit_offcontrol_used_this_station), appetit_offcontrol_used_this_station, false)
+	appetit_scandale_armed = _reint_keyed(d.get("appetit_scandale_armed", appetit_scandale_armed), appetit_scandale_armed, false)
 	foi_next_response_impedita = d.get("foi_next_response_impedita", false)
 	missel_modifiers = _reint_keyed(d.get("missel_modifiers", {}), {}, false)
 	initiative_override = _reint_keyed(d.get("initiative_override", {}), {}, true)

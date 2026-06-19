@@ -100,8 +100,13 @@ static func can_provoquer(state: GameState, player: int, def_id: String) -> bool
 static func can_provoke_from_domain(state: GameState, player: int, d_id: int) -> bool:
 	if state.controller_of(d_id) == player:
 		return true
-	# Appétit hérétique (Infamie) presence path + its three guards.
-	if state.find_transgression_instance(player, TransgressionData.T_APPETIT, GameEnums.TransgressionFace.INFAMIE) == null:
+	# Off-control provoke via Appétit hérétique — two sources, same guards :
+	#   • Infamie : permanent, but once per Station (appetit_offcontrol_used).
+	#   • Scandale : a one-shot armed for the very next Transgression.
+	var has_infamy: bool = state.find_transgression_instance(player, TransgressionData.T_APPETIT, GameEnums.TransgressionFace.INFAMIE) != null
+	var infamy_path: bool = has_infamy and not state.appetit_offcontrol_used_this_station.get(player, false)
+	var scandale_path: bool = state.appetit_scandale_armed.get(player, false)
+	if not infamy_path and not scandale_path:
 		return false
 	if state.controller_of(GameEnums.DomainId.DESIR) != player:
 		return false
@@ -109,8 +114,6 @@ static func can_provoke_from_domain(state: GameState, player: int, d_id: int) ->
 		return false
 	var d := state.domain(d_id)
 	if d != null and d.seal_owner == GameEnums.opponent(player):
-		return false
-	if state.appetit_offcontrol_used_this_station.get(player, false):
 		return false
 	return true
 

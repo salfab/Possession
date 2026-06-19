@@ -200,6 +200,13 @@ func _begin_station(station: int, _initial: bool) -> void:
 	state.paranoia_used_this_station[GameEnums.PlayerId.PURPLE] = false
 	state.appetit_offcontrol_used_this_station[GameEnums.PlayerId.RED] = false
 	state.appetit_offcontrol_used_this_station[GameEnums.PlayerId.PURPLE] = false
+	# Appétit hérétique (Scandale) : if the armed one-shot went unused last Station,
+	# the card grants +1 Corruption ; then clear it for the new Station.
+	for ap in [GameEnums.PlayerId.RED, GameEnums.PlayerId.PURPLE]:
+		if state.appetit_scandale_armed.get(ap, false):
+			state.add_corruption_pool(ap, 1)
+			state.add_log("Appétit hérétique (Scandale) non utilisé : +1 Corruption pour %s." % GameEnums.player_name(ap))
+		state.appetit_scandale_armed[ap] = false
 	# Dénonciation scandale block is station-scoped: reset at station start.
 	state.denonciation_blocked_domain[GameEnums.PlayerId.RED] = -1
 	state.denonciation_blocked_domain[GameEnums.PlayerId.PURPLE] = -1

@@ -62,6 +62,10 @@ static func provoquer(state: GameState, player: int, def_id: String, origin_choi
 	# Appétit hérétique (Infamie) power.
 	if state.controller_of(origin) != player:
 		state.appetit_offcontrol_used_this_station[player] = true
+	# Appétit hérétique (Scandale) is a one-shot for the NEXT Transgression : this
+	# IS that next one, so consume it now. If this very provoke is Appétit itself,
+	# _apply_scandal_effect re-arms it below (consumed = false → armed = true).
+	state.appetit_scandale_armed[player] = false
 	# Pay cost (with Népotisme discount tracked)
 	var cost := GameRules.transgression_scandal_cost(state, player, def_id)
 	state.add_corruption_pool(player, -cost)
@@ -397,8 +401,14 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 				state.add_corruption_pool(player, 1)
 				state.add_log("Effet Scandale Mascarade de velours : +1 Corruption (déplacement invalide).")
 		TransgressionData.T_APPETIT:
-			state.add_corruption_pool(player, 1)
-			state.add_log("Effet Scandale Appétit hérétique : +1 Corruption.")
+			# Card : « La prochaine Transgression que vous provoquez cette Station
+			# peut être jouée depuis un Domaine que vous ne contrôlez pas [gardes].
+			# Si non utilisé avant fin de Station : +1 Corruption. » Arm the one-shot ;
+			# the +1-if-unused is granted in TurnManager._begin_station. The guards
+			# (contrôle Désir, ≥1 présence, non scellé par l'adversaire) live in
+			# GameRules.can_provoke_from_domain.
+			state.appetit_scandale_armed[player] = true
+			state.add_log("Effet Scandale Appétit hérétique : la prochaine Transgression peut être provoquée hors-contrôle (sous conditions).")
 		TransgressionData.T_DOGME:
 			# Free entrave on target_station; fallback +1 Corruption.
 			var ts_d: int = extra.get("target_station", -1)

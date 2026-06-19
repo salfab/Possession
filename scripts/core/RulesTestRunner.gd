@@ -155,12 +155,15 @@ func _test_save_load_roundtrip() -> void:
 	s.nepotisme_used_this_station[GameEnums.PlayerId.RED] = true
 	s.transgressions_provoked_this_station[GameEnums.PlayerId.PURPLE] = 1
 	s.intrigue_seal_grant[GameEnums.PlayerId.RED] = GameEnums.DomainId.FOI
+	s.appetit_scandale_armed[GameEnums.PlayerId.PURPLE] = true
 	s.ascendant = 2
 	var parsed: Variant = JSON.parse_string(JSON.stringify(s.to_dict()))
 	var s2 := _new_state()
 	s2.from_dict(parsed)
 	_assert(s2.intrigue_seal_grant[GameEnums.PlayerId.RED] == GameEnums.DomainId.FOI,
 		"Round-trip JSON : intrigue_seal_grant (clé+valeur int) préservé")
+	_assert(s2.appetit_scandale_armed[GameEnums.PlayerId.PURPLE] == true,
+		"Round-trip JSON : appetit_scandale_armed (clé int, valeur bool) préservé")
 	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == 4,
 		"Round-trip JSON : available_corruption[RED] préservé (clé int)")
 	_assert(s2.available_corruption[GameEnums.PlayerId.PURPLE] == 2,
@@ -1144,6 +1147,35 @@ func _appetit_base_state() -> GameState:
 
 
 func _test_codex_appetit() -> void:
+	# ── SCANDALE (carte) : arme « provoquer hors-contrôle » pour la prochaine
+	# Transgression (mêmes gardes que l'Infamie) ; one-shot ; +1 si inutilisé. ──
+	var ss := _new_state()
+	ss.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 2)    # contrôle Désir
+	ss.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.PURPLE, 2)  # PURPLE contrôle PEUR
+	ss.set_corruption_in(GameEnums.DomainId.PEUR, GameEnums.PlayerId.RED, 1)     # RED y a ≥1 présence
+	ss.available_corruption[GameEnums.PlayerId.RED] = 10
+	_assert(not GameRules.can_provoquer(ss, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION),
+		"Appétit Scandale : avant d'armer, pas de provocation hors-contrôle")
+	ActionResolver.provoquer(ss, GameEnums.PlayerId.RED, TransgressionData.T_APPETIT)
+	_assert(ss.appetit_scandale_armed[GameEnums.PlayerId.RED],
+		"Appétit Scandale : pouvoir armé après provocation")
+	_assert(GameRules.can_provoquer(ss, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION),
+		"Appétit Scandale : provocation hors-contrôle autorisée (pouvoir armé)")
+	ActionResolver.provoquer(ss, GameEnums.PlayerId.RED, TransgressionData.T_PERSECUTION)
+	_assert(not ss.appetit_scandale_armed[GameEnums.PlayerId.RED],
+		"Appétit Scandale : one-shot consommé par la Transgression suivante")
+	# Inutilisé → +1 Corruption au début de la Station suivante, puis réinitialisé.
+	var ss2 := _new_state()
+	ss2.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 2)
+	ss2.available_corruption[GameEnums.PlayerId.RED] = 10
+	ActionResolver.provoquer(ss2, GameEnums.PlayerId.RED, TransgressionData.T_APPETIT)
+	var pool_armed: int = ss2.available_corruption[GameEnums.PlayerId.RED]
+	var tm_ap := TurnManager.new(ss2, false)
+	tm_ap._begin_station(GameEnums.StationId.TENTATION, false)
+	_assert(ss2.available_corruption[GameEnums.PlayerId.RED] == pool_armed + 1
+		and not ss2.appetit_scandale_armed[GameEnums.PlayerId.RED],
+		"Appétit Scandale : +1 Corruption si inutilisé en fin de Station, puis réinitialisé")
+
 	# Sanity : without Appétit infamy, a PEUR transgression needs control of PEUR.
 	var s0 := _appetit_base_state()
 	s0.domain(GameEnums.DomainId.DESIR).infamies.clear()
