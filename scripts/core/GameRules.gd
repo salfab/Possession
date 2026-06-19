@@ -140,9 +140,12 @@ static func can_sceller(state: GameState, player: int, d_id: int) -> bool:
 		return false
 	if state.controller_of(d_id) != player:
 		return false
-	# Intrigue du Consistoire infamy: can seal origin domain without net domination.
+	# Intrigue du Consistoire : can seal without net domination via either —
+	#   • the Infamy (permanently, for its origin Domain), or
+	#   • the Scandale (this Station only, for the chosen granted Domain).
 	var intrigue_ti: GameState.TransgressionInstance = state.find_transgression_instance(player, TransgressionData.T_INTRIGUE, GameEnums.TransgressionFace.INFAMIE)
-	var intrigue_bypass: bool = intrigue_ti != null and intrigue_ti.origin_domain == d_id
+	var intrigue_bypass: bool = (intrigue_ti != null and intrigue_ti.origin_domain == d_id) \
+		or state.intrigue_seal_grant.get(player, -1) == d_id
 	if not intrigue_bypass and not state.has_net_domination(d_id, player):
 		return false
 	if state.available_corruption[player] < 1:

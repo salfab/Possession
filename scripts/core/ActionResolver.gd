@@ -234,6 +234,19 @@ static func _entrave_target_ok(state: GameState, st: int) -> bool:
 	return not GameRules.is_response_entraved(state, st)
 
 
+# Intrigue de consistoire (Scandale) target : a Domain you control, WITHOUT net
+# domination, and not sealed. (A net-dominated Domain gains nothing — you can
+# already Seal it normally.)
+static func _intrigue_grant_ok(state: GameState, player: int, d_id: int) -> bool:
+	if d_id < 0:
+		return false
+	if state.controller_of(d_id) != player:
+		return false
+	if state.has_net_domination(d_id, player):
+		return false
+	return not state.is_sealed(d_id)
+
+
 static func _apply_scandal_effect(state: GameState, player: int, def_id: String, origin: int, extra: Dictionary = {}) -> void:
 	match def_id:
 		TransgressionData.T_NEPOTISME:
@@ -333,20 +346,22 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 				state.add_log("Effet Scandale Abdication intérieure ignoré.")
 		# ── Codex ──────────────────────────────────────────────────────────────
 		TransgressionData.T_INTRIGUE:
-			# Chosen target_domain: opponent loses 1 corruption there; if 0, self +1.
-			var tgt_i: int = extra.get("target_domain", -1)
+			# Card : « Choisissez un Domaine que vous contrôlez sans Domination nette
+			# et non scellé. Jusqu'à fin de Station, vous pouvez le Sceller sans
+			# Domination nette. Si aucune cible : +1 Corruption. »
+			var tgt_i: int = int(extra.get("target_domain", -1))
+			if not _intrigue_grant_ok(state, player, tgt_i):
+				tgt_i = -1
+				for d_id_i in DomainData.DOMAINS:
+					if _intrigue_grant_ok(state, player, d_id_i):
+						tgt_i = d_id_i
+						break
 			if tgt_i >= 0:
-				var opp_i: int = GameEnums.opponent(player)
-				var opp_has: int = state.corruption_in(tgt_i, opp_i)
-				if opp_has >= 1:
-					state.set_corruption_in(tgt_i, opp_i, opp_has - 1)
-					state.add_log("Effet Scandale Intrigue du Consistoire : %s perd 1 Corruption en %s." % [GameEnums.player_name(opp_i), GameEnums.DOMAIN_NAMES[tgt_i]])
-				else:
-					state.add_corruption_pool(player, 1)
-					state.add_log("Effet Scandale Intrigue du Consistoire : +1 Corruption (adversaire absent en %s)." % GameEnums.DOMAIN_NAMES[tgt_i])
+				state.intrigue_seal_grant[player] = tgt_i
+				state.add_log("Effet Scandale Intrigue de consistoire : %s peut Sceller %s sans Domination nette jusqu'à fin de Station." % [GameEnums.player_name(player), GameEnums.DOMAIN_NAMES[tgt_i]])
 			else:
 				state.add_corruption_pool(player, 1)
-				state.add_log("Effet Scandale Intrigue du Consistoire : +1 Corruption (aucune cible).")
+				state.add_log("Effet Scandale Intrigue de consistoire : +1 Corruption (aucune cible).")
 		TransgressionData.T_BULLE:
 			# Card : « Retirez l'interdiction permanente de Scellement (Communion)
 			# d'un Domaine que vous contrôlez. Si aucune cible : +1 Corruption. »

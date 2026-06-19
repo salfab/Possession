@@ -171,6 +171,13 @@ var obeissance_acts_first: Dictionary = {  # PlayerId -> bool
 	GameEnums.PlayerId.RED: false,
 	GameEnums.PlayerId.PURPLE: false,
 }
+# Intrigue de consistoire (Scandale) : grants the right to Seal one chosen
+# Domain WITHOUT net domination until the end of the Station. owner -> DomainId
+# (or -1 when no grant is active). Station-scoped (reset in _begin_station).
+var intrigue_seal_grant: Dictionary = {  # owner PlayerId -> DomainId or -1
+	GameEnums.PlayerId.RED: -1,
+	GameEnums.PlayerId.PURPLE: -1,
+}
 
 
 func _init() -> void:
@@ -340,6 +347,7 @@ func to_dict() -> Dictionary:
 		"codex_available": codex_available.duplicate(),
 		"denonciation_blocked_domain": denonciation_blocked_domain.duplicate(),
 		"obeissance_acts_first": obeissance_acts_first.duplicate(),
+		"intrigue_seal_grant": intrigue_seal_grant.duplicate(),
 	}
 
 # JSON stringifies Dictionary keys (and widens ints to floats), so an int-keyed
@@ -403,3 +411,4 @@ func from_dict(d: Dictionary) -> void:
 	codex_available = d.get("codex_available", []).duplicate()
 	denonciation_blocked_domain = _reint_keyed(d.get("denonciation_blocked_domain", denonciation_blocked_domain), denonciation_blocked_domain, true)
 	obeissance_acts_first = _reint_keyed(d.get("obeissance_acts_first", obeissance_acts_first), obeissance_acts_first, false)
+	intrigue_seal_grant = _reint_keyed(d.get("intrigue_seal_grant", intrigue_seal_grant), intrigue_seal_grant, true)

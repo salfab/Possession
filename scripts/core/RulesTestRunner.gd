@@ -154,10 +154,13 @@ func _test_save_load_roundtrip() -> void:
 	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
 	s.nepotisme_used_this_station[GameEnums.PlayerId.RED] = true
 	s.transgressions_provoked_this_station[GameEnums.PlayerId.PURPLE] = 1
+	s.intrigue_seal_grant[GameEnums.PlayerId.RED] = GameEnums.DomainId.FOI
 	s.ascendant = 2
 	var parsed: Variant = JSON.parse_string(JSON.stringify(s.to_dict()))
 	var s2 := _new_state()
 	s2.from_dict(parsed)
+	_assert(s2.intrigue_seal_grant[GameEnums.PlayerId.RED] == GameEnums.DomainId.FOI,
+		"Round-trip JSON : intrigue_seal_grant (clé+valeur int) préservé")
 	_assert(s2.available_corruption[GameEnums.PlayerId.RED] == 4,
 		"Round-trip JSON : available_corruption[RED] préservé (clé int)")
 	_assert(s2.available_corruption[GameEnums.PlayerId.PURPLE] == 2,
@@ -976,17 +979,31 @@ func _test_codex_filter() -> void:
 # Intrigue du Consistoire (11)
 # ---------------------------------------------------------------------------
 func _test_codex_intrigue() -> void:
+	# SCANDALE (carte) : accorde le droit de Sceller un Domaine contrôlé SANS
+	# Domination nette (et non scellé) jusqu'à fin de Station.
 	var s := _new_state()
-	# Setup: RED controls AMBITION, PURPLE has corruption in DESIR.
-	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)
-	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE, 2)
+	s.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 3)  # contrôle requis pour provoquer
+	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.RED, 2)
+	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.PURPLE, 1)    # contrôlé sans Domination nette
+	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.RED, 2)
+	s.set_corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE, 1)  # idem, mais NON choisi
 	s.available_corruption[GameEnums.PlayerId.RED] = 10
-	# SCANDALE: opponent loses 1 in target_domain.
-	var blue_desir_before: int = s.corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE)
+	# Avant : Foi non scellable (pas de Domination nette).
+	_assert(not GameRules.can_sceller(s, GameEnums.PlayerId.RED, GameEnums.DomainId.FOI),
+		"Intrigue Scandale : sans grant, pas de Scellement sans Domination nette")
 	ActionResolver.provoquer(s, GameEnums.PlayerId.RED, TransgressionData.T_INTRIGUE, -1,
-		{"target_domain": GameEnums.DomainId.DESIR})
-	_assert(s.corruption_in(GameEnums.DomainId.DESIR, GameEnums.PlayerId.PURPLE) == blue_desir_before - 1,
-		"Intrigue Scandale : adversaire perd 1 Corruption dans la cible")
+		{"target_domain": GameEnums.DomainId.FOI})
+	_assert(s.intrigue_seal_grant[GameEnums.PlayerId.RED] == GameEnums.DomainId.FOI,
+		"Intrigue Scandale : grant posé sur le Domaine choisi")
+	_assert(GameRules.can_sceller(s, GameEnums.PlayerId.RED, GameEnums.DomainId.FOI),
+		"Intrigue Scandale : Scellement de Foi autorisé sans Domination nette (grant actif)")
+	_assert(not GameRules.can_sceller(s, GameEnums.PlayerId.RED, GameEnums.DomainId.DESIR),
+		"Intrigue Scandale : le grant ne s'applique qu'au Domaine choisi")
+	# Grant station-scoped : réinitialisé au début de la Station suivante.
+	var tm_intr := TurnManager.new(s, false)
+	tm_intr._begin_station(GameEnums.StationId.TENTATION, false)
+	_assert(s.intrigue_seal_grant[GameEnums.PlayerId.RED] == -1,
+		"Intrigue Scandale : grant réinitialisé au début de Station")
 	# INFAMY: can seal AMBITION without net domination.
 	var s2 := _new_state()
 	s2.set_corruption_in(GameEnums.DomainId.AMBITION, GameEnums.PlayerId.RED, 2)

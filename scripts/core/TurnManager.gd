@@ -203,6 +203,9 @@ func _begin_station(station: int, _initial: bool) -> void:
 	# Dénonciation scandale block is station-scoped: reset at station start.
 	state.denonciation_blocked_domain[GameEnums.PlayerId.RED] = -1
 	state.denonciation_blocked_domain[GameEnums.PlayerId.PURPLE] = -1
+	# Intrigue scandale grant (seal without net domination) is station-scoped.
+	state.intrigue_seal_grant[GameEnums.PlayerId.RED] = -1
+	state.intrigue_seal_grant[GameEnums.PlayerId.PURPLE] = -1
 	# Obéissance: scandale flag resets each station; re-activate for infamy holders.
 	state.obeissance_acts_first[GameEnums.PlayerId.RED] = false
 	state.obeissance_acts_first[GameEnums.PlayerId.PURPLE] = false
