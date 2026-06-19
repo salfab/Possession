@@ -5103,11 +5103,22 @@ func _provoke_simonie(origin: int) -> void:
 	if candidates.size() <= 1:
 		_do_provoke_simonie(origin, candidates[0] if candidates.size() == 1 else -1)
 		return
+	# Label each option by the Liturgical RESPONSE name (not the Station), and
+	# remind the player what that Response does In Integro vs Impedita — the whole
+	# point of Simonie is choosing WHICH response to blunt.
 	var options: Array = []
+	var prompt: String = I18n.t("ui.dialog.simonie_pick_prompt")
 	for st in candidates:
-		options.append({"label": String(GameEnums.STATION_NAMES.get(st, "?")), "value": st})
-	_show_demon_choice(I18n.t("ui.dialog.title.simonie_pick"),
-		I18n.t("ui.dialog.simonie_pick_prompt"), options,
+		var resp: Dictionary = LiturgicalResponseData.get_response(st)
+		var rname: String = String(resp.get("name", GameEnums.STATION_NAMES.get(st, "?")))
+		options.append({"label": rname, "value": st})
+		prompt += "\n\n" + I18n.t("ui.dialog.simonie_reminder", [
+			rname,
+			String(GameEnums.STATION_NAMES.get(st, "?")),
+			String(resp.get("text_in_integro", "")),
+			String(resp.get("text_impedita", "")),
+		])
+	_show_demon_choice(I18n.t("ui.dialog.title.simonie_pick"), prompt, options,
 		func(v): _do_provoke_simonie(origin, int(v)))
 
 
