@@ -10,6 +10,9 @@ extends Control
 # and label keys that used to live in Main.gd.
 
 signal action_chosen(payload: Dictionary)
+# Emitted when the player asks to preview a Transgression card WITHOUT acting —
+# the menu stays open so they can still provoke/amplify after closing the card.
+signal card_preview_requested(tid: String, face: int)
 # payload variants :
 #   {"kind": Kind.BASE,    "action_id": int}                 # ActionId
 #   {"kind": Kind.PROVOKE, "tid": String, "origin": int}
@@ -238,7 +241,9 @@ func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 		if d_id in GameRules.transgression_origin_options(state, player, tid):
 			var lbl := I18n.t("ui.popup.provoke_in",
 				[TransgressionData.name_of(tid), GameEnums.DOMAIN_NAMES[d_id]])
-			prov.add_child(_make_cell(lbl, "", GAIN, true, _emit_provoke.bind(tid, d_id)))
+			prov.add_child(_action_plus_preview(
+				_make_cell(lbl, "", GAIN, true, _emit_provoke.bind(tid, d_id)),
+				tid, GameEnums.TransgressionFace.SCANDALE))
 			added = true
 	if prov.get_child_count() > 0:
 		box.add_child(_section_label("ui.menu.provoke_section"))
@@ -255,7 +260,9 @@ func _build_dynamic(d_id: int, state: GameState, player: int) -> Control:
 			continue
 		var lbl := I18n.t("ui.popup.amplify_in",
 			[TransgressionData.name_of(ti.def_id), GameEnums.DOMAIN_NAMES[d_id]])
-		amp.add_child(_make_cell(lbl, "", GAIN, true, _emit_amplify.bind(ti.def_id)))
+		amp.add_child(_action_plus_preview(
+			_make_cell(lbl, "", GAIN, true, _emit_amplify.bind(ti.def_id)),
+			ti.def_id, GameEnums.TransgressionFace.INFAMIE))
 		added = true
 	if amp.get_child_count() > 0:
 		box.add_child(_section_label("ui.menu.amplify_section"))
@@ -354,6 +361,23 @@ func _emit_base(aid: int) -> void:
 func _emit_provoke(tid: String, origin: int) -> void:
 	close()
 	action_chosen.emit({"kind": Kind.PROVOKE, "tid": tid, "origin": origin})
+
+# Wraps an action cell with a small "preview card" cell to its right, so the
+# player can see the Transgression card before committing. Previewing keeps the
+# menu open (no close()).
+func _action_plus_preview(action_cell: Control, tid: String, face: int) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	action_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(action_cell)
+	var prev := _make_cell(I18n.t("ui.menu.preview_card"), "", TXT_DIM, true, _emit_preview.bind(tid, face))
+	prev.size_flags_horizontal = Control.SIZE_SHRINK_END
+	prev.custom_minimum_size = Vector2(220, 132)
+	row.add_child(prev)
+	return row
+
+func _emit_preview(tid: String, face: int) -> void:
+	card_preview_requested.emit(tid, face)
 
 func _emit_amplify(tid: String) -> void:
 	close()

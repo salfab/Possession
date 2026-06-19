@@ -815,6 +815,7 @@ func _build_overlays() -> void:
 	# Action menu (custom parchment panel, overlays the board + HUD)
 	_action_menu = DomainActionMenu.new()
 	_action_menu.action_chosen.connect(_on_menu_action)
+	_action_menu.card_preview_requested.connect(_on_domain_card_preview)
 	add_child(_action_menu)
 
 	# Liturgy dialog (full-screen modal at end of station)
@@ -2738,6 +2739,12 @@ func _on_domain_clicked(d_id: int) -> void:
 	_selected_domain = d_id
 	var at: Vector2 = get_viewport().get_mouse_position()
 	_action_menu.open_for(d_id, state, state.active_player, at)
+
+
+# Preview a Transgression card from the domain menu without acting — the
+# fullscreen card opens over the still-open menu (so the player can then provoke).
+func _on_domain_card_preview(tid: String, face: int) -> void:
+	_show_fullscreen_transgression(tid, face, TransgressionData.name_of(tid))
 
 
 func _on_menu_action(payload: Dictionary) -> void:
