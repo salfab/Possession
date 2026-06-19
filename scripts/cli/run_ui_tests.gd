@@ -75,6 +75,14 @@ func _initialize() -> void:
 	_dump_geometry(main, banners)
 	_check_structure(banners)
 	_check_coverage(main, banners)
+	# Card-action button : in a separate load()'d class so its autoload
+	# references (GameEnums / TransgressionData) resolve — they don't in this
+	# --script body.
+	var card_res: Dictionary = load("res://scripts/cli/card_action_check.gd").new().check(main)
+	for l in card_res.get("lines", []):
+		_lines.append(String(l))
+	_pass += int(card_res.get("pass", 0))
+	_fail += int(card_res.get("fail", 0))
 
 	_finish()
 
