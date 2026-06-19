@@ -78,6 +78,8 @@ const STRINGS := {
 	"ui.menu.provoke_section": {"fr": "Provoquer ici", "en": "Provoke here"},
 	"ui.menu.amplify_section": {"fr": "Amplifier",     "en": "Amplify"},
 	"ui.menu.preview_card":    {"fr": "Carte",         "en": "Card"},
+	"ui.menu.card_row":        {"fr": "%s — %s",       "en": "%s — %s"},
+	"ui.menu.open_card":       {"fr": "Ouvrir la carte", "en": "Open the card"},
 	"ui.card.provoke":         {"fr": "Provoquer ici", "en": "Provoke here"},
 	"ui.card.amplify":         {"fr": "Amplifier",     "en": "Amplify"},
 	# Explanations surfaced (as a toast) when a greyed card action button is tapped.
