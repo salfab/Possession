@@ -127,6 +127,13 @@ func _end_station() -> void:
 	# Resolve liturgical response and pause: the UI must acknowledge the
 	# response (full-screen dialog) before we advance to the next station.
 	pending_liturgy = LiturgyResolver.resolve_station_response(state)
+	# The Entrave on this Station's response is now spent — drop it so it doesn't
+	# linger in pending_entraves and wrongly entrave a later response.
+	var kept: Array = []
+	for pe in state.pending_entraves:
+		if pe.target_station != state.current_station:
+			kept.append(pe)
+	state.pending_entraves = kept
 	_pending_advance_to_station = state.current_station + 1
 
 

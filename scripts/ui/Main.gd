@@ -2755,6 +2755,10 @@ func _on_menu_action(payload: Dictionary) -> void:
 				_provoke_persecution(int(payload["origin"]))
 				_selected_domain = -1
 				return
+			if String(payload["tid"]) == TransgressionData.T_SIMONIE:
+				_provoke_simonie(int(payload["origin"]))
+				_selected_domain = -1
+				return
 			result = manager.perform_action(GameEnums.ActionId.PROVOQUER,
 				{"def_id": String(payload["tid"]), "origin": int(payload["origin"])})
 		DomainActionMenu.Kind.AMPLIFY:
@@ -4910,6 +4914,9 @@ func _on_provoquer_clicked(tid: String, origin: int) -> void:
 	if tid == TransgressionData.T_PERSECUTION:
 		_provoke_persecution(origin)
 		return
+	if tid == TransgressionData.T_SIMONIE:
+		_provoke_simonie(origin)
+		return
 	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, {"def_id": tid, "origin": origin})
 	_handle_action_result(r)
 	_refresh_all()
@@ -4952,6 +4959,48 @@ func _do_provoke_persecution(origin: int, target_domain: int) -> void:
 	var kwargs: Dictionary = {"def_id": TransgressionData.T_PERSECUTION, "origin": origin}
 	if target_domain >= 0:
 		kwargs["target_domain"] = target_domain
+	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, kwargs)
+	_handle_action_result(r)
+	_refresh_all()
+
+
+# Simonie : let the player choose which Station's response to hinder — the
+# current one or the next. Mirrors the Persécution picker.
+func _provoke_simonie(origin: int) -> void:
+	var candidates: Array = []
+	var cur: int = state.current_station
+	for st in [cur, cur + 1]:
+		if st != GameEnums.StationId.EXORCISME and st <= GameEnums.StationId.OFFICE \
+				and not GameRules.is_response_entraved(state, st):
+			candidates.append(st)
+	if candidates.size() <= 1:
+		_do_provoke_simonie(origin, candidates[0] if candidates.size() == 1 else -1)
+		return
+	var dlg := AcceptDialog.new()
+	dlg.exclusive = true
+	dlg.title = I18n.t("ui.dialog.title.simonie_pick")
+	dlg.dialog_text = I18n.t("ui.dialog.simonie_pick_prompt")
+	dlg.ok_button_text = I18n.t("ui.dialog.close")
+	add_child(dlg)
+	_style_dialog(dlg)
+	for st in candidates:
+		var st_str: String = String(GameEnums.STATION_NAMES.get(st, "?"))
+		var btn := dlg.add_button(st_str, true, "sim_%d" % int(st))
+		var captured_st: int = int(st)
+		var captured_origin: int = origin
+		var captured_dlg := dlg
+		btn.pressed.connect(func():
+			captured_dlg.hide()
+			captured_dlg.queue_free()
+			_do_provoke_simonie(captured_origin, captured_st))
+	_hide_other_exclusive_dialogs(dlg)
+	dlg.popup_centered()
+
+
+func _do_provoke_simonie(origin: int, target_station: int) -> void:
+	var kwargs: Dictionary = {"def_id": TransgressionData.T_SIMONIE, "origin": origin}
+	if target_station >= 0:
+		kwargs["target_station"] = target_station
 	var r := manager.perform_action(GameEnums.ActionId.PROVOQUER, kwargs)
 	_handle_action_result(r)
 	_refresh_all()

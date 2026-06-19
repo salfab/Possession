@@ -39,6 +39,8 @@ func run_all() -> Dictionary:
 	_test_save_load_roundtrip()
 	_test_liturgy_advance_after_acknowledge()
 	_test_persecution_target()
+	_test_simonie_entrave_target()
+	_test_entrave_cleared_after_response()
 	# Codex des Transgressions
 	_test_codex_setup()
 	_test_codex_filter()
@@ -60,6 +62,40 @@ func run_all() -> Dictionary:
 
 func _new_state() -> GameState:
 	return GameState.new()
+
+
+func _test_simonie_entrave_target() -> void:
+	# Simonie Scandale must hinder the CHOSEN Station (extra.target_station) —
+	# here the next one, not the current.
+	var s := _new_state()
+	s.current_station = GameEnums.StationId.MURMURES
+	s.set_corruption_in(GameEnums.DomainId.FOI, GameEnums.PlayerId.PURPLE, 1)  # controls FOI -> can provoke
+	s.available_corruption[GameEnums.PlayerId.PURPLE] = 10
+	ActionResolver.provoquer(s, GameEnums.PlayerId.PURPLE, TransgressionData.T_SIMONIE,
+		GameEnums.DomainId.FOI, {"target_station": GameEnums.StationId.TENTATION})
+	_assert(GameRules.is_response_entraved(s, GameEnums.StationId.TENTATION),
+		"Simonie : Entrave posée sur la Station choisie (Tentation)")
+	_assert(not GameRules.is_response_entraved(s, GameEnums.StationId.MURMURES),
+		"Simonie : la Station courante n'est pas entravée quand on choisit la suivante")
+
+
+func _test_entrave_cleared_after_response() -> void:
+	# An Entrave is spent once its Station's response resolves — it must not
+	# linger in pending_entraves and block a later response.
+	var s := _new_state()
+	var pe := GameState.PendingEntrave.new()
+	pe.caster = GameEnums.PlayerId.RED
+	pe.target_station = GameEnums.StationId.MURMURES
+	s.pending_entraves.append(pe)
+	var tm := TurnManager.new(s, true)
+	_assert(GameRules.is_response_entraved(s, GameEnums.StationId.MURMURES),
+		"Entrave : réponse de la Station courante entravée avant résolution")
+	var pulses: int = GameEnums.STATION_PULSES[GameEnums.StationId.MURMURES]
+	for i in pulses * 2:
+		tm.perform_action(GameEnums.ActionId.PASSER, {})
+	tm.acknowledge_liturgy()
+	_assert(not GameRules.is_response_entraved(s, GameEnums.StationId.MURMURES),
+		"Entrave : consommée après résolution (retirée de pending_entraves)")
 
 
 func _test_persecution_target() -> void:

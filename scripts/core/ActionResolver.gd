@@ -224,6 +224,16 @@ static func break_domination(state: GameState, d_id: int) -> void:
 
 # --- Per-card SCANDALE effects ---------------------------------------------
 
+# Simonie may hinder only the current Station or the next one, and only if that
+# Station can still be hindered (exists, not the Exorcism, not already entraved).
+static func _entrave_target_ok(state: GameState, st: int) -> bool:
+	if st != state.current_station and st != state.current_station + 1:
+		return false
+	if st < 0 or st == GameEnums.StationId.EXORCISME or st > GameEnums.StationId.OFFICE:
+		return false
+	return not GameRules.is_response_entraved(state, st)
+
+
 static func _apply_scandal_effect(state: GameState, player: int, def_id: String, origin: int, extra: Dictionary = {}) -> void:
 	match def_id:
 		TransgressionData.T_NEPOTISME:
@@ -244,12 +254,16 @@ static func _apply_scandal_effect(state: GameState, player: int, def_id: String,
 			else:
 				state.add_log("Effet Scandale Favori secret ignoré (pas de Corruption disponible).")
 		TransgressionData.T_SIMONIE:
-			# Place an Entrave on this Station's response, or the next.
-			# Default to current station if not entraved yet, else next.
-			var target := state.current_station
-			if GameRules.is_response_entraved(state, target) or target == GameEnums.StationId.EXORCISME:
-				target = min(state.current_station + 1, GameEnums.StationId.OFFICE)
-			if target != GameEnums.StationId.EXORCISME and not GameRules.is_response_entraved(state, target):
+			# Place an Entrave on this Station's response or the next. The player
+			# may choose via extra.target_station (validated) ; otherwise default
+			# to the current Station, falling back to the next when it's already
+			# entraved.
+			var target := int(extra.get("target_station", -1))
+			if not _entrave_target_ok(state, target):
+				target = state.current_station
+				if GameRules.is_response_entraved(state, target) or target == GameEnums.StationId.EXORCISME:
+					target = min(state.current_station + 1, GameEnums.StationId.OFFICE)
+			if _entrave_target_ok(state, target):
 				var pe := GameState.PendingEntrave.new()
 				pe.caster = player
 				pe.target_station = target
