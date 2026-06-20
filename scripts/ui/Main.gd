@@ -4535,6 +4535,11 @@ func _on_fullscreen_card_action_pressed() -> void:
 		_flash_action_toast(_fullscreen_action_reason, "refused")
 		return
 	_fullscreen_card_dialog.hide()
+	# The action is being performed (it's now the other player's turn) : close the
+	# domain menu too — it stays open behind the card during preview, but its job
+	# is done once we act. No-op if the card was reached from another entry point.
+	if _action_menu != null:
+		_action_menu.close()
 	if _fullscreen_action_kind == "amplify":
 		var r := manager.perform_action(GameEnums.ActionId.AMPLIFIER, {"def_id": tid})
 		_handle_action_result(r)
