@@ -209,8 +209,6 @@ var _asc_pips: Array = []           # preview dots, one per integer value
 # Cached static StyleBoxFlat (built once, reused) — avoids per-refresh /
 # per-open allocation churn in the hot UI-refresh paths.
 var _player_panel_styles: Dictionary = {}   # "pid_active" -> StyleBoxFlat
-var _fab_style_on: StyleBoxFlat
-var _fab_style_off: StyleBoxFlat
 var _trans_card_style: StyleBoxFlat
 # Signatures of the last-rendered marker / panel sets — skip the teardown +
 # rebuild when nothing changed (the heavy part is node creation + signal
@@ -279,6 +277,11 @@ var _rupture_meter: RuptureMeter    # icon + progress cells + check per conditio
 # row of buttons across the bottom of the screen.
 var _fab: Button
 var _settings_fab: Button
+var _puiser_btn: Button   # large on-board button for "Puiser dans l'Ombre"
+var _puiser_tex_red: Texture2D      # active = RED + Puiser legal
+var _puiser_tex_violet: Texture2D   # active = PURPLE + Puiser legal
+var _puiser_tex_gris: Texture2D     # unavailable (Réserve ≠ 0)
+var _puiser_has_art: bool = false
 var _actions_menu: AppMenu
 var _settings_menu: AppMenu
 
@@ -970,9 +973,53 @@ func _build_debug_bar() -> void:
 	_settings_fab.pressed.connect(_open_settings_menu)
 	add_child(_settings_fab)
 
+	# Dedicated on-board button for "Puiser dans l'Ombre" — large, illustration-
+	# based, bottom-LEFT so it never collides with the bottom-right FAB stack, the
+	# side demon panels, or the board hotspots. The art is three finished circular
+	# medallions (each with its OWN ornate frame, so the Button itself is flat /
+	# frameless) : rouge / violet = the ACTIVE demon's colour shown when Puiser is
+	# legal, gris = the desaturated "unavailable" look (Réserve ≠ 0).
+	# _refresh_puiser_button swaps the icon by state. We never set Button.disabled
+	# (a disabled button swallows the tap on touch and shows no tooltip) — it stays
+	# tappable and _on_btn_puiser toasts the reason when illegal. Textures load
+	# outside headless only (mirrors CardImages) ; absent → text-label fallback.
+	const PUISER_BTN_SIZE := 116
+	_puiser_btn = Button.new()
+	if DisplayServer.get_name() != "headless":
+		var base := "res://assets/ui/buttons/"
+		if ResourceLoader.exists(base + "puiser_ombre_rouge.png"):
+			_puiser_tex_red = load(base + "puiser_ombre_rouge.png")
+		if ResourceLoader.exists(base + "puiser_ombre_violet.png"):
+			_puiser_tex_violet = load(base + "puiser_ombre_violet.png")
+		if ResourceLoader.exists(base + "puiser_ombre_gris.png"):
+			_puiser_tex_gris = load(base + "puiser_ombre_gris.png")
+	_puiser_has_art = _puiser_tex_gris != null
+	if _puiser_has_art:
+		_puiser_btn.icon = _puiser_tex_gris   # default ; _refresh_puiser_button swaps it
+		_puiser_btn.expand_icon = true
+		_puiser_btn.flat = true
+		var empty := StyleBoxEmpty.new()
+		for sname in ["normal", "hover", "pressed", "focus"]:
+			_puiser_btn.add_theme_stylebox_override(sname, empty)
+	else:
+		# Artwork missing (e.g. headless) — keep the button visible + labelled.
+		_puiser_btn.text = I18n.t("ui.btn.puiser")
+	_puiser_btn.tooltip_text = I18n.t("ui.btn.puiser.tooltip")
+	_puiser_btn.set_meta("i18n_tooltip_key", "ui.btn.puiser.tooltip")
+	# Anchor bottom-left : pinned to the left + bottom edges, small inset.
+	_puiser_btn.anchor_left = 0.0
+	_puiser_btn.anchor_top = 1.0
+	_puiser_btn.anchor_right = 0.0
+	_puiser_btn.anchor_bottom = 1.0
+	_puiser_btn.offset_left = 16
+	_puiser_btn.offset_top = -(PUISER_BTN_SIZE + 16)
+	_puiser_btn.offset_right = 16 + PUISER_BTN_SIZE
+	_puiser_btn.offset_bottom = -16
+	_puiser_btn.pressed.connect(_on_btn_puiser)
+	add_child(_puiser_btn)
+
 	# Two custom parchment menus (AppMenu) replacing the old native PopupMenu.
-	# Items are rebuilt on every open so labels follow the current locale and
-	# "Puiser" can be toggled disabled depending on the active player's Réserve.
+	# Items are rebuilt on every open so labels follow the current locale.
 	_actions_menu = AppMenu.new()
 	_actions_menu.item_chosen.connect(_on_fab_menu_pressed)
 	add_child(_actions_menu)
@@ -989,7 +1036,6 @@ const FAB_ZOOM_IN    := 1002
 const FAB_LANG       := 1003
 const FAB_TRANS      := 1004
 const FAB_NEW_GAME   := 1005
-const FAB_PUISER     := 1007
 const FAB_JOURNAL    := 1008
 const FAB_HOTSPOTS   := 1009
 const FAB_GLOSSARY   := 1010
@@ -1052,16 +1098,13 @@ func _make_gear_icon() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-# ACTIONS menu : in-game actions. Items rebuilt on every open so the locale and
-# the Puiser disabled-state stay fresh.
+# ACTIONS menu : in-game actions. Items rebuilt on every open so the locale
+# stays fresh. ("Puiser dans l'Ombre" lives on its own on-board button now —
+# see _puiser_btn in _build_debug_bar — and is no longer listed here.)
 func _open_actions_menu() -> void:
-	var puiser_disabled: bool = (state != null
-		and not GameRules.can_puiser(state, state.active_player))
 	var items: Array = [
 		{"id": FAB_TRANS,    "label": I18n.t("ui.btn.transgressions")},
 		{"id": FAB_NEW_GAME, "label": I18n.t("ui.btn.new_game")},
-		{"id": FAB_PUISER,   "label": I18n.t("ui.btn.puiser"),
-			"hint": I18n.t("ui.btn.puiser.tooltip"), "disabled": puiser_disabled},
 	]
 	_actions_menu.open(I18n.t("ui.menu.actions_title"), items)
 
@@ -1090,7 +1133,6 @@ func _on_fab_menu_pressed(id: int) -> void:
 		FAB_LANG:       _on_btn_toggle_lang()
 		FAB_TRANS:      _on_btn_transgressions()
 		FAB_NEW_GAME:   _on_btn_new_game()
-		FAB_PUISER:     _on_btn_puiser()
 		FAB_GLOSSARY:   _on_btn_glossary()
 		FAB_JOURNAL:    _on_btn_toggle_log()
 		FAB_HOTSPOTS:   _on_btn_toggle_hotspots()
@@ -1259,7 +1301,7 @@ func _refresh_all() -> void:
 	_refresh_player_transgression_panels()
 	_refresh_rupture_recap()
 	_refresh_active_player_highlight()
-	_refresh_fab_highlight()
+	_refresh_puiser_button()
 	_animate_state_deltas()
 	_animate_action_feedback()
 	_maybe_show_liturgy_dialog()
@@ -1476,43 +1518,25 @@ func _build_player_panel_style(pid: int, is_active: bool) -> StyleBoxFlat:
 	return sb
 
 
-# When Puiser dans l'Ombre is the active player's only legal action (Réserve
-# at 0), tint the FAB so the user knows there's a forced action waiting in
-# the menu. Otherwise restore the default styling.
-func _refresh_fab_highlight() -> void:
-	if _fab == null or state == null:
+# Visual state for the dedicated Puiser button. We never set Button.disabled (a
+# disabled button can't be tapped on touch and shows no tooltip — we WANT the tap
+# so _on_btn_puiser toasts the refusal reason). With art : swap the medallion to
+# the active demon's colour when Puiser is legal, grey otherwise. Without art
+# (headless/missing) : fall back to dimming the text label.
+func _refresh_puiser_button() -> void:
+	if _puiser_btn == null or state == null:
 		return
-	var puiser_legal: bool = (not state.game_over) \
-		and (not state.has_pending_decisions()) \
-		and GameRules.can_puiser(state, state.active_player)
-	# Two fixed styles (forced-action vs idle) — cached once, swapped by state.
-	if _fab_style_on == null:
-		_fab_style_on = _build_fab_style(true)
-		_fab_style_off = _build_fab_style(false)
-	if puiser_legal:
-		_fab.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
-	else:
-		_fab.remove_theme_color_override("font_color")
-	var sb: StyleBoxFlat = _fab_style_on if puiser_legal else _fab_style_off
-	for state_name in ["normal", "hover", "pressed", "focus"]:
-		_fab.add_theme_stylebox_override(state_name, sb)
-
-
-func _build_fab_style(puiser_legal: bool) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.set_corner_radius_all(32)
-	sb.set_border_width_all(2)
-	sb.shadow_size = 8
-	if puiser_legal:
-		# Forced-action mode : crimson / gold halo, brighter ink.
-		sb.bg_color = Color(0.30, 0.06, 0.12, 0.95)
-		sb.border_color = Color(0.95, 0.55, 0.20)
-		sb.shadow_color = Color(0.95, 0.55, 0.20, 0.55)
-	else:
-		sb.bg_color = Color(0.18, 0.06, 0.22, 0.95)
-		sb.border_color = Color(0.85, 0.65, 0.30)
-		sb.shadow_color = Color(0, 0, 0, 0.55)
-	return sb
+	var legal: bool = GameRules.can_puiser(state, state.active_player)
+	if not _puiser_has_art:
+		_puiser_btn.modulate = Color(1, 1, 1, 1) if legal else Color(1, 1, 1, 0.4)
+		return
+	var tex: Texture2D = _puiser_tex_gris
+	if legal:
+		tex = _puiser_tex_red if state.active_player == GameEnums.PlayerId.RED else _puiser_tex_violet
+	if tex == null:
+		tex = _puiser_tex_gris   # safety : never blank the button
+	if tex != null:
+		_puiser_btn.icon = tex
 
 
 func _refresh_status() -> void:
