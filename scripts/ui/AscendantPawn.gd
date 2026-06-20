@@ -1,17 +1,21 @@
 class_name AscendantPawn
 extends Control
-# Board-track pawn for the demonic Ascendant. Drawn procedurally so it stays
-# readable at small size and carries the current leading demon's colour.
+# Board-track pawn for the demonic Ascendant. Uses the illustrated marker asset
+# when rendering is available, with the old procedural sigil kept as a safe
+# fallback for headless tests or a missing import.
 
 const DEFAULT_SIZE := Vector2(42, 52)
+const TEXTURE_PATH := "res://assets/ui/markers/ascendant.png"
 
 var value: int = 0
 var pawn_color: Color = Color(0.92, 0.72, 0.30)
+var _pawn_texture: Texture2D = null
 
 
 func _init() -> void:
 	custom_minimum_size = DEFAULT_SIZE
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pawn_texture = _load_pawn_texture()
 
 
 func set_value(v: int) -> void:
@@ -28,6 +32,34 @@ func set_value(v: int) -> void:
 
 
 func _draw() -> void:
+	if _pawn_texture != null:
+		_draw_asset_pawn()
+		return
+	_draw_fallback_pawn()
+
+
+func _load_pawn_texture() -> Texture2D:
+	if DisplayServer.get_name() == "headless":
+		return null
+	var tex := load(TEXTURE_PATH)
+	return tex if tex is Texture2D else null
+
+
+func _draw_asset_pawn() -> void:
+	var c := Vector2(size.x * 0.5, size.y * 0.48)
+	var r := minf(size.x, size.y) * 0.47
+	var glow := Color(pawn_color.r, pawn_color.g, pawn_color.b, 0.52)
+	# The glow carries the current leading demon's colour while the neutral
+	# black-and-gold artwork remains legible over the detailed board painting.
+	draw_circle(c, r * 1.08, Color(0, 0, 0, 0.72))
+	draw_circle(c, r, glow)
+	var rect := Rect2(Vector2.ZERO, size)
+	draw_texture_rect(_pawn_texture, rect, false, Color.WHITE)
+	draw_texture_rect(_pawn_texture, rect, false,
+		Color(pawn_color.r, pawn_color.g, pawn_color.b, 0.16))
+
+
+func _draw_fallback_pawn() -> void:
 	var w := size.x
 	var h := size.y
 	var c := Vector2(w * 0.5, h * 0.43)
