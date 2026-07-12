@@ -38,4 +38,4 @@ jobs:
         with:
           name: balance-log-n${{ inputs.n_per_modifier }}
           path: balance.log
-          retention-days: 30
+          retention-days: 7

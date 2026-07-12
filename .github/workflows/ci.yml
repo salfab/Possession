@@ -84,6 +84,9 @@ jobs:
           path: |
             tests.log
             ui-tests.log
+          # Debug aid for the current run only — the 90-day default piles up
+          # hundreds of logs and eats the 0.5GB Actions storage quota.
+          retention-days: 1
 
   # ---------------------------------------------------------------------------
   # 2. Build the Web/HTML5 export.
@@ -211,7 +214,10 @@ jobs:
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.ARTIFACT_NAME }}.zip
-          retention-days: 14
+          # ~90MB per push: at 14 days this alone blew the 0.5GB Actions
+          # storage quota. The artifact is consumed by the deploy job in the
+          # same run; 2 days leaves room to re-run a failed deploy.
+          retention-days: 2
 
   # ---------------------------------------------------------------------------
   # 3. Deploy to itch.io via butler. Skipped on PRs and forks.
